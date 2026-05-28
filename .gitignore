@@ -39,3 +39,5 @@ Thumbs.db
 *.bak
 .env.local
 .env.*.local
+
+参考/*

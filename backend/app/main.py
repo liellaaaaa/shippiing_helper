@@ -1,7 +1,14 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.api.v1.orders import router as orders_router
 
-app = FastAPI(title="ShippingHelper API", version="1.0.0")
+app = FastAPI(
+    title="ShippingHelper API",
+    version="1.0.0",
+    description="外贸船务效率工具 - Phase 1 API",
+    docs_url="/docs",
+    redoc_url="/redoc",
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -10,6 +17,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(orders_router)
 
 
 @app.get("/health")

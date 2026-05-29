@@ -105,44 +105,63 @@ All weight/volume calculations must use `calculation_service.py`:
 ## Project Structure
 
 ```
-shipping_helper_web/
-├── frontend/
-│   └── src/
-│       ├── api/                 # Axios API calls
-│       ├── components/
-│       │   └── OnlyOfficeEditor.vue   # SHARED - single component for all doc types
-│       └── views/
-│           ├── phase1/         # OrderPaste, PIExtract, DataMerge, PackageCalc, DataDashboard
-│           └── phase2/         # Shipment, Booking, MSDS, LOI (all use OnlyOfficeEditor.vue)
+shipping_helper/
 ├── backend/
 │   └── app/
-│       ├── api/v1/
-│       │   ├── orders.py
-│       │   ├── pi.py
-│       │   ├── packages.py
-│       │   ├── documents.py
-│       │   └── onlyoffice.py   # Callback endpoint
-│       ├── core/               # Business logic (order_parser, pi_extractor, merger)
-│       ├── services/           # calculation_service.py (shared)
-│       └── models/             # SQLAlchemy models
-├── templates/                   # Document templates (booking, msds, loi)
-└── data/                        # SQLite database
+│       ├── api/
+│       │   ├── v1/
+│       │   │   └── orders.py      # REST API: /api/v1/orders
+│       │   └── deps.py            # FastAPI dependency injection
+│       ├── core/
+│       │   ├── order_parser.py   # Delimiter detection, aggregation, dedup
+│       │   └── knowledge_filler.py # HS code + customs name auto-fill
+│       ├── services/
+│       │   └── order_service.py   # Service layer (transactional save)
+│       ├── models/
+│       │   └── order.py          # SQLAlchemy models
+│       ├── schemas/
+│       │   └── order.py          # Pydantic schemas
+│       ├── main.py               # FastAPI entry point
+│       └── database.py           # SQLite connection
+├── frontend/
+│   └── src/
+│       ├── api/
+│       │   └── orders.ts         # Axios API client
+│       ├── components/
+│       │   └── phase1/
+│       │       ├── PasteTextarea.vue
+│       │       └── OrderPreviewForm.vue
+│       └── views/
+│           └── phase1/
+│               └── OrderPaste.vue
+├── docs/
+│   ├── PRD-ShippingHelper-Web.md        # Main PRD
+│   ├── PRD-ShippingHelper-Web-P1v2.md  # Phase 1 spec
+│   ├── PRD-ShippingHelper-Web-P2v2.md  # Phase 2 spec
+│   ├── PRD-ShippingHelper-Web-P1v2-OrderParsing.md  # Order parsing design
+│   ├── API-ShippingHelper-v1.md        # API reference
+│   ├── TEST-ShippingHelper-v1.md       # Integration test docs
+│   └── superpower/plans/              # Implementation plans
+├── 参考/                              # Legacy PyQt5 reference
+└── data/
+    └── shipping_helper.db            # SQLite database
 ```
-
-**Important**: All OnlyOffice editor instances MUST use `components/OnlyOfficeEditor.vue`. Never create document-specific editor components.
 
 ---
 
 ## Data Models
 
 Core tables (see `docs/` PRD for full schema):
-- `orders` - 26-field order table
+- `orders` - Order header table (订单头)
+- `order_items` - Product detail table (产品明细，外键→orders.id) — **一单多品**
 - `packaging_types` - 13 packaging types
 - `pallets` - 2 pallet types
 - `pi_data` - PI summary table
 - `pi_contracts` - Single PI contract
 - `products_knowledge` - Product knowledge base
 - `templates` - Document template config
+
+> ⚠️ **重要**：orders 表和 order_items 表已拆分。`internal_code` 仅存在于 order_items（产品级），orders 表不存储此字段。
 
 ---
 
@@ -163,8 +182,8 @@ The `参考/` folder contains the Python implementation that should inform imple
 ## Phase Development Order
 
 **Phase 1** (Order Processing):
-1. Project initialization (Vue + FastAPI)
-2. Order paste parsing (26 fields)
+1. ~~Project initialization (Vue + FastAPI)~~ ✅
+2. ~~Order paste parsing~~ ✅
 3. PI file extraction (.xls/.xlsx)
 4. Data merging (internal_code association)
 5. Packaging calculation (13 types, 2 pallets, 20GP judgment)
@@ -183,6 +202,8 @@ The `参考/` folder contains the Python implementation that should inform imple
 1. **OnlyOffice Integration**: All Excel and Word documents use OnlyOffice. Document Server URL configured via environment variable.
 
 2. **Frontend Component Reuse**: A single shared `OnlyOfficeEditor.vue` component must be used for ALL document types (Booking, MSDS, LOI). Do NOT create separate editor components per page. The component accepts `config`, `documentServerUrl`, and `events` as props.
+
+3. **Internal Code Location**: `internal_code` is stored ONLY in `order_items` (product-level). The `orders` table does NOT contain `internal_code`.
 
 3. **Calculation Consistency**: Weight/volume/20GP logic exists ONLY in `calculation_service.py`. Phase 1 and Phase 2 call the same service.
 
@@ -211,14 +232,26 @@ docker run -d -p 8080:80 onlyoffice/documentserver
 
 ## Phase 1 Progress
 
-| Module | Status |
-|--------|--------|
-| Project initialization | pending |
-| Order paste parsing | pending |
-| PI file extraction | pending |
-| Data merging | pending |
-| Packaging calculation | pending |
-| Data dashboard | pending |
+| Module | Status | Notes |
+|--------|--------|-------|
+| Project initialization | ✅ done | Vue 3 + FastAPI + SQLite scaffold |
+| Order paste parsing | ✅ done | Tab/CRLF delimiter, smart aggregation, dedup, knowledge fill |
+| PI file extraction | pending | |
+| Data merging | pending | |
+| Packaging calculation | pending | |
+| Data dashboard | pending | |
+
+**Completed Files:**
+- `backend/app/models/order.py` — orders + order_items + packaging_types + products_knowledge
+- `backend/app/core/order_parser.py` — delimiter detection, batch dedup, aggregation
+- `backend/app/core/knowledge_filler.py` — HS code + customs name auto-fill
+- `backend/app/services/order_service.py` — service layer with transactional save
+- `backend/app/api/v1/orders.py` — REST endpoints with OpenAPI docs
+- `backend/app/api/deps.py` — FastAPI dependency injection
+- `frontend/src/api/orders.ts` — Axios API client
+- `frontend/src/components/phase1/PasteTextarea.vue` — paste input component
+- `frontend/src/components/phase1/OrderPreviewForm.vue` — preview + edit component
+- `frontend/src/views/phase1/OrderPaste.vue` — full page
 
 ---
 
@@ -233,4 +266,4 @@ docker run -d -p 8080:80 onlyoffice/documentserver
 
 ---
 
-*Last updated: 2026/05/28*
+*Last updated: 2026/05/29*

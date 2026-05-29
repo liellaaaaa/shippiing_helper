@@ -4,10 +4,3 @@
 
 <script setup lang="ts">
 </script>
-
-<style>
-body {
-  margin: 0;
-  font-family: 'Helvetica Neue', Arial, sans-serif;
-}
-</style>

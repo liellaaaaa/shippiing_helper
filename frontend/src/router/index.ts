@@ -3,6 +3,7 @@ import Layout from '@/views/Layout.vue'
 import OrderPaste from '@/views/phase1/OrderPaste.vue'
 import PIExtract from '@/views/phase1/PIExtract.vue'
 import DataMerge from '@/views/phase1/DataMerge.vue'
+import PackageCalc from '@/views/phase1/PackageCalc.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -32,6 +33,12 @@ const router = createRouter({
           name: 'DataMerge',
           component: DataMerge,
           meta: { title: '数据关联' }
+        },
+        {
+          path: 'package-calc',
+          name: 'PackageCalc',
+          component: PackageCalc,
+          meta: { title: '包装计算' }
         }
       ]
     }

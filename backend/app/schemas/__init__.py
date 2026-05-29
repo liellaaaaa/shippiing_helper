@@ -16,6 +16,13 @@ from app.schemas.pi_contract import (
     PiContractSaveResponse,
     PiContractQueryResponse,
 )
+from app.schemas.merge import (
+    OrderListItem,
+    OrderListResponse,
+    OrderComparisonResponse,
+    ComparisonItem,
+    MergeQueryParams,
+)
 
 __all__ = [
     # order schemas
@@ -34,4 +41,10 @@ __all__ = [
     "PiContractSaveRequest",
     "PiContractSaveResponse",
     "PiContractQueryResponse",
+    # merge schemas
+    "OrderListItem",
+    "OrderListResponse",
+    "OrderComparisonResponse",
+    "ComparisonItem",
+    "MergeQueryParams",
 ]

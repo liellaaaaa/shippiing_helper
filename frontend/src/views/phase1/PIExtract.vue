@@ -44,8 +44,7 @@
             <p>上传文件后将显示解析结果</p>
           </div>
           <div v-else>
-            <!-- PiPreviewTable will go here in FE-4 -->
-            <p>解析完成，等待预览组件...</p>
+            <PiPreviewTable v-if="parsedData" :data="parsedData!" @saved="handleSaved" />
           </div>
         </el-card>
       </div>
@@ -65,6 +64,7 @@
 import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import PiUploadDragger from '@/components/phase1/PiUploadDragger.vue'
+import PiPreviewTable from '@/components/phase1/PiPreviewTable.vue'
 import ColumnMappingModal from '@/components/phase1/ColumnMappingModal.vue'
 import { uploadPiFile, type PiUploadResponse } from '@/api/pi'
 
@@ -148,6 +148,11 @@ const handleMappingApply = (mapping: Record<string, string>) => {
 const handleMappingSaveTemplate = (mapping: Record<string, string>) => {
   const customerCode = parsedData.value?.customer_code || 'unknown'
   saveCustomerMapping(customerCode, mapping)
+}
+
+// Handle PI saved success
+const handleSaved = () => {
+  ElMessage.success('PI 合同保存成功')
 }
 </script>
 

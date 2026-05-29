@@ -4,6 +4,7 @@ FastAPI 依赖注入。
 """
 from app.services.order_service import OrderService
 from app.services.merge_service import MergeService
+from app.services.calculation_service import CalculationService
 from app.database import SessionLocal
 
 
@@ -21,3 +22,8 @@ def get_pi_service():
 def get_merge_service() -> MergeService:
     """数据关联服务依赖"""
     return MergeService(SessionLocal())
+
+
+def get_calculation_service() -> CalculationService:
+    """包装计算服务依赖"""
+    return CalculationService()

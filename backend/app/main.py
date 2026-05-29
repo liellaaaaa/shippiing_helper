@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.orders import router as orders_router
+from app.api.v1.pi import router as pi_router
 
 app = FastAPI(
     title="ShippingHelper API",
@@ -19,6 +20,7 @@ app.add_middleware(
 )
 
 app.include_router(orders_router)
+app.include_router(pi_router)
 
 
 @app.get("/health")

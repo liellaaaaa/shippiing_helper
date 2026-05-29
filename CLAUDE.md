@@ -236,22 +236,34 @@ docker run -d -p 8080:80 onlyoffice/documentserver
 |--------|--------|-------|
 | Project initialization | ✅ done | Vue 3 + FastAPI + SQLite scaffold |
 | Order paste parsing | ✅ done | Tab/CRLF delimiter, smart aggregation, dedup, knowledge fill |
-| PI file extraction | pending | |
+| PI file extraction | ✅ done | .xlsx/.xls upload, column mapping, confidence, pi_data upsert |
 | Data merging | pending | |
 | Packaging calculation | pending | |
 | Data dashboard | pending | |
 
 **Completed Files:**
 - `backend/app/models/order.py` — orders + order_items + packaging_types + products_knowledge
+- `backend/app/models/pi_contract.py` — PiContract + PiContractItem + PiData models
+- `backend/app/schemas/pi_contract.py` — Pydantic schemas for PI upload/save/query
 - `backend/app/core/order_parser.py` — delimiter detection, batch dedup, aggregation
 - `backend/app/core/knowledge_filler.py` — HS code + customs name auto-fill
+- `backend/app/core/pi_parser.py` — column mapping, smart degradation, confidence
 - `backend/app/services/order_service.py` — service layer with transactional save
+- `backend/app/services/pi_service.py` — PI service with transactional save + pi_data upsert
 - `backend/app/api/v1/orders.py` — REST endpoints with OpenAPI docs
+- `backend/app/api/v1/pi.py` — PI upload/save/query endpoints
 - `backend/app/api/deps.py` — FastAPI dependency injection
 - `frontend/src/api/orders.ts` — Axios API client
+- `frontend/src/api/pi.ts` — PI API client
 - `frontend/src/components/phase1/PasteTextarea.vue` — paste input component
 - `frontend/src/components/phase1/OrderPreviewForm.vue` — preview + edit component
-- `frontend/src/views/phase1/OrderPaste.vue` — full page
+- `frontend/src/components/phase1/PIExtract.vue` — full page
+- `frontend/src/components/phase1/PiUploadDragger.vue` — drag-and-drop upload
+- `frontend/src/components/phase1/PiPreviewTable.vue` — editable preview table
+- `frontend/src/components/phase1/ColumnMappingModal.vue` — column mapping modal
+- `frontend/src/views/phase1/OrderPaste.vue` — order paste page
+- `backend/migrations/001_add_pi_contracts.py` — table migration
+- `backend/migrations/002_add_indexes.py` — index migration
 
 ---
 

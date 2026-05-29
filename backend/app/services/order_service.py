@@ -29,7 +29,7 @@ class OrderService:
 
         return PasteParseResponse(
             orders=orders,
-            skipped_rows=[SkippedRowSchema(**s) for s in skipped_rows],
+            skipped_rows=skipped_rows,
             warning=warning,
         )
 

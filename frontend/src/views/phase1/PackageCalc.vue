@@ -1,10 +1,5 @@
 <template>
   <div class="package-calc-page">
-    <div class="page-header">
-      <h1 class="page-title">包装计算</h1>
-      <p class="page-subtitle">物流测算参谋 — 海运/空运/陆运一体化计算</p>
-    </div>
-
     <!-- 顶部控制面板 -->
     <div class="control-panel">
       <!-- 运输模式切换 -->

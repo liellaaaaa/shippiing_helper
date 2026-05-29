@@ -8,8 +8,8 @@ from app.schemas.pi_contract import (
     PiContractSaveResponse,
     PiContractQueryResponse,
 )
-from app.core.pi_parser import parse_file_path
-import tempfile
+from app.core.pi_parser import parse_pi_bytes
+import io
 import os
 
 
@@ -59,21 +59,15 @@ async def upload_pi_file(
     if len(content) > 10 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="文件大小超过 10MB 限制")
 
-    # Write to temp file
-    with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
-        tmp.write(content)
-        tmp_path = tmp.name
-
     try:
-        result = parse_file_path(tmp_path)
-        # TODO: Apply customer mapping from localStorage if customer_code provided (Phase 2)
+        result = parse_pi_bytes(content, file.filename or "unknown.xlsx")
         return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"解析失败: {str(e)}")
-    finally:
-        os.unlink(tmp_path)
 
 
 @router.post(

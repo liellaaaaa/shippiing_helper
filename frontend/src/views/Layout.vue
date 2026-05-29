@@ -38,6 +38,15 @@
             </span>
             <span class="link-text">PI 文件提取</span>
           </router-link>
+          <router-link to="/data-merge" class="nav-link">
+            <span class="link-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+              </svg>
+            </span>
+            <span class="link-text">数据关联</span>
+          </router-link>
           <router-link to="/package-calc" class="nav-link">
             <span class="link-icon">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -47,15 +56,6 @@
               </svg>
             </span>
             <span class="link-text">包装计算</span>
-          </router-link>
-          <router-link to="/data-merge" class="nav-link">
-            <span class="link-icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-              </svg>
-            </span>
-            <span class="link-text">数据关联</span>
           </router-link>
           <router-link to="/dashboard" class="nav-link">
             <span class="link-icon">
@@ -67,6 +67,18 @@
             </span>
             <span class="link-text">数据看板</span>
           </router-link>
+          <!-- 阶段二（实现后取消注释）
+          <div class="nav-section-divider"></div>
+          <router-link to="/shipment" class="nav-link">
+            <span class="link-text">出货管理</span>
+          </router-link>
+          <router-link to="/booking" class="nav-link">
+            <span class="link-text">订舱单编辑</span>
+          </router-link>
+          <router-link to="/document" class="nav-link">
+            <span class="link-text">文档生成</span>
+          </router-link>
+          -->
         </div>
 
         <div class="nav-actions">
@@ -84,4 +96,12 @@
 
 <style>
 @import '@/styles/global.css';
+
+.nav-section-divider {
+  width: 1px;
+  height: 20px;
+  background: #dcdfe6;
+  margin: 0 4px;
+  align-self: center;
+}
 </style>

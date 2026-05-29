@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Layout from '@/views/Layout.vue'
+import Phase1Workflow from '@/views/phase1/Phase1Workflow.vue'
 import OrderPaste from '@/views/phase1/OrderPaste.vue'
 import PIExtract from '@/views/phase1/PIExtract.vue'
 import DataMerge from '@/views/phase1/DataMerge.vue'
@@ -15,7 +16,13 @@ const router = createRouter({
       children: [
         {
           path: '',
-          redirect: '/order-paste'
+          redirect: '/workflow'
+        },
+        {
+          path: 'workflow',
+          name: 'Phase1Workflow',
+          component: Phase1Workflow,
+          meta: { title: '订单处理工作流' }
         },
         {
           path: 'order-paste',

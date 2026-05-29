@@ -81,9 +81,8 @@ export interface PiQueryResponse {
 export const uploadPiFile = async (file: File): Promise<PiUploadResponse> => {
   const formData = new FormData()
   formData.append('file', file)
-  const response = await axios.post<PiUploadResponse>(`${BASE_URL}/upload`, formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  })
+  // Do NOT set Content-Type header manually — axios must set it with boundary
+  const response = await axios.post<PiUploadResponse>(`${BASE_URL}/upload`, formData)
   return response.data
 }
 

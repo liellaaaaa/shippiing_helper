@@ -17,6 +17,10 @@ COLUMN_MAPPING: dict[str, list[str]] = {
     "merchandiser": ["跟单员", "Merchandiser", "Merch"],
     "customs_name": ["报关名称", "Customs Name"],
     "hs_code": ["H.S.Code", "HS Code", "H.S."],
+    "order_requirement": ["订单要求", "Order Requirement", "要求"],
+    "order_date": ["交货日期", "Delivery Date", "交期"],
+    "production_deadline": ["生产交期", "Production Deadline"],
+    "shipment_method": ["出货方式", "Shipment Method", "出运方式"],
 }
 
 
@@ -42,6 +46,82 @@ def split_lines(text: str) -> list[str]:
     """Split by newline to get rows, filter empty lines, strip each part."""
     lines = text.split("\n")
     return [line.strip() for line in lines if line.strip()]
+
+
+def merge_quoted_lines(lines: list[str]) -> list[str]:
+    """
+    合并被 Excel 引号包围的单元格换行打断的行。
+
+    问题：Excel 引号单元格含换行时，引号 " 在跨行处被切断，
+    形成"引号开头行"、"多行内容"、"引号结尾行"分离的情况。
+
+    逻辑：
+    - 若上一行末字段以 " 开头但不以 " 结尾 → 引号未关闭，后续行并入
+    - 若本行首字段以 " 结尾 → 引号关闭，本行剩余字段成新行
+    """
+    if not lines:
+        return lines
+
+    result: list[str] = []
+    # Tracks whether we've opened a quote from a previous line and haven't closed it yet.
+    # Once True after a quote opens, stays True until a closing field resets it.
+    in_open_quote = False
+
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        line_cols = line.split("\t")
+
+        if result and in_open_quote:
+            # Open quote from a previous line — merge continuation lines
+            if len(line_cols) == 1 and not line.endswith('"'):
+                prev_parts = result[-1].split("\t")
+                prev_parts[-1] = prev_parts[-1] + "\n" + line.strip()
+                result[-1] = "\t".join(prev_parts)
+                i += 1
+                continue
+            elif line.endswith('"') and not line.startswith('"'):
+                prev_parts = result[-1].split("\t")
+                prev_parts[-1] = prev_parts[-1] + "\n" + line.strip()
+                result[-1] = "\t".join(prev_parts)
+                in_open_quote = False
+                i += 1
+                continue
+            elif len(line_cols) > 1 and line_cols[0].endswith('"') and not line_cols[0].startswith('"'):
+                prev_parts = result[-1].split("\t")
+                prev_parts[-1] = prev_parts[-1] + "\n" + line_cols[0]
+                result[-1] = "\t".join(prev_parts)
+                rest = "\t".join(line_cols[1:])
+                if rest.strip():
+                    result.append(rest)
+                in_open_quote = False
+                i += 1
+                continue
+
+        # Before appending, check if prev row's last field opened a quote.
+        # If so, merge current line into prev row instead of appending.
+        if result:
+            prev_parts = result[-1].split("\t")
+            last_field = prev_parts[-1] if prev_parts else ""
+            if last_field.startswith('"') and not last_field.endswith('"'):
+                # Prev row opened a quote — merge current line (continuation) into it
+                prev_parts[-1] = prev_parts[-1] + "\n" + line.strip()
+                result[-1] = "\t".join(prev_parts)
+                # Quote is still open for next lines
+                i += 1
+                continue
+
+        # No open quote from prev row — check if CURRENT row opens one (for next iteration)
+        if result:
+            prev_parts = result[-1].split("\t")
+            last_field = prev_parts[-1] if prev_parts else ""
+            if last_field.startswith('"') and not last_field.endswith('"'):
+                in_open_quote = True
+
+        result.append(line)
+        i += 1
+
+    return result
 
 
 def parse_header(header_line: str, delimiter: str) -> dict[int, str]:
@@ -91,11 +171,14 @@ def parse_pasted_data(
     if not raw_text.strip():
         return [], [], None
 
-    delimiter = detect_delimiter(raw_text)
+    # 先修复引号打断的行，再检测分隔符
     lines = split_lines(raw_text)
+    lines = merge_quoted_lines(lines)
 
     if not lines:
         return [], [], None
+
+    delimiter = detect_delimiter(lines[0])
 
     # Parse header
     col_map = parse_header(lines[0], delimiter)
@@ -159,6 +242,11 @@ def parse_pasted_data(
             total_amount=item.get("total_amount") if isinstance(item.get("total_amount"), float) else None,
             customs_name=item.get("customs_name"),
             hs_code=item.get("hs_code"),
+            order_requirement=item.get("order_requirement"),
+            order_date=item.get("order_date"),
+            production_deadline=item.get("production_deadline"),
+            shipment_method=item.get("shipment_method"),
+            salesperson=item.get("salesperson"),
         )
         orders_by_no[order_no].items.append(order_item)
 

@@ -1,10 +1,5 @@
 <template>
   <div class="pi-extract-page">
-    <div class="page-header">
-      <h1 class="page-title">PI 文件提取</h1>
-      <p class="page-subtitle">上传 PI 合同文件，自动解析并关联产品知识库</p>
-    </div>
-
     <div class="page-content">
       <div class="content-left">
         <el-card class="upload-card">
@@ -77,16 +72,6 @@ const showMappingModal = ref(false)
 const confidencePercent = ref('0%')
 const originalColumns = ref<string[]>([])
 
-// Load customer mapping from localStorage
-const loadCustomerMapping = (customerCode: string): Record<string, string> | null => {
-  try {
-    const raw = localStorage.getItem(`pi_mapping_${customerCode}`)
-    return raw ? JSON.parse(raw).column_mapping : null
-  } catch {
-    return null
-  }
-}
-
 // Save customer mapping to localStorage
 const saveCustomerMapping = (customerCode: string, mapping: Record<string, string>) => {
   localStorage.setItem(`pi_mapping_${customerCode}`, JSON.stringify({
@@ -140,7 +125,7 @@ const queryContracts = () => {
 }
 
 // Handle column mapping application
-const handleMappingApply = (mapping: Record<string, string>) => {
+const handleMappingApply = (_mapping: Record<string, string>) => {
   ElMessage.info('列映射已应用（重新解析功能待实现）')
 }
 

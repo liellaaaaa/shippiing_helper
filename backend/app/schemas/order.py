@@ -14,6 +14,11 @@ class OrderItemSchema(BaseModel):
     quantity_kg: Optional[float] = None
     unit_price: Optional[float] = None
     total_amount: Optional[float] = None
+    order_requirement: Optional[str] = None   # 订单要求（含包装指令）
+    order_date: Optional[str] = None          # 交货日期
+    production_deadline: Optional[str] = None # 生产交期
+    shipment_method: Optional[str] = None    # 出货方式
+    salesperson: Optional[str] = None        # 业务员（产品行级别）
     packaging_type_id: Optional[int] = None
     pallet_spec: Optional[str] = None
     drums_per_pallet: Optional[int] = None

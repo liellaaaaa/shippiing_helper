@@ -1,7 +1,5 @@
 <template>
   <div class="order-paste-page">
-    <el-page-header @back="handleBack" content="订单粘贴解析" />
-
     <div class="page-content">
       <PasteTextarea
         v-model="rawText"
@@ -22,13 +20,11 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import PasteTextarea from '@/components/phase1/PasteTextarea.vue'
 import OrderPreviewForm from '@/components/phase1/OrderPreviewForm.vue'
 import { ordersApi, type PasteParseResponse, type ParsedOrderSchema } from '@/api/orders'
 
-const router = useRouter()
 const rawText = ref('')
 const parseResult = ref<PasteParseResponse | null>(null)
 
@@ -59,10 +55,6 @@ function handleReset() {
 
 function handleClear() {
   handleReset()
-}
-
-function handleBack() {
-  router.back()
 }
 </script>
 

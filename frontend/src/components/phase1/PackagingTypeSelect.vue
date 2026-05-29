@@ -41,7 +41,7 @@ defineEmits(['update:modelValue'])
 const packagingTypes = ref<PackagingType[]>([])
 const manualOverride = ref(false)
 
-watch(() => props.modelValue, (newVal, oldVal) => {
+watch(() => props.modelValue, (newVal) => {
   if (props.recommended && newVal !== props.recommended) {
     manualOverride.value = true
   }

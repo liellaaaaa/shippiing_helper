@@ -1,10 +1,5 @@
 <template>
   <div class="data-merge-page">
-    <div class="page-header">
-      <h1 class="page-title">数据关联</h1>
-      <p class="page-subtitle">订单与 PI 数据核对诊断中心 — 只提示，不合并</p>
-    </div>
-
     <!-- 顶部：Tab + 搜索 -->
     <div class="filter-bar">
       <el-tabs v-model="activeTab" @tab-change="handleTabChange">

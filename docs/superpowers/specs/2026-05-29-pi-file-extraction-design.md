@@ -43,10 +43,13 @@
 | sales_person | TEXT | 业务员 | Excel 列 |
 | pi_date | TEXT | PI日期 | Excel 列 |
 | is_ordered | TEXT | 是否下单（0/1） | Excel 列 |
+| order_id | INTEGER FK | 关联销售订单ID（**可选**，Phase 1 可为空） | Excel 列"销售订单号" |
 | created_at | TEXT | 创建时间 | 系统生成 |
 | updated_at | TEXT | 更新时间 | 系统生成 |
 
-**关联**：`pi_no` 是 pi_contracts 的唯一索引。一张 PI 合同的多行产品明细通过 `pi_no` 关联。
+**关联说明**：
+- `pi_no` 是 pi_contracts 的唯一索引。一张 PI 合同的多行产品明细通过 `pi_no` 关联。
+- `order_id` 为可选字段，用于精准关联具体销售订单。解析时优先匹配"销售订单号"列；若该列不存在或为空，则通过 `internal_code` 与 orders 表间接关联。
 
 ### 2.2 pi_contract_items（PI 产品明细表）
 
@@ -99,6 +102,7 @@
 | PI号 | pi_no | PI NO. / Proforma Invoice No. |
 | 业务员 | sales_person | Salesperson |
 | 日期 | pi_date | Date / PI Date |
+| 销售订单号 | order_id | Sales Order No. / SO No. |
 | 内部编码 | internal_code | Item Code / SKU / 产品代码 |
 | 数量 | quantity | QTY / Quantity |
 | 单价 | unit_price | Unit Price / Price |
@@ -135,19 +139,28 @@
 
 **场景**：固定客户（如 TOA-DOVECHEM）的 PI 文件列名非标，但格式固定。
 
-**交互**：
-1. 首次上传该客户 PI 时，手动映射列名
-2. 点击"保存为 [客户名] 专属模板"
-3. 下次上传同一客户的 PI，系统自动应用已保存的映射规则
+**交互流程**：
+1. 用户上传 PI 文件
+2. 系统计算解析置信度
+3. **若置信度 ≥ 60%**：直接显示预览，不显示映射编辑按钮
+4. **若置信度 < 60%**：预览界面显示橙色警告"识别率较低"，并显示"编辑列映射"按钮
+5. 用户点击"编辑列映射" → 弹出模态框，左侧展示 Excel 原始列名，右侧下拉选择目标字段
+6. 用户完成映射后点击"应用"，系统重新解析
+7. 用户点击"保存为 [客户名] 专属模板" → 映射规则存入 localStorage
 
-**存储**：
+**存储位置**：前端 `localStorage`，key = `pi_mapping_{customer_code}`，跨设备不同步（Phase 1 简单高效）。
+
+**示例**：
 ```json
+// localStorage key: "pi_mapping_TOA-DOVECHEM"
 {
   "customer_code": "TOA-DOVECHEM",
   "column_mapping": {
     "SKU": "internal_code",
-    "ITEM": "internal_code"
-  }
+    "ITEM": "internal_code",
+    "COLOR": "product_color"
+  },
+  "created_at": "2026-05-29"
 }
 ```
 
@@ -189,6 +202,8 @@
   "is_ordered": "0",
   "items": [
     {
+      "row_index": 1,
+      "status": "success",
       "internal_code": "SILI-001",
       "quantity": 2400.0,
       "unit_price": 29.5,
@@ -200,15 +215,39 @@
       "order_customs_name": "有机硅柔软剂 25kg/桶",
       "notes": "",
       "_missing_fields": []
+    },
+    {
+      "row_index": 2,
+      "status": "error",
+      "error_msg": "数量格式不正确：'abc'",
+      "internal_code": "SILI-002",
+      "quantity": null,
+      "unit_price": 25.0,
+      "total_amount": null,
+      "product_color": "",
+      "hs_code": null,
+      "customs_name": "改性硅油",
+      "customs_composition": "",
+      "order_customs_name": "",
+      "notes": "",
+      "_missing_fields": ["quantity", "total_amount", "hs_code"]
     }
   ],
   "confidence": {
     "recognized": 10,
     "total": 12,
-    "percentage": "83%"
+    "percentage": "83%",
+    "failed_rows": 1
   }
 }
 ```
+
+**字段说明**：
+- `row_index`：行号（第几行），用于前端定位问题行
+- `status`：`success`（解析成功）或 `error`（解析失败）
+- `error_msg`：当 status=error 时，描述具体错误原因
+- `_missing_fields`：缺失的关键字段列表（用于前端标红）
+- `confidence.failed_rows`：解析失败的行数
 
 **错误响应（400）**：
 ```json

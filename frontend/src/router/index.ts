@@ -4,6 +4,7 @@ import OrderPaste from '@/views/phase1/OrderPaste.vue'
 import PIExtract from '@/views/phase1/PIExtract.vue'
 import DataMerge from '@/views/phase1/DataMerge.vue'
 import PackageCalc from '@/views/phase1/PackageCalc.vue'
+import Dashboard from '@/views/phase1/Dashboard.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -39,6 +40,12 @@ const router = createRouter({
           name: 'PackageCalc',
           component: PackageCalc,
           meta: { title: '包装计算' }
+        },
+        {
+          path: 'dashboard',
+          name: 'Dashboard',
+          component: Dashboard,
+          meta: { title: '数据看板' }
         }
       ]
     }

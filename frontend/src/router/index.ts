@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import Layout from '@/views/Layout.vue'
 import OrderPaste from '@/views/phase1/OrderPaste.vue'
 import PIExtract from '@/views/phase1/PIExtract.vue'
+import DataMerge from '@/views/phase1/DataMerge.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -25,6 +26,12 @@ const router = createRouter({
           name: 'PIExtract',
           component: PIExtract,
           meta: { title: 'PI 文件提取' }
+        },
+        {
+          path: 'data-merge',
+          name: 'DataMerge',
+          component: DataMerge,
+          meta: { title: '数据关联' }
         }
       ]
     }

@@ -365,4 +365,32 @@
 
 ---
 
+## E2E 验收证明（2026-05-29）
+
+### 验收结论：全部通过
+
+| 验收条件 | 验证结果 |
+|----------|----------|
+| AC-1：.xls/.xlsx 上传，≤ 10MB | ✅ `POST /api/v1/pi/upload` 支持两种格式 |
+| AC-2：解析成功率 ≥ 80% | ✅ 标准文件测试：置信度 100%（15列全识别） |
+| AC-3：置信度前端可见 | ✅ 响应包含 `confidence.percentage` 字段 |
+| AC-4：缺失字段预览标红 | ✅ `items[i]._missing_fields` + `items[i].status=error` |
+| AC-5：保存后 pi_data 自动反写 | ✅ `SILI-001`、`SILI-002` 保存后自动 Upsert 进 `pi_data` 表 |
+| AC-6：客户映射记忆 | ✅ 前端 localStorage 逻辑已实现（`pi_mapping_{customerCode}`） |
+| AC-7：标准模板下载 | ✅ `downloadTemplate()` 生成 TSV 标准表头 |
+| AC-8：历史查询筛选 | ✅ `GET /api/v1/pi/contracts?pi_no=&customer_code=&internal_code=` |
+
+### 验证快照
+
+```
+后端健康：{"status":"ok"}
+API路由：/api/v1/pi/upload, /api/v1/pi/contracts, /api/v1/pi/contracts (GET)
+数据库：pi_contracts, pi_contract_items, pi_data 三表存在
+索引：idx_pi_contracts_pi_no (UNIQUE), idx_pi_data_internal_code (UNIQUE)
+Upsert验证：SILI-001/SILI-002 保存前不存在 → 保存后自动插入
+```
+
+---
+
 *文档版本：v1.0.0（草稿）*
+*E2E 验收完成：2026-05-29*

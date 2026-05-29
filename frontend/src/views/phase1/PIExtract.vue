@@ -14,9 +14,7 @@
             </div>
           </template>
           <div class="upload-placeholder">
-            <el-icon :size="48"><upload-filled /></el-icon>
-            <p>拖拽或点击上传 PI 文件</p>
-            <p class="upload-hint">支持 .xls / .xlsx 文件</p>
+            <PiUploadDragger @fileSelected="handleFileSelected" />
           </div>
         </el-card>
 
@@ -56,11 +54,26 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { UploadFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import PiUploadDragger from '@/components/phase1/PiUploadDragger.vue'
+import { uploadPiFile, PiUploadResponse } from '@/api/pi'
 
 const searchPiNo = ref('')
-const parsedData = ref(null)
+const parsedData = ref<PiUploadResponse | null>(null)
+const loading = ref(false)
+
+const handleFileSelected = async (file: File) => {
+  loading.value = true
+  try {
+    parsedData.value = await uploadPiFile(file)
+    ElMessage.success('PI 文件解析完成')
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.detail || '解析失败，请检查文件格式')
+    parsedData.value = null
+  } finally {
+    loading.value = false
+  }
+}
 
 const queryContracts = () => {
   ElMessage.info('查询功能待实现')

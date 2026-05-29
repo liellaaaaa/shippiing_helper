@@ -35,6 +35,34 @@ def normalize_column_name(col_name: str) -> str | None:
     return None
 
 
+# Standard Excel column order (23 fields) — used as positional fallback when no header
+STANDARD_COLUMN_ORDER: list[str] = [
+    "salesperson",       # 0
+    "customer_code",     # 1
+    "internal_code",     # 2
+    "product_cn",        # 3
+    "customs_name",      # 4
+    "spec_kg",          # 5
+    "quantity_kg",      # 6
+    None,               # 7  是否调价 — 不解析
+    None,               # 8  有无样品 — 不解析
+    "order_requirement",# 9
+    "order_date",       # 10
+    None,               # 11 审核 — 不解析
+    None,               # 12 销售区域 — 不解析
+    "order_no",         # 13
+    None,               # 14 出货抬头 — 不解析
+    None,               # 15 单据类型 — 不解析
+    "merchandiser",     # 16
+    None,               # 17 下单日期 — 不解析
+    None,               # 18 确认下单 — 不解析
+    None,               # 19 生产交期 — 不解析
+    None,               # 20 出货渠道 — 不解析
+    "shipment_method",  # 21
+    None,               # 22 规格异常 — 不解析
+]
+
+
 def detect_delimiter(raw_text: str) -> str:
     """Return tab if tabs found, else newline."""
     if "\t" in raw_text:
@@ -135,6 +163,15 @@ def parse_header(header_line: str, delimiter: str) -> dict[int, str]:
     return col_map
 
 
+def build_positional_map(col_count: int) -> dict[int, str]:
+    """Build column map from standard Excel column order (positional fallback)."""
+    col_map: dict[int, str] = {}
+    for i, field_name in enumerate(STANDARD_COLUMN_ORDER):
+        if field_name is not None and i < col_count:
+            col_map[i] = field_name
+    return col_map
+
+
 def parse_row(parts: list[str], col_map: dict[int, str]) -> dict[str, str | float | None]:
     """Map row parts to field names using col_map."""
     row_data: dict[str, str | float | None] = {}
@@ -180,14 +217,19 @@ def parse_pasted_data(
 
     delimiter = detect_delimiter(lines[0])
 
-    # Parse header
+    # Parse header — fall back to positional mapping if header yields < 3 mapped fields
     col_map = parse_header(lines[0], delimiter)
+    has_header = len(col_map) >= 3
+    if not has_header and len(lines[0].split(delimiter)) >= 10:
+        # Header didn't match enough column names; treat first line as data row
+        col_map = build_positional_map(len(lines[0].split(delimiter)))
 
-    # Parse data rows
+    # Parse data rows — skip header row if present
     raw_items: list[dict] = []
     skipped_rows: list[SkippedRowSchema] = []
+    data_start = 1 if has_header else 0
 
-    for i, line in enumerate(lines[1:], start=2):
+    for i, line in enumerate(lines[data_start:], start=data_start + 2):
         parts = [p.strip() for p in line.split(delimiter)]
         row_data = parse_row(parts, col_map)
 

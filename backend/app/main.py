@@ -4,6 +4,7 @@ from app.api.v1.orders import router as orders_router
 from app.api.v1.pi import router as pi_router
 from app.api.v1.merge import router as merge_router
 from app.api.v1.packages import router as packages_router
+from app.api.v1.dashboard import router as dashboard_router
 
 app = FastAPI(
     title="ShippingHelper API",
@@ -25,6 +26,7 @@ app.include_router(orders_router)
 app.include_router(pi_router)
 app.include_router(merge_router)
 app.include_router(packages_router)
+app.include_router(dashboard_router)
 
 
 @app.get("/health")

@@ -3,6 +3,7 @@ FastAPI 依赖注入。
 将服务层注入到路由中。
 """
 from app.services.order_service import OrderService
+from app.services.merge_service import MergeService
 from app.database import SessionLocal
 
 
@@ -15,3 +16,8 @@ def get_pi_service():
     """PI合同服务依赖注入"""
     from app.services.pi_service import PiService
     return PiService(SessionLocal())
+
+
+def get_merge_service() -> MergeService:
+    """数据关联服务依赖"""
+    return MergeService(SessionLocal())

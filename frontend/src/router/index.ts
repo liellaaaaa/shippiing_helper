@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Layout from '@/views/Layout.vue'
 import Phase1Workflow from '@/views/phase1/Phase1Workflow.vue'
+import Phase2Workflow from '@/views/phase2/Phase2Workflow.vue'
 import Dashboard from '@/views/phase1/Dashboard.vue'
 
 const router = createRouter({
@@ -25,6 +26,12 @@ const router = createRouter({
           name: 'Dashboard',
           component: Dashboard,
           meta: { title: '数据看板' }
+        },
+        {
+          path: 'phase2',
+          name: 'Phase2Workflow',
+          component: Phase2Workflow,
+          meta: { title: '文档编辑' }
         }
       ]
     }

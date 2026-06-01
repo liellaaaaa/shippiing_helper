@@ -118,6 +118,13 @@
       >
         确认入库
       </el-button>
+      <el-button
+        v-if="savedOrderId"
+        type="primary"
+        @click="$router.push({ path: '/phase2', query: { orderId: savedOrderId } })"
+      >
+        进入文档编辑 →
+      </el-button>
     </div>
   </div>
 </template>
@@ -140,6 +147,7 @@ const piParsed = ref(false)
 const piParsedData = ref<PiUploadResponse | null>(null)
 const piFileName = ref('')
 const saving = ref(false)
+const savedOrderId = ref<number | null>(null)
 const packagingResult = ref<PackagingResult | null>(null)
 
 // Order Form
@@ -435,12 +443,13 @@ async function handleConfirmSave() {
       customs_name: piForm.value.customs_name,
     } : undefined
 
-    await saveOrderPiRecord({
+    const resp = await saveOrderPiRecord({
       order_data: orderData,
       pi_data: piData,
       packaging_result: packagingResult.value || undefined,
     })
 
+    savedOrderId.value = resp.record_id
     ElMessage.success('数据已成功落库！')
     handleReset()
   } catch (err: any) {

@@ -29,7 +29,15 @@
               <el-tag v-if="piParsed" type="success" size="small">已解析</el-tag>
             </div>
           </template>
-          <PiUploadDragger @fileSelected="handlePiFileSelected" />
+          <PiUploadDragger
+            v-if="!piParsed"
+            @fileSelected="handlePiFileSelected"
+          />
+          <div v-else class="pi-file-info">
+            <el-icon><document /></el-icon>
+            <span class="pi-file-name">{{ piFileName }}</span>
+            <el-button text size="small" @click="piParsed = false; piFileName = ''">重新上传</el-button>
+          </div>
         </el-card>
       </div>
 
@@ -117,6 +125,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
+import { Document } from '@element-plus/icons-vue'
 import PasteTextarea from '@/components/phase1/PasteTextarea.vue'
 import PiUploadDragger from '@/components/phase1/PiUploadDragger.vue'
 import { ordersApi, type ParsedOrderSchema } from '@/api/orders'
@@ -129,6 +138,7 @@ const orderParsed = ref(false)
 const orderParsedData = ref<ParsedOrderSchema | null>(null)
 const piParsed = ref(false)
 const piParsedData = ref<PiUploadResponse | null>(null)
+const piFileName = ref('')
 const saving = ref(false)
 const packagingResult = ref<PackagingResult | null>(null)
 
@@ -283,6 +293,7 @@ async function handleOrderParse(text: string) {
 }
 
 async function handlePiFileSelected(file: File) {
+  piFileName.value = file.name
   try {
     const result = await uploadPiFile(file)
     piParsedData.value = result
@@ -445,6 +456,7 @@ function handleReset() {
   orderParsedData.value = null
   piParsed.value = false
   piParsedData.value = null
+  piFileName.value = ''
   packagingResult.value = null
   orderForm.value = { order_no: '', customer_code: '', internal_code: '', product_cn: '', spec_kg: 0, quantity_kg: 0, unit_price: 0, total_amount: 0, hs_code: '', customs_name: '', order_requirement: '', notes: '' }
   piForm.value = { pi_no: '', customer_code: '', pi_date: '', internal_code: '', quantity: 0, unit_price: 0, total_amount: 0, hs_code: '', customs_name: '' }
@@ -470,4 +482,7 @@ function handleReset() {
 .packing-scheme { margin-top: 12px; padding: 10px; background: #f5f7fa; border-radius: 6px; font-size: 13px; color: #606266; }
 
 .action-bar { position: sticky; bottom: 0; display: flex; justify-content: flex-end; gap: 12px; padding: 16px 24px; background: white; border-top: 1px solid #e8e8e8; margin-top: 20px; box-shadow: 0 -2px 12px rgba(0,0,0,0.05); }
+
+.pi-file-info { display: flex; align-items: center; gap: 8px; padding: 12px 16px; background: #f0f9eb; border-radius: 8px; color: #67c23a; }
+.pi-file-name { flex: 1; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>

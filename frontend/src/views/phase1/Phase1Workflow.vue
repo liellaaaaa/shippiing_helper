@@ -1,6 +1,5 @@
 <template>
   <div class="phase1-workflow">
-    <!-- 页面标题 -->
     <div class="page-header">
       <h1 class="page-title">外贸订单处理工作流</h1>
       <p class="page-subtitle">粘贴订单 → 上传 PI → 预览合并数据 → 确认入库</p>
@@ -9,7 +8,6 @@
     <div class="workflow-layout">
       <!-- 左侧输入区 -->
       <div class="input-panel">
-        <!-- 订单输入 -->
         <el-card class="input-card">
           <template #header>
             <div class="card-header">
@@ -17,48 +15,13 @@
               <el-tag v-if="orderParsed" type="success" size="small">已解析</el-tag>
             </div>
           </template>
-
           <PasteTextarea
             v-model="orderText"
             @parse="handleOrderParse"
             @clear="handleOrderClear"
           />
-
-          <!-- 订单预览（可编辑） -->
-          <div v-if="orderParsed" class="order-preview">
-            <el-divider content-position="left">订单预览</el-divider>
-            <el-form label-width="100px" size="small">
-              <el-form-item label="订单号">
-                <el-input v-model="orderForm.order_no" />
-              </el-form-item>
-              <el-form-item label="客户编码">
-                <el-input v-model="orderForm.customer_code" />
-              </el-form-item>
-              <el-form-item label="内部编码">
-                <el-input v-model="orderForm.internal_code" />
-              </el-form-item>
-              <el-form-item label="产品名称">
-                <el-input v-model="orderForm.product_cn" />
-              </el-form-item>
-              <el-form-item label="规格kg">
-                <el-input-number v-model="orderForm.spec_kg" :min="0" />
-              </el-form-item>
-              <el-form-item label="订单量kg">
-                <el-input-number v-model="orderForm.quantity_kg" :min="0" />
-              </el-form-item>
-              <el-form-item label="订单要求">
-                <el-input
-                  v-model="orderForm.order_requirement"
-                  type="textarea"
-                  :rows="3"
-                  placeholder="包含包装、标签、卡板、出货日期等要求"
-                />
-              </el-form-item>
-            </el-form>
-          </div>
         </el-card>
 
-        <!-- PI 上传 -->
         <el-card class="input-card" style="margin-top: 16px;">
           <template #header>
             <div class="card-header">
@@ -66,64 +29,49 @@
               <el-tag v-if="piParsed" type="success" size="small">已解析</el-tag>
             </div>
           </template>
-
           <PiUploadDragger @fileSelected="handlePiFileSelected" />
-
-          <!-- PI 预览 -->
-          <div v-if="piParsed" class="pi-preview">
-            <el-divider content-position="left">PI 预览</el-divider>
-            <el-descriptions :column="1" border size="small">
-              <el-descriptions-item label="PI号">{{ piForm.pi_no }}</el-descriptions-item>
-              <el-descriptions-item label="客户编码">{{ piForm.customer_code }}</el-descriptions-item>
-              <el-descriptions-item label="日期">{{ piForm.pi_date }}</el-descriptions-item>
-              <el-descriptions-item label="数量">{{ piForm.quantity }}</el-descriptions-item>
-              <el-descriptions-item label="单价">{{ piForm.unit_price }}</el-descriptions-item>
-              <el-descriptions-item label="金额">{{ piForm.total_amount }}</el-descriptions-item>
-              <el-descriptions-item label="报关品名">{{ piForm.customs_name }}</el-descriptions-item>
-              <el-descriptions-item label="H.S.Code">{{ piForm.hs_code }}</el-descriptions-item>
-            </el-descriptions>
-          </div>
         </el-card>
       </div>
 
       <!-- 右侧预览区 -->
       <div class="preview-panel">
-        <!-- 合并预览表 -->
         <el-card class="preview-card">
           <template #header>
             <div class="card-header">
-              <span>合并预览</span>
+              <span>合并预览（可直接编辑）</span>
               <el-tag v-if="canMerge" type="warning" size="small">待确认</el-tag>
               <el-tag v-else type="info" size="small">等待数据</el-tag>
             </div>
           </template>
 
-          <el-table :data="mergedRows" border stripe size="small" max-height="300">
+          <el-table :data="editableMergedRows" border stripe size="small" max-height="400">
             <el-table-column prop="field" label="字段" width="120" />
             <el-table-column prop="orderVal" label="订单数据" min-width="140" />
             <el-table-column prop="piVal" label="PI数据" min-width="140" />
-            <el-table-column prop="mergedVal" label="合并结果" min-width="140">
+            <el-table-column prop="mergedVal" label="合并结果" min-width="160">
               <template #default="{ row }">
-                <span :class="row.source ? 'source-' + row.source : ''">{{ row.mergedVal }}</span>
+                <el-input
+                  v-model="row.mergedVal"
+                  size="small"
+                  @change="onMergedValChange(row, ($event as string))"
+                />
               </template>
             </el-table-column>
           </el-table>
         </el-card>
 
-        <!-- 包装计算结果 -->
         <el-card class="preview-card" style="margin-top: 16px;">
           <template #header>
             <div class="card-header">
               <span>包装计算</span>
-              <el-button v-if="orderForm.order_requirement" size="small" type="primary" @click="runPackagingCalc">
-                重新计算
+              <el-button size="small" type="primary" @click="runPackagingCalc" :disabled="!orderParsed">
+                {{ packagingResult ? '重新计算' : '计算包装' }}
               </el-button>
             </div>
           </template>
 
           <div v-if="!packagingResult" class="pkg-placeholder">
-            <p v-if="orderForm.order_requirement">正在解析订单要求并计算...</p>
-            <p v-else>请先填写订单要求，再点击「重新计算」</p>
+            <p>点击上方按钮进行包装计算</p>
           </div>
 
           <div v-else class="pkg-result">
@@ -150,7 +98,6 @@
       </div>
     </div>
 
-    <!-- 底部操作栏 -->
     <div class="action-bar">
       <el-button @click="handleReset">重置</el-button>
       <el-button @click="runPackagingCalc" :disabled="!orderParsed">计算包装</el-button>
@@ -176,20 +123,16 @@ import { ordersApi, type ParsedOrderSchema } from '@/api/orders'
 import { uploadPiFile, type PiUploadResponse } from '@/api/pi'
 import { saveOrderPiRecord, type PackagingResult } from '@/api/phase1'
 
-// ─── State ────────────────────────────────────────────────────────────────────
-
+// State
 const orderText = ref('')
 const orderParsed = ref(false)
 const orderParsedData = ref<ParsedOrderSchema | null>(null)
-
 const piParsed = ref(false)
 const piParsedData = ref<PiUploadResponse | null>(null)
-
 const saving = ref(false)
 const packagingResult = ref<PackagingResult | null>(null)
 
-// ─── Order Form ───────────────────────────────────────────────────────────────
-
+// Order Form
 const orderForm = ref({
   order_no: '',
   customer_code: '',
@@ -205,8 +148,7 @@ const orderForm = ref({
   notes: '',
 })
 
-// ─── PI Form ──────────────────────────────────────────────────────────────────
-
+// PI Form
 const piForm = ref({
   pi_no: '',
   customer_code: '',
@@ -219,31 +161,89 @@ const piForm = ref({
   customs_name: '',
 })
 
-// ─── Computed ─────────────────────────────────────────────────────────────────
-
+// Computed
 const canMerge = computed(() => orderParsed.value && orderForm.value.internal_code)
 
-// ─── Merged Rows ───────────────────────────────────────────────────────────────
+// Merged Rows - editable
+interface MergedRow {
+  field: string
+  key: string
+  orderVal: string
+  piVal: string
+  mergedVal: string
+  source: string
+}
 
-const mergedRows = computed(() => {
-  const rows = [
-    { field: '订单号', orderVal: orderForm.value.order_no, piVal: '', mergedVal: orderForm.value.order_no, source: 'order' },
-    { field: '客户编码', orderVal: orderForm.value.customer_code, piVal: piForm.value.customer_code, mergedVal: orderForm.value.customer_code || piForm.value.customer_code, source: orderForm.value.customer_code ? 'order' : 'pi' },
-    { field: '内部编码', orderVal: orderForm.value.internal_code, piVal: piForm.value.internal_code, mergedVal: orderForm.value.internal_code, source: 'order' },
-    { field: '产品名称', orderVal: orderForm.value.product_cn, piVal: '', mergedVal: orderForm.value.product_cn, source: 'order' },
-    { field: '规格kg', orderVal: String(orderForm.value.spec_kg), piVal: '', mergedVal: String(orderForm.value.spec_kg), source: 'order' },
-    { field: '数量kg', orderVal: String(orderForm.value.quantity_kg), piVal: String(piForm.value.quantity), mergedVal: String(piForm.value.quantity || orderForm.value.quantity_kg), source: piForm.value.quantity ? 'pi' : 'order' },
-    { field: '单价', orderVal: String(orderForm.value.unit_price), piVal: String(piForm.value.unit_price), mergedVal: String(piForm.value.unit_price || orderForm.value.unit_price), source: piForm.value.unit_price ? 'pi' : 'order' },
-    { field: '金额', orderVal: String(orderForm.value.total_amount), piVal: String(piForm.value.total_amount), mergedVal: String(piForm.value.total_amount || orderForm.value.total_amount), source: piForm.value.total_amount ? 'pi' : 'order' },
-    { field: 'H.S.Code', orderVal: orderForm.value.hs_code, piVal: piForm.value.hs_code, mergedVal: piForm.value.hs_code || orderForm.value.hs_code, source: piForm.value.hs_code ? 'pi' : 'order' },
-    { field: '报关品名', orderVal: orderForm.value.customs_name, piVal: piForm.value.customs_name, mergedVal: orderForm.value.customs_name || piForm.value.customs_name, source: orderForm.value.customs_name ? 'order' : 'pi' },
-    { field: '订单要求', orderVal: orderForm.value.order_requirement, piVal: '', mergedVal: orderForm.value.order_requirement, source: 'order' },
-  ]
-  return rows
-})
+const editableMergedRows = ref<MergedRow[]>([
+  { field: '订单号', key: 'order_no', orderVal: '', piVal: '', mergedVal: '', source: 'order' },
+  { field: '客户编码', key: 'customer_code', orderVal: '', piVal: '', mergedVal: '', source: 'order' },
+  { field: '内部编码', key: 'internal_code', orderVal: '', piVal: '', mergedVal: '', source: 'order' },
+  { field: '产品名称', key: 'product_cn', orderVal: '', piVal: '', mergedVal: '', source: 'order' },
+  { field: '规格kg', key: 'spec_kg', orderVal: '', piVal: '', mergedVal: '', source: 'order' },
+  { field: '数量kg', key: 'quantity_kg', orderVal: '', piVal: '', mergedVal: '', source: 'order' },
+  { field: '单价', key: 'unit_price', orderVal: '', piVal: '', mergedVal: '', source: 'order' },
+  { field: '金额', key: 'total_amount', orderVal: '', piVal: '', mergedVal: '', source: 'order' },
+  { field: 'H.S.Code', key: 'hs_code', orderVal: '', piVal: '', mergedVal: '', source: 'order' },
+  { field: '报关品名', key: 'customs_name', orderVal: '', piVal: '', mergedVal: '', source: 'order' },
+  { field: '订单要求', key: 'order_requirement', orderVal: '', piVal: '', mergedVal: '', source: 'order' },
+])
 
-// ─── Handlers ─────────────────────────────────────────────────────────────────
+function syncMergedRowsFromForms() {
+  const of = orderForm.value
+  const pf = piForm.value
+  const map: Record<string, string> = {
+    order_no: of.order_no,
+    customer_code: of.customer_code,
+    internal_code: of.internal_code,
+    product_cn: of.product_cn,
+    spec_kg: String(of.spec_kg),
+    quantity_kg: String(of.quantity_kg),
+    unit_price: String(of.unit_price),
+    total_amount: String(of.total_amount),
+    hs_code: of.hs_code,
+    customs_name: of.customs_name,
+    order_requirement: of.order_requirement,
+  }
+  for (const row of editableMergedRows.value) {
+    row.orderVal = map[row.key] || ''
+    if (row.key === 'customer_code') row.piVal = pf.customer_code || ''
+    if (row.key === 'quantity_kg') row.piVal = String(pf.quantity) || ''
+    if (row.key === 'unit_price') row.piVal = String(pf.unit_price) || ''
+    if (row.key === 'total_amount') row.piVal = String(pf.total_amount) || ''
+    if (row.key === 'hs_code') row.piVal = pf.hs_code || ''
+    if (row.key === 'customs_name') row.piVal = pf.customs_name || ''
+    if (row.orderVal) {
+      row.mergedVal = row.orderVal
+      row.source = 'order'
+    } else if (row.piVal) {
+      row.mergedVal = row.piVal
+      row.source = 'pi'
+    } else {
+      row.mergedVal = ''
+      row.source = 'order'
+    }
+  }
+}
 
+function onMergedValChange(row: MergedRow, val: string) {
+  row.mergedVal = val
+  const of = orderForm.value
+  switch (row.key) {
+    case 'order_no': of.order_no = val; break
+    case 'customer_code': of.customer_code = val; break
+    case 'internal_code': of.internal_code = val; break
+    case 'product_cn': of.product_cn = val; break
+    case 'spec_kg': of.spec_kg = parseFloat(val) || 0; break
+    case 'quantity_kg': of.quantity_kg = parseFloat(val) || 0; break
+    case 'unit_price': of.unit_price = parseFloat(val) || 0; break
+    case 'total_amount': of.total_amount = parseFloat(val) || 0; break
+    case 'hs_code': of.hs_code = val; break
+    case 'customs_name': of.customs_name = val; break
+    case 'order_requirement': of.order_requirement = val; break
+  }
+}
+
+// Handlers
 async function handleOrderParse(text: string) {
   try {
     const result = await ordersApi.parsePaste(text)
@@ -271,7 +271,7 @@ async function handleOrderParse(text: string) {
     }
     orderParsed.value = true
 
-    // 自动触发包装计算
+    syncMergedRowsFromForms()
     if (orderForm.value.order_requirement) {
       runPackagingCalc()
     }
@@ -300,6 +300,7 @@ async function handlePiFileSelected(file: File) {
       customs_name: firstItem.customs_name || '',
     }
     piParsed.value = true
+    syncMergedRowsFromForms()
     ElMessage.success('PI 解析成功')
   } catch (err: any) {
     ElMessage.error(err.response?.data?.detail || 'PI 解析失败')
@@ -313,10 +314,9 @@ function handleOrderClear() {
   packagingResult.value = null
 }
 
-// ─── Packaging Calculation ─────────────────────────────────────────────────────
-
+// Packaging Calculation
 async function runPackagingCalc() {
-  if (!orderForm.value.internal_code && !orderParsed.value) {
+  if (!orderParsed.value) {
     ElMessage.warning('请先完成订单解析')
     return
   }
@@ -365,7 +365,6 @@ interface ParsedRequirement {
 function parseRequirement(text: string): ParsedRequirement {
   const result: ParsedRequirement = {}
 
-  // 桶规格匹配
   const drumMatch = text.match(/(\d+)\s*kg\s*(桶|桶装)/)
   if (drumMatch) {
     const kg = parseInt(drumMatch[1])
@@ -376,14 +375,12 @@ function parseRequirement(text: string): ParsedRequirement {
     result.packagingType = drumMap[kg] || `${kg}kg桶`
   }
 
-  // 卡板规格匹配
   if (text.includes('1.1m') || text.includes('1.1*1.1')) {
     result.palletSpec = '1.1m*1.1m'
   } else if (text.includes('1.0m') || text.includes('1.0*1.0')) {
     result.palletSpec = '1.0m*1.0m'
   }
 
-  // 不打卡板
   if (text.includes('不打卡板') || text.includes('散货')) {
     result.noPallet = true
   }
@@ -391,8 +388,7 @@ function parseRequirement(text: string): ParsedRequirement {
   return result
 }
 
-// ─── Confirm Save ──────────────────────────────────────────────────────────────
-
+// Confirm Save
 async function handleConfirmSave() {
   if (!canMerge.value) {
     ElMessage.warning('请确保订单已解析')
@@ -452,6 +448,7 @@ function handleReset() {
   packagingResult.value = null
   orderForm.value = { order_no: '', customer_code: '', internal_code: '', product_cn: '', spec_kg: 0, quantity_kg: 0, unit_price: 0, total_amount: 0, hs_code: '', customs_name: '', order_requirement: '', notes: '' }
   piForm.value = { pi_no: '', customer_code: '', pi_date: '', internal_code: '', quantity: 0, unit_price: 0, total_amount: 0, hs_code: '', customs_name: '' }
+  syncMergedRowsFromForms()
 }
 </script>
 
@@ -468,14 +465,9 @@ function handleReset() {
 .input-card, .preview-card { border-radius: 12px; }
 .card-header { font-weight: 600; font-size: 15px; display: flex; justify-content: space-between; align-items: center; }
 
-.order-preview, .pi-preview { margin-top: 12px; }
-
 .pkg-placeholder { text-align: center; color: #909399; padding: 20px; }
 .pkg-result { padding: 4px 0; }
 .packing-scheme { margin-top: 12px; padding: 10px; background: #f5f7fa; border-radius: 6px; font-size: 13px; color: #606266; }
 
 .action-bar { position: sticky; bottom: 0; display: flex; justify-content: flex-end; gap: 12px; padding: 16px 24px; background: white; border-top: 1px solid #e8e8e8; margin-top: 20px; box-shadow: 0 -2px 12px rgba(0,0,0,0.05); }
-
-.source-order { color: #409eff; }
-.source-pi { color: #67c23a; }
 </style>

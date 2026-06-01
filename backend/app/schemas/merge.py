@@ -14,6 +14,7 @@ class OrderListItem(BaseModel):
     association_status: str  # "full" / "partial" / "none"
     items_count: int         # 订单产品总数
     linked_count: int         # 已关联 PI 的数量
+    pi_no: Optional[str] = None  # 该订单关联的第一个 PI 号
     created_at: Optional[str] = None
 
     class Config:
@@ -35,6 +36,9 @@ class OrderItemData(BaseModel):
     total_amount: Optional[float] = None
     hs_code: Optional[str] = None
     customs_name: Optional[str] = None
+    gross_weight: Optional[float] = None
+    volume: Optional[float] = None
+    product_en: Optional[str] = None
 
 
 class PiItemData(BaseModel):
@@ -44,6 +48,8 @@ class PiItemData(BaseModel):
     total_amount: Optional[float] = None
     hs_code: Optional[str] = None
     customs_name: Optional[str] = None
+    consignee: Optional[str] = None
+    port: Optional[str] = None
 
 
 class DiffInfo(BaseModel):
@@ -71,6 +77,7 @@ class OrderComparisonResponse(BaseModel):
     order_id: int
     order_no: str
     customer_code: Optional[str] = None
+    pi_no: Optional[str] = None  # 该订单关联的 PI 号
     items: list[ComparisonItem]
 
 

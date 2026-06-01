@@ -72,7 +72,7 @@ async def download_doc(doc_key: str):
         if not doc:
             return {"error": "Document not found"}
         content = base64.b64decode(doc.file_blob)
-        suffix = doc_key.split(".")[-1] if "." in doc_key else "bin"
-        return FileResponse(BytesIO(content), media_type="application/octet-stream", filename=f"{doc_key}.{suffix}")
+        suffix = doc.file_name.split(".")[-1] if "." in doc.file_name else "bin"
+        return FileResponse(BytesIO(content), media_type="application/octet-stream", filename=doc.file_name)
     finally:
         db.close()

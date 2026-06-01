@@ -6,17 +6,24 @@
         <div v-if="phase1Data" class="field-list">
           <div class="field-row">
             <el-tag type="info">发货人</el-tag>
-            <el-input :model-value="phase1Data.shipper || 'HONGHAO CHEMICAL CO., LTD.'" readonly>
-              <template #append>
-                <el-button @click="copy(phase1Data.shipper || 'HONGHAO CHEMICAL CO., LTD.')">
-                  <i class="el-icon-document-copy"></i>
-                </el-button>
-              </template>
-            </el-input>
+            <div class="field-input-btn">
+              <el-select
+                v-model="shipperValue"
+                placeholder="选择发货人"
+                filterable
+                allow-create
+                default-first-option
+              >
+                <el-option v-for="s in SHIPPER_OPTIONS" :key="s" :label="s" :value="s" />
+              </el-select>
+              <el-button @click="copy(shipperValue)">
+                <i class="el-icon-document-copy"></i>
+              </el-button>
+            </div>
           </div>
           <div class="field-row">
             <el-tag type="info">收货人</el-tag>
-            <el-input :model-value="phase1Data.consignee" readonly>
+            <el-input v-model="phase1Data.consignee" readonly>
               <template #append>
                 <el-button @click="copy(phase1Data.consignee)">
                   <i class="el-icon-document-copy"></i>
@@ -26,9 +33,9 @@
           </div>
           <div class="field-row">
             <el-tag type="info">通知人</el-tag>
-            <el-input :model-value="phase1Data.consignee" readonly>
+            <el-input v-model="phase1Data.notifyParty" placeholder="可编辑">
               <template #append>
-                <el-button @click="copy(phase1Data.consignee)">
+                <el-button @click="copy(phase1Data.notifyParty)">
                   <i class="el-icon-document-copy"></i>
                 </el-button>
               </template>
@@ -190,12 +197,19 @@ const props = defineProps<{
   internalCode: string
 }>()
 
+const SHIPPER_OPTIONS = [
+  'HONGHAO CHEMICAL CO., LTD.',
+  'HENGFA CHEMICAL CO., LTD.',
+  'HONGYUAN CHEMICAL CO., LTD.',
+]
+
 const activeNames = ref(['phase1'])
 const phase1Data = ref<any>(null)
 const msdsData = ref<any>(null)
 const transportData = ref<any>(null)
 const exportCodeData = ref<any>(null)
 const exportCodeQuery = ref('')
+const shipperValue = ref(SHIPPER_OPTIONS[0])
 
 async function copy(text: string) {
   if (!text) return
@@ -206,7 +220,21 @@ async function copy(text: string) {
 watch(() => props.orderId, async (id) => {
   if (!id) return
   const res = await fetch(`/api/v1/merge/orders/${id}/comparison`)
-  phase1Data.value = await res.json()
+  const data = await res.json()
+  // Flatten first item for display
+  const first = data.items?.[0]
+  phase1Data.value = {
+    order_no: data.order_no || '',
+    customer_code: data.customer_code || '',
+    consignee: first?.pi?.consignee || '',
+    port: first?.pi?.port || '',
+    product_name_cn: first?.product_cn || '',
+    product_name_en: first?.order?.product_en || '',
+    hs_code: first?.order?.hs_code || '',
+    gross_weight: first?.order?.gross_weight || '',
+    volume: first?.order?.volume || '',
+    notifyParty: '',
+  }
 }, { immediate: true })
 
 watch(() => props.productName, async (name) => {

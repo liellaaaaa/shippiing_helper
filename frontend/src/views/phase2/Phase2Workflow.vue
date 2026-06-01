@@ -28,17 +28,19 @@ const currentProductName = computed(() => currentOrderItems.value[0]?.product_cn
 const currentInternalCode = computed(() => currentOrderItems.value[0]?.internal_code || '')
 
 async function loadOrderList() {
-  const res = await fetch('/api/v1/merge/orders?status=confirmed&pageSize=100')
+  const res = await fetch('/api/v1/merge/orders?tab=completed&page_size=100')
   const data = await res.json()
-  orderList.value = data.items || []
+  orderList.value = data.orders || []
 }
 
 async function onOrderChange(orderId: number) {
-  selectedPiNo.value = ''
   const res = await fetch(`/api/v1/merge/orders/${orderId}/comparison`)
   const data = await res.json()
   currentOrderItems.value = data.items || []
-  piList.value = data.pi_contracts || []
+  // auto-select order-level pi_no as default for LOI
+  if (data.pi_no) {
+    selectedPiNo.value = data.pi_no
+  }
 }
 
 async function openDocument(type: 'booking' | 'loi') {

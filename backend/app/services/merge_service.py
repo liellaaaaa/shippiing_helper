@@ -4,6 +4,7 @@ from typing import Optional
 from app.database import SessionLocal
 from app.models.order import Order, OrderItem
 from app.models.pi_contract import PiContract, PiContractItem
+from app.models.order_pi_record import OrderPiRecord
 from app.schemas.merge import (
     OrderListItem,
     OrderListResponse,
@@ -87,6 +88,15 @@ class MergeService:
                 for item in items
             )
 
+            # 取关联 PI 号（第一个匹配项的 PI 号）
+            pi_no = None
+            if linked_items:
+                from app.models.pi_contract import PiContract
+                first_pi_item = linked_items[0]
+                pi_contract = self.db.query(PiContract).filter_by(id=first_pi_item.pi_contract_id).first()
+                if pi_contract:
+                    pi_no = pi_contract.pi_no
+
             result_items.append(OrderListItem(
                 id=order.id,
                 order_no=order.order_no,
@@ -96,6 +106,7 @@ class MergeService:
                 association_status=association_status,
                 items_count=len(items),
                 linked_count=linked_count,
+                pi_no=pi_no,
                 created_at=order.created_at.strftime("%Y-%m-%d") if order.created_at else None,
             ))
 
@@ -115,8 +126,46 @@ class MergeService:
     def get_order_comparison(self, order_id: int) -> Optional[OrderComparisonResponse]:
         """
         获取指定订单的合并比对数据。
-        返回每个 order_item 与对应的 pi_contract_item 的比对结果。
+        优先从 order_pi_records（合并表）读取；
+        若无匹配则回退到 Order + OrderItem + PiContractItem 原始表。
         """
+        # 优先：从 order_pi_records 读取合并数据
+        merged = self.db.query(OrderPiRecord).filter(
+            OrderPiRecord.id == order_id
+        ).first()
+
+        if merged:
+            # 使用合并表数据构建响应
+            order_data = OrderItemData(
+                quantity=merged.quantity_kg,
+                unit_price=merged.unit_price,
+                total_amount=merged.total_amount,
+                hs_code=merged.hs_code,
+                customs_name=merged.customs_name,
+                gross_weight=merged.gross_weight_kg,
+                volume=merged.volume_cbm,
+                product_en=merged.product_en,
+            )
+            pi_data = PiItemData(
+                consignee=merged.customer_name,  # order_pi_records.customer_name = consignee
+                port=merged.delivery_date,       # delivery_date 作为卸货港
+            )
+            comparison_item = ComparisonItem(
+                internal_code=merged.internal_code,
+                product_cn=merged.product_cn,
+                order=order_data,
+                pi=pi_data,
+                diff=DiffInfo(status="一致", flags=[]),
+            )
+            return OrderComparisonResponse(
+                order_id=merged.id,
+                order_no=merged.order_no,
+                customer_code=merged.customer_code,
+                pi_no=merged.pi_no,
+                items=[comparison_item],
+            )
+
+        # 回退：查原始 Order + OrderItem + PiContractItem
         order = self.db.query(Order).filter_by(id=order_id).first()
         if not order:
             return None
@@ -125,38 +174,37 @@ class MergeService:
         comparison_items = []
 
         for item in order_items:
-            internal_code = item.internal_code
-
-            # 查找对应的 PI item
             pi_item = self.db.query(PiContractItem).filter_by(
-                internal_code=internal_code
+                internal_code=item.internal_code
             ).first()
-
-            # 构建 order 数据
             order_data = OrderItemData(
                 quantity=item.quantity_kg,
                 unit_price=item.unit_price,
                 total_amount=item.total_amount,
                 hs_code=item.hs_code,
                 customs_name=item.customs_name,
+                gross_weight=item.gross_weight_kg,
+                volume=item.volume_cbm,
+                product_en=item.product_en,
             )
-
-            # 构建 PI 数据（可能为空）
             pi_data = None
+            pi_contract_for_item = None
             if pi_item:
+                pi_contract_for_item = self.db.query(PiContract).filter_by(
+                    id=pi_item.pi_contract_id
+                ).first()
                 pi_data = PiItemData(
                     quantity=pi_item.quantity,
                     unit_price=pi_item.unit_price,
                     total_amount=pi_item.total_amount,
                     hs_code=pi_item.hs_code,
                     customs_name=pi_item.customs_name,
+                    consignee=pi_contract_for_item.customer_code if pi_contract_for_item else None,
+                    port=None,
                 )
-
-            # 计算差异
             diff = self._compute_diff(item, pi_item)
-
             comparison_items.append(ComparisonItem(
-                internal_code=internal_code,
+                internal_code=item.internal_code,
                 product_cn=item.product_cn,
                 order=order_data,
                 pi=pi_data,
@@ -167,6 +215,7 @@ class MergeService:
             order_id=order.id,
             order_no=order.order_no,
             customer_code=order.customer_code,
+            pi_no=order.pi_no,
             items=comparison_items,
         )
 

@@ -301,7 +301,7 @@ async function handlePiFileSelected(file: File) {
     }
     piParsed.value = true
     syncMergedRowsFromForms()
-    ElMessage.success('PI 解析成功')
+    ElMessage.success(`PI 文件 "${file.name}" 解析成功`)
   } catch (err: any) {
     ElMessage.error(err.response?.data?.detail || 'PI 解析失败')
   }

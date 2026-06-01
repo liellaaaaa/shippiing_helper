@@ -5,6 +5,7 @@ from app.api.v1.pi import router as pi_router
 from app.api.v1.merge import router as merge_router
 from app.api.v1.packages import router as packages_router
 from app.api.v1.dashboard import router as dashboard_router
+from app.api.v1 import documents, msds, transport, export_codes, onlyoffice
 
 app = FastAPI(
     title="ShippingHelper API",
@@ -27,6 +28,11 @@ app.include_router(pi_router)
 app.include_router(merge_router)
 app.include_router(packages_router)
 app.include_router(dashboard_router)
+app.include_router(documents.router)
+app.include_router(msds.router)
+app.include_router(transport.router)
+app.include_router(export_codes.router)
+app.include_router(onlyoffice.router)
 
 
 @app.get("/health")

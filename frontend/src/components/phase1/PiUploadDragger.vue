@@ -13,7 +13,7 @@
         拖拽 PI 文件到此处，或 <em>点击上传</em>
       </div>
       <template #tip>
-        <div class="el-upload__tip">支持 .xls / .xlsx 文件，大小不超过 10MB</div>
+        <div class="el-upload__tip">支持 .xls / .xlsx / .pdf 文件，大小不超过 10MB</div>
       </template>
     </el-upload>
   </div>
@@ -27,7 +27,7 @@ const emit = defineEmits<{
   fileSelected: [file: File]
 }>()
 
-const acceptTypes = '.xls,.xlsx'
+const acceptTypes = '.xls,.xlsx,.pdf'
 
 const handleFileChange = (uploadFile: { raw?: File }) => {
   const file = uploadFile.raw
@@ -41,8 +41,8 @@ const handleFileChange = (uploadFile: { raw?: File }) => {
 
   // Validate file extension
   const ext = file.name.split('.').pop()?.toLowerCase()
-  if (ext !== 'xls' && ext !== 'xlsx') {
-    ElMessage.error('不支持的文件格式，请上传 .xls 或 .xlsx 文件')
+  if (ext !== 'xls' && ext !== 'xlsx' && ext !== 'pdf') {
+    ElMessage.error('不支持的文件格式，请上传 .xls、.xlsx 或 .pdf 文件')
     return
   }
 

@@ -217,12 +217,21 @@ def parse_pasted_data(
 
     delimiter = detect_delimiter(lines[0])
 
-    # Parse header — fall back to positional mapping if header yields < 3 mapped fields
+    # Parse header — fall back to positional mapping if header yields < 2 mapped fields
     col_map = parse_header(lines[0], delimiter)
-    has_header = len(col_map) >= 3
-    if not has_header and len(lines[0].split(delimiter)) >= 10:
-        # Header didn't match enough column names; treat first line as data row
-        col_map = build_positional_map(len(lines[0].split(delimiter)))
+    has_header = len(col_map) >= 2
+    if not has_header:
+        col_count = len(lines[0].split(delimiter))
+        # Short format (8 cols): order_no | customer_code | internal_code | product | spec_kg | qty_kg | unit_price | total_amount
+        # Long format (>=10 cols): full 23-column standard, first row is data
+        if col_count == 8:
+            # Map to short format directly: order_no=0, customer_code=1, internal_code=2, ...
+            SHORT_FORMAT = ["order_no", "customer_code", "internal_code", "product_cn", "spec_kg", "quantity_kg", "unit_price", "total_amount"]
+            col_map = {i: v for i, v in enumerate(SHORT_FORMAT)}
+            has_header = False   # 8-col short format has no header row — first line is data
+        else:
+            # For long rows: treat first line as data row
+            col_map = build_positional_map(col_count)
 
     # Parse data rows — skip header row if present
     raw_items: list[dict] = []

@@ -184,15 +184,15 @@ The `参考/` folder contains the Python implementation that should inform imple
 **Phase 1** (Order Processing):
 1. ~~Project initialization (Vue + FastAPI)~~ ✅
 2. ~~Order paste parsing~~ ✅
-3. PI file extraction (.xls/.xlsx)
-4. Data merging (internal_code association)
-5. Packaging calculation (13 types, 2 pallets, 20GP judgment)
+3. ~~PI file extraction (.xls/.xlsx/.pdf OCR)~~ ✅
+4. ~~Data merging (internal_code association)~~ ✅
+5. ~~Packaging calculation (13 types, 2 pallets, 20GP judgment)~~ ✅
 6. Data dashboard (OnlyOffice read-only)
 
 **Phase 2** (Document Generation):
-1. Shipment data management
-2. Template management
-3. Document generation (Booking, MSDS, LOI via OnlyOffice)
+1. ~~Shipment data management~~ ✅
+2. ~~Template management~~ ✅
+3. ~~Document generation (Booking, MSDS, LOI via OnlyOffice)~~ ✅
 4. Data display (left dashboard, right editor)
 
 ---
@@ -236,10 +236,10 @@ docker run -d -p 8080:80 onlyoffice/documentserver
 |--------|--------|-------|
 | Project initialization | ✅ done | Vue 3 + FastAPI + SQLite scaffold |
 | Order paste parsing | ✅ done | Tab/CRLF delimiter, smart aggregation, dedup, knowledge fill |
-| PI file extraction | ✅ done | .xlsx/.xls upload, column mapping, confidence, pi_data upsert |
-| Data merging | pending | |
-| Packaging calculation | pending | |
-| Data dashboard | pending | |
+| PI file extraction | ✅ done | .xlsx/.xls/.pdf upload, column mapping, confidence, pi_data upsert, OCR |
+| Data merging | ✅ done | internal_code association, order-PI merge |
+| Packaging calculation | ✅ done | 13 drum types, 2 pallets, 20GP judgment, PackagingCalculator component |
+| Data dashboard | pending | OnlyOffice read-only |
 
 **Completed Files:**
 - `backend/app/models/order.py` — orders + order_items + packaging_types + products_knowledge
@@ -250,32 +250,42 @@ docker run -d -p 8080:80 onlyoffice/documentserver
 - `backend/app/core/pi_parser.py` — column mapping, smart degradation, confidence
 - `backend/app/services/order_service.py` — service layer with transactional save
 - `backend/app/services/pi_service.py` — PI service with transactional save + pi_data upsert
-- `backend/app/api/v1/orders.py` — REST endpoints with OpenAPI docs
+- `backend/app/services/packaging_service.py` — packaging calculation (drums, pallets, volume, 20GP)
+- `backend/app/api/v1/orders.py` — REST API endpoints
 - `backend/app/api/v1/pi.py` — PI upload/save/query endpoints
+- `backend/app/api/v1/phase2.py` — Phase 2 API routes (document generation, OnlyOffice callback)
 - `backend/app/api/deps.py` — FastAPI dependency injection
+- `backend/migrations/001_add_pi_contracts.py` — table migration
+- `backend/migrations/002_add_indexes.py` — index migration
 - `frontend/src/api/orders.ts` — Axios API client
 - `frontend/src/api/pi.ts` — PI API client
+- `frontend/src/api/phase2.ts` — Phase 2 API client
 - `frontend/src/components/phase1/PasteTextarea.vue` — paste input component
 - `frontend/src/components/phase1/OrderPreviewForm.vue` — preview + edit component
 - `frontend/src/components/phase1/PIExtract.vue` — full page
-- `frontend/src/components/phase1/PiUploadDragger.vue` — drag-and-drop upload
+- `frontend/src/components/phase1/PiUploadDragger.vue` — drag-and-drop upload (.xlsx/.xls/.pdf)
 - `frontend/src/components/phase1/PiPreviewTable.vue` — editable preview table
 - `frontend/src/components/phase1/ColumnMappingModal.vue` — column mapping modal
+- `frontend/src/components/phase1/PackagingCalculator.vue` — packaging calculator component
 - `frontend/src/views/phase1/OrderPaste.vue` — order paste page
-- `backend/migrations/001_add_pi_contracts.py` — table migration
-- `backend/migrations/002_add_indexes.py` — index migration
+- `frontend/src/views/phase2/Phase2Workflow.vue` — Phase 2 main workflow page
+- `frontend/src/views/phase2/components/ReferencePanel.vue` — 4-tab reference panel
+- `frontend/src/views/phase2/components/DocumentEditor.vue` — OnlyOffice editor wrapper
 
 ---
 
 ## Phase 2 Progress
 
-| Module | Status |
-|--------|--------|
-| Data management | pending |
-| Template management | pending |
-| Document generation | pending |
-| Data display | pending |
+| Module | Status | Notes |
+|--------|--------|-------|
+| Phase 2 API routes | ✅ done | All endpoints registered in main.py |
+| OnlyOfficeService | ✅ done | Document generation (Booking/LOI/MSDS), marker-based filling |
+| DocumentService | ✅ done | Template copying, BLOB storage, version management |
+| ShipmentDoc model | ✅ done | Document version storage with content_hash idempotency |
+| ExportCodesService | ✅ done | HS code lookup service |
+| OnlyOffice callback | ✅ done | `POST /api/v1/onlyoffice/callback` with pessimistic lock release |
+| Phase 2 frontend page | ✅ done | Phase2Workflow + ReferencePanel + DocumentEditor components |
+| PI upload (.pdf) | ✅ done | PiUploadDragger supports .pdf via OCR |
+| consignee/destination | ✅ done | PI Header fields extracted from PDF |
 
----
-
-*Last updated: 2026/05/29*
+*Last updated: 2026/06/02*

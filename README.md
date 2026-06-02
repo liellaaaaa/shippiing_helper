@@ -14,11 +14,53 @@
 
 ```
 shipping_helper/
-├── backend/          # FastAPI 后端
-├── frontend/          # Vue 3 前端
-├── docs/             # 需求文档、API 文档、测试文档
-├── 参考/              # PyQt5 旧版参考实现
-└── data/             # SQLite 数据库
+├── backend/
+│   └── app/
+│       ├── api/v1/
+│       │   ├── orders.py        # REST API: /api/v1/orders
+│       │   ├── pi.py            # PI upload/save/query
+│       │   ├── phase2.py        # Document generation API
+│       │   └── deps.py          # FastAPI dependency injection
+│       ├── core/
+│       │   ├── order_parser.py  # Delimiter detection, aggregation, dedup
+│       │   ├── knowledge_filler.py # HS code + customs name auto-fill
+│       │   └── pi_parser.py     # Column mapping, smart degradation
+│       ├── services/
+│       │   ├── order_service.py     # Service layer (transactional save)
+│       │   ├── pi_service.py        # PI service + pi_data upsert
+│       │   ├── packaging_service.py # Packaging calculation
+│       │   └── calculation_service.py # Weight/volume/20GP logic
+│       ├── models/
+│       │   ├── order.py         # orders + order_items + packaging_types
+│       │   └── pi_contract.py   # PiContract + PiContractItem + PiData
+│       ├── schemas/
+│       │   └── pi_contract.py   # Pydantic schemas
+│       ├── main.py              # FastAPI entry point
+│       └── database.py          # SQLite connection
+├── frontend/
+│   └── src/
+│       ├── api/
+│       │   ├── orders.ts        # Axios API client
+│       │   ├── pi.ts            # PI API client
+│       │   └── phase2.ts        # Phase 2 API client
+│       ├── components/phase1/
+│       │   ├── PasteTextarea.vue
+│       │   ├── OrderPreviewForm.vue
+│       │   ├── PIExtract.vue
+│       │   ├── PiUploadDragger.vue
+│       │   ├── PiPreviewTable.vue
+│       │   ├── ColumnMappingModal.vue
+│       │   └── PackagingCalculator.vue
+│       └── views/
+│           ├── phase1/OrderPaste.vue
+│           └── phase2/
+│               ├── Phase2Workflow.vue
+│               └── components/
+│                   ├── ReferencePanel.vue
+│                   └── DocumentEditor.vue
+├── docs/                        # PRD, API, TEST documentation
+├── 参考/                        # Legacy PyQt5 reference
+└── data/                        # SQLite database
 ```
 
 ## 快速启动
@@ -49,18 +91,24 @@ npm run dev
 |------|------|------|
 | 项目初始化 | ✅ | Vue 3 + FastAPI + SQLite |
 | 订单粘贴解析 | ✅ | Tab/换行分隔、一单多品、知识库匹配 |
-| PI 文件提取 | 🔲 | 待开发 |
-| 数据关联 | 🔲 | 待开发 |
-| 包装计算 | 🔲 | 待开发 |
-| 数据看板 | 🔲 | 待开发 |
+| PI 文件提取 | ✅ | .xlsx/.xls/.pdf(OCR)、列映射、置信度 |
+| 数据关联 | ✅ | internal_code 关联、订单-PI 合并 |
+| 包装计算 | ✅ | 13种桶型、2种托盘、20GP判断 |
+| 数据看板 | 🔲 | OnlyOffice 只读（待开发） |
 
 ## Phase 2 功能模块
 
 | 模块 | 状态 | 说明 |
 |------|------|------|
-| 出货数据管理 | 🔲 | 待开发 |
-| 模板管理 | 🔲 | 待开发 |
-| 文档生成 | 🔲 | 通过 OnlyOffice |
+| Phase 2 API 路由 | ✅ | 文档生成、OnlyOffice 回调 |
+| OnlyOfficeService | ✅ | Booking/LOI/MSDS 生成、标记填充 |
+| DocumentService | ✅ | 模板复制、BLOB 存储、版本管理 |
+| ShipmentDoc 模型 | ✅ | 文档版本存储、content_hash 幂等 |
+| ExportCodesService | ✅ | HS code 查询服务 |
+| OnlyOffice 回调 | ✅ | 悲观锁释放 |
+| Phase 2 前端页面 | ✅ | Phase2Workflow + ReferencePanel + DocumentEditor |
+| PI 上传 (.pdf) | ✅ | 支持 PDF via OCR |
+| consignee/destination | ✅ | PI Header 字段从 PDF 提取 |
 
 ## 核心文档
 
@@ -72,6 +120,8 @@ npm run dev
 | `docs/PRD-ShippingHelper-Web-P1v2-OrderParsing.md` | 订单解析模块设计方案 |
 | `docs/API-ShippingHelper-v1.md` | API 接口文档 |
 | `docs/TEST-ShippingHelper-v1.md` | 集成测试文档 |
+| `docs/superpowers/plans/` | 实施计划 |
+| `CLAUDE.md` | Claude Code 开发指南 |
 
 ## 架构决策
 
@@ -83,6 +133,7 @@ npm run dev
 | 文件存储 | 数据库 BLOB，不使用共享文件夹 |
 | 模板原则 | 模板只读，实例从模板复制 |
 | 悲观锁 | 订单级锁（`order_status`, `locked_by`, `locked_at`） |
+| PDF 解析 | OCR（pymupdf）支持 PDF 格式 PI 文件 |
 
 ## 数据模型
 

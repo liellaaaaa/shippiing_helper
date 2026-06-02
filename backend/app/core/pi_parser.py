@@ -324,7 +324,8 @@ def parse_proforma_invoice(rows: list[list[str]]) -> PiContractUploadResponse:
 
     # 使用跨行提取器从行列结构中查找 Label→Value 模式
     pi_no = _extract_field_from_rows(rows, [r"PI\s*No"])
-    customer_code = _extract_field_from_rows(rows, [r"Name\s*:"])
+    # customer_code 不从 PI 提取（PI 文件无此字段，客户编号来自订单粘贴数据）
+    customer_code = None
 
     # 提取日期：Date: 2026/3/4（可能是 Excel 序列号 46085 = 2026-03-29）
     pi_date_raw = _extract_field_from_rows(rows, [r"Date\s*:"])

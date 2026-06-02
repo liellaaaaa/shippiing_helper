@@ -38,6 +38,10 @@ class PiContractUploadResponse(BaseModel):
     sales_person: Optional[str] = None
     pi_date: Optional[str] = None
     is_ordered: str = "0"
+    # PI Header 信息
+    consignee_name: Optional[str] = None
+    consignee_address: Optional[str] = None
+    destination: Optional[str] = None
     items: list[PiContractItemRow] = []
     confidence: ConfidenceInfo
 
@@ -47,7 +51,7 @@ class PiContractUploadResponse(BaseModel):
 
 class PiContractSaveItem(BaseModel):
     """PI合同保存明细项"""
-    internal_code: str  # required
+    internal_code: Optional[str] = None  # Proforma格式可能为空
     quantity: Optional[float] = None
     unit_price: Optional[float] = None
     total_amount: Optional[float] = None
@@ -70,6 +74,10 @@ class PiContractSaveRequest(BaseModel):
     pi_date: Optional[str] = None
     is_ordered: str = "0"
     order_id: Optional[int] = None
+    # PI Header 信息
+    consignee_name: Optional[str] = None
+    consignee_address: Optional[str] = None
+    destination: Optional[str] = None
     items: list[PiContractSaveItem] = []
 
     class Config:

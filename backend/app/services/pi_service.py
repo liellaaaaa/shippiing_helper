@@ -35,6 +35,9 @@ class PiService:
                 contract.pi_date = request.pi_date
                 contract.is_ordered = request.is_ordered
                 contract.order_id = request.order_id
+                contract.consignee_name = request.consignee_name
+                contract.consignee_address = request.consignee_address
+                contract.destination = request.destination
             else:
                 # Create new contract
                 contract = PiContract(
@@ -44,6 +47,9 @@ class PiService:
                     pi_date=request.pi_date,
                     is_ordered=request.is_ordered,
                     order_id=request.order_id,
+                    consignee_name=request.consignee_name,
+                    consignee_address=request.consignee_address,
+                    destination=request.destination,
                 )
                 self.db.add(contract)
                 self.db.flush()  # Get the ID
@@ -83,7 +89,10 @@ class PiService:
         """
         Upsert a single item into pi_data.
         Returns True if a record was inserted or updated.
+        Proforma 格式无 internal_code 时跳过。
         """
+        if not item.internal_code:
+            return False
         existing = self.db.query(PiData).filter_by(internal_code=item.internal_code).first()
         if existing:
             # Update fields if provided

@@ -14,6 +14,10 @@ class PiContract(Base):
     pi_date = Column(String(20))
     is_ordered = Column(String(20), default="0")
     order_id = Column(Integer, ForeignKey("orders.id"), nullable=True)
+    # PI Header 信息
+    consignee_name = Column(String(200))      # 收货人名称
+    consignee_address = Column(String(500))   # 收货人地址
+    destination = Column(String(200))         # 目的港
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -25,7 +29,7 @@ class PiContractItem(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     pi_contract_id = Column(Integer, ForeignKey("pi_contracts.id", ondelete="CASCADE"), nullable=False, index=True)
-    internal_code = Column(String(100), nullable=False, index=True)
+    internal_code = Column(String(100), nullable=True, index=True)
     quantity = Column(Float)
     unit_price = Column(Float)
     total_amount = Column(Float)

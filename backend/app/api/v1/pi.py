@@ -5,10 +5,13 @@ from typing import Optional
 from app.schemas.pi_contract import (
     PiContractUploadResponse,
     PiContractSaveRequest,
+    PiContractSaveItem,
     PiContractSaveResponse,
     PiContractQueryResponse,
 )
 from app.core.pi_parser import parse_pi_bytes
+from app.services.pi_service import PiService
+from app.database import SessionLocal
 import io
 import os
 
@@ -61,6 +64,35 @@ async def upload_pi_file(
 
     try:
         result = parse_pi_bytes(content, file.filename or "unknown.xlsx")
+
+        # 自动持久化到 pi_contracts 表
+        db = SessionLocal()
+        try:
+            svc = PiService(db)
+            svc.save_contract(PiContractSaveRequest(
+                pi_no=result.pi_no,
+                customer_code=result.customer_code,
+                sales_person=result.sales_person,
+                pi_date=result.pi_date,
+                consignee_name=result.consignee_name,
+                consignee_address=result.consignee_address,
+                destination=result.destination,
+                items=[PiContractSaveItem(
+                    internal_code=item.internal_code,
+                    quantity=item.quantity,
+                    unit_price=item.unit_price,
+                    total_amount=item.total_amount,
+                    product_color=item.product_color,
+                    hs_code=item.hs_code,
+                    customs_name=item.customs_name,
+                    customs_composition=item.customs_composition,
+                    order_customs_name=item.order_customs_name,
+                    notes=item.notes,
+                ) for item in result.items],
+            ))
+        finally:
+            db.close()
+
         return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

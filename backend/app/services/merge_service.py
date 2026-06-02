@@ -146,9 +146,11 @@ class MergeService:
                 volume=merged.volume_cbm,
                 product_en=merged.product_en,
             )
+            # 优先从 pi_contracts 读取收货人/卸货港
+            pi_contract = self.db.query(PiContract).filter_by(pi_no=merged.pi_no).first()
             pi_data = PiItemData(
-                consignee=merged.customer_name,  # order_pi_records.customer_name = consignee
-                port=merged.delivery_date,       # delivery_date 作为卸货港
+                consignee=pi_contract.consignee_name if pi_contract else None,
+                port=pi_contract.destination if pi_contract else None,
             )
             comparison_item = ComparisonItem(
                 internal_code=merged.internal_code,
@@ -199,8 +201,8 @@ class MergeService:
                     total_amount=pi_item.total_amount,
                     hs_code=pi_item.hs_code,
                     customs_name=pi_item.customs_name,
-                    consignee=pi_contract_for_item.customer_code if pi_contract_for_item else None,
-                    port=None,
+                    consignee=pi_contract_for_item.consignee_name if pi_contract_for_item else None,
+                    port=pi_contract_for_item.destination if pi_contract_for_item else None,
                 )
             diff = self._compute_diff(item, pi_item)
             comparison_items.append(ComparisonItem(

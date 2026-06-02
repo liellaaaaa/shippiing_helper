@@ -352,6 +352,12 @@ def parse_proforma_invoice(rows: list[list[str]]) -> PiContractUploadResponse:
     # 提取 Destination
     destination = _extract_field_from_rows(rows, [r"Destination\s*:"])
 
+    # 提取收货人信息（Name: 后紧跟公司名）
+    consignee_name = _extract_field_from_rows(rows, [r"Name\s*:"])
+
+    # 收货人地址：Address: 或 Add.:
+    consignee_address = _extract_field_from_rows(rows, [r"Address\s*:", r"Add\.\s*:"])
+
     # 提取 Total Amount
     total_amount_str = _extract_field_from_rows(rows, [r"Total Amount\s*:"])
     total_amount = _clean_number(total_amount_str) if total_amount_str else None
@@ -428,8 +434,8 @@ def parse_proforma_invoice(rows: list[list[str]]) -> PiContractUploadResponse:
     if not pi_no:
         raise ValueError("无法识别 PI 编号，请确认文件格式")
 
-    fields_recognized = sum(1 for v in [pi_no, customer_code, hs_code, pi_date] if v)
-    total_fields = 4
+    fields_recognized = sum(1 for v in [pi_no, customer_code, hs_code, pi_date, consignee_name, destination] if v)
+    total_fields = 6
     confidence = ConfidenceInfo(
         recognized=fields_recognized,
         total=total_fields,
@@ -443,6 +449,9 @@ def parse_proforma_invoice(rows: list[list[str]]) -> PiContractUploadResponse:
         sales_person=None,
         pi_date=pi_date,
         is_ordered="0",
+        consignee_name=consignee_name,
+        consignee_address=consignee_address,
+        destination=destination,
         items=items,
         confidence=confidence,
     )

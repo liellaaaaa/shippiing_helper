@@ -49,12 +49,12 @@ async def upload_pi_file(
     file: UploadFile = File(...),
     customer_code: Optional[str] = None,
 ):
-    """上传并解析 PI 文件 (.xls/.xlsx)。"""
+    """上传并解析 PI 文件 (.xls/.xlsx/.pdf)。"""
     # Validate file type
-    allowed_extensions = {".xlsx", ".xls"}
+    allowed_extensions = {".xlsx", ".xls", ".pdf"}
     ext = os.path.splitext(file.filename or "")[1].lower()
     if ext not in allowed_extensions:
-        raise HTTPException(status_code=400, detail="不支持的文件格式，请上传 .xls 或 .xlsx 文件")
+        raise HTTPException(status_code=400, detail="不支持的文件格式，请上传 .xls、.xlsx 或 .pdf 文件")
 
     # Validate file size (10MB max)
     await file.seek(0)

@@ -8,6 +8,10 @@ PI文件解析器 - 从Excel文件中提取PI合同数据
 
 import re
 import io
+import os
+import pymupdf
+import pytesseract
+from PIL import Image
 from openpyxl import load_workbook
 import xlrd
 from typing import Optional
@@ -500,6 +504,147 @@ def _read_xls_bytes(content: bytes) -> list[list[str]]:
     return rows
 
 
+def _extract_text_from_pdf_bytes(content: bytes) -> str:
+    """通过 OCR 从 PDF 内容提取纯文本（图片型扫描 PDF）"""
+    pytesseract.pytesseract.tesseract_cmd = r"C:/Program Files/Tesseract-OCR/tesseract.exe"
+    doc = pymupdf.open(stream=content, filetype="pdf")
+    texts = []
+    for page in doc:
+        mat = pymupdf.Matrix(3, 3)
+        pix = page.get_pixmap(matrix=mat)
+        img_bytes = pix.tobytes("png")
+        img = Image.open(io.BytesIO(img_bytes))
+        text = pytesseract.image_to_string(img, lang="eng+chi")
+        texts.append(text)
+    doc.close()
+    return "\n".join(texts)
+
+
+def _parse_rows_from_text(text: str) -> list[list[str]]:
+    """将纯文本转换为行列表（用于 Proforma Invoice 解析）"""
+    lines = text.split("\n")
+    rows = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        parts = re.split(r"\s{2,}", stripped)
+        if parts and parts[0]:
+            rows.append([p.strip() for p in parts])
+    return rows
+
+
+def parse_proforma_invoice_from_text(text: str) -> PiContractUploadResponse:
+    """从 OCR 文本直接解析 Proforma Invoice（用于 PDF）"""
+
+    def ef(text, pat):
+        label = re.sub(r"\s*:\s*$", "", pat)
+        m = re.search(rf"(?i){label}\s*[:：]\s*([^\n]+)", text)
+        return m.group(1).strip() if m else None
+
+    def ef_next_line(text, pat):
+        label = re.sub(r"\s*:\s*$", "", pat)
+        idx = re.search(rf"(?i){label}\s*[:：]", text)
+        if not idx:
+            return None
+        start = idx.end()
+        rest = text[start:]
+        lines = rest.split("\n", 2)
+        if len(lines) >= 2 and lines[1].strip():
+            return lines[1].strip()
+        return None
+
+    def strip_note(text):
+        m = re.match(r"([^,]+(?:,[^,]+){0,2}),\s*[A-Za-z ]+$", text)
+        if m:
+            return m.group(1).strip()
+        return text.strip()
+
+    pi_no_raw = ef(text, r"Order\s+No\.?\s*:")
+    if pi_no_raw and re.match(r"^\d+\]\s*\#", pi_no_raw.strip()):
+        pi_no = ef_next_line(text, r"Order\s+No\.?\s*:") or pi_no_raw
+    else:
+        pi_no = pi_no_raw
+
+    consignee_name = ef(text, r"NAME")
+    consignee_address = ef(text, r"ADD\s*:")
+    destination = ef(text, r"\.\s*Destination\s+:")
+    hs_code = ef(text, r"\.\s*H\.S\.\s*Code")
+    pi_date_raw = ef(text, r"Date\s+:")
+    pi_date = strip_note(pi_date_raw) if pi_date_raw else None
+
+    items = []
+    lines = text.split("\n")
+    table_started = False
+    item_index = 0
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if "DESCRIPTION OF GOODS" in stripped.upper() or "QUANTITY" in stripped.upper():
+            table_started = True
+            continue
+        if not table_started:
+            continue
+        if stripped.startswith("1. Packing") or stripped.startswith("2. All") or stripped.startswith("3. This") or "Payment terms and" in stripped:
+            break
+        m = re.match(r"(.+?)\s+([\d.]+)\s*\|\s*([\d,]+)\s*\|\s*US\$([\d,.]+)\s+US\$([\d,.]+)", stripped)
+        if m:
+            desc, hs, qty, unit_price, amount = m.groups()
+            customs_name = desc.strip()
+            hs_code_val = hs.strip()
+            try:
+                qty_val = float(qty.replace(",", ""))
+                unit_val = float(unit_price.replace(",", ""))
+                amount_val = float(amount.replace(",", ""))
+            except ValueError:
+                qty_val = unit_val = amount_val = None
+            item_index += 1
+            notes_parts = []
+            if destination:
+                notes_parts.append(f"目的地: {destination}")
+            items.append(PiContractItemRow(
+                row_index=item_index,
+                status="success",
+                error_msg=None,
+                internal_code=None,
+                quantity=qty_val,
+                unit_price=unit_val,
+                total_amount=amount_val,
+                product_color=None,
+                hs_code=hs_code_val,
+                customs_name=customs_name,
+                customs_composition=None,
+                order_customs_name=None,
+                notes="; ".join(notes_parts) if notes_parts else None,
+            ))
+
+    if not pi_no:
+        raise ValueError("无法识别 PI 编号，请确认文件格式")
+
+    fields_recognized = sum(1 for v in [pi_no, consignee_name, destination] if v)
+    confidence = ConfidenceInfo(
+        recognized=fields_recognized,
+        total=3,
+        percentage=f"{fields_recognized/3*100:.0f}%",
+        failed_rows=0,
+    )
+
+    return PiContractUploadResponse(
+        pi_no=pi_no or "",
+        customer_code=None,
+        sales_person=None,
+        pi_date=pi_date,
+        is_ordered="0",
+        consignee_name=consignee_name,
+        consignee_address=consignee_address,
+        destination=destination,
+        items=items,
+        confidence=confidence,
+    )
+
+
 def _auto_parse_rows(rows: list[list[str]]) -> PiContractUploadResponse:
     """
     自动识别格式并解析：先尝试表格解析，失败则尝试 Proforma Invoice 格式。
@@ -528,15 +673,17 @@ def parse_file_path(file_path: str) -> PiContractUploadResponse:
 
 
 def parse_pi_bytes(content: bytes, filename: str) -> PiContractUploadResponse:
-    """直接从内存字节解析PI文件，不写入临时文件"""
-    import os
+    """直接从内存字节解析PI文件，支持 .xlsx / .xls / .pdf"""
     ext = os.path.splitext(filename)[1].lower() if filename else ""
 
     if ext == ".xlsx":
         rows = _read_xlsx_bytes(content)
+        return _auto_parse_rows(rows)
     elif ext == ".xls":
         rows = _read_xls_bytes(content)
+        return _auto_parse_rows(rows)
+    elif ext == ".pdf":
+        text = _extract_text_from_pdf_bytes(content)
+        return parse_proforma_invoice_from_text(text)
     else:
-        raise ValueError(f"不支持的文件格式: {ext}，仅支持 .xlsx 和 .xls")
-
-    return _auto_parse_rows(rows)
+        raise ValueError(f"不支持的文件格式: {ext}，仅支持 .xlsx、.xls 和 .pdf")

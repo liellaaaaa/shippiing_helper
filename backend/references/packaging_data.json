@@ -1,0 +1,182 @@
+{
+  "packages": [
+    {
+      "name": "30kg蓝桶",
+      "dims": "250*250*430mm",
+      "cbm": 0.026,
+      "tare_kg": 2.0,
+      "gross_kg": 32.0,
+      "net_kg": 30.0,
+      "barrel_type": "胶桶",
+      "is_palletizable": true,
+      "no_pallet_qty": null,
+      "pallet_qty_1x1": null,
+      "pallet_qty_1_1x1_1": 24
+    },
+    {
+      "name": "25kg/包",
+      "dims": "200*500*800mm",
+      "cbm": 0.028,
+      "tare_kg": 0.5,
+      "gross_kg": 25.5,
+      "net_kg": 25.0,
+      "barrel_type": "胶桶",
+      "is_palletizable": true,
+      "no_pallet_qty": null,
+      "pallet_qty_1x1": null,
+      "pallet_qty_1_1x1_1": null
+    },
+    {
+      "name": "25kg 正方罐（蓝色）",
+      "dims": "270*270*410mm",
+      "cbm": 0.03,
+      "tare_kg": 2.0,
+      "gross_kg": 27.0,
+      "net_kg": 25.0,
+      "barrel_type": "胶桶",
+      "is_palletizable": true,
+      "no_pallet_qty": null,
+      "pallet_qty_1x1": null,
+      "pallet_qty_1_1x1_1": null
+    },
+    {
+      "name": "25kg 纸桶",
+      "dims": "310*310*400mm",
+      "cbm": 0.039,
+      "tare_kg": 2.0,
+      "gross_kg": 27.0,
+      "net_kg": 25.0,
+      "barrel_type": "纸桶",
+      "is_palletizable": true,
+      "no_pallet_qty": null,
+      "pallet_qty_1x1": null,
+      "pallet_qty_1_1x1_1": 18
+    },
+    {
+      "name": "50kg蓝桶(细口)",
+      "dims": "395*395*585mm",
+      "cbm": 0.09,
+      "tare_kg": 2.5,
+      "gross_kg": 52.5,
+      "net_kg": 50.0,
+      "barrel_type": "胶桶",
+      "is_palletizable": true,
+      "no_pallet_qty": null,
+      "pallet_qty_1x1": null,
+      "pallet_qty_1_1x1_1": 18
+    },
+    {
+      "name": "50kg蓝桶(大口)",
+      "dims": "330*390*590mm",
+      "cbm": 0.08,
+      "tare_kg": 2.5,
+      "gross_kg": 52.5,
+      "net_kg": 50.0,
+      "barrel_type": "胶桶",
+      "is_palletizable": true,
+      "no_pallet_qty": null,
+      "pallet_qty_1x1": null,
+      "pallet_qty_1_1x1_1": null
+    },
+    {
+      "name": "50kg纸桶",
+      "dims": "410*410*高500mm",
+      "cbm": 0.085,
+      "tare_kg": 2.5,
+      "gross_kg": 52.5,
+      "net_kg": 50.0,
+      "barrel_type": "纸桶",
+      "is_palletizable": true,
+      "no_pallet_qty": null,
+      "pallet_qty_1x1": null,
+      "pallet_qty_1_1x1_1": 12
+    },
+    {
+      "name": "60kg蓝桶",
+      "dims": "320*410*640mm",
+      "cbm": 0.09,
+      "tare_kg": 3.5,
+      "gross_kg": 63.5,
+      "net_kg": 60.0,
+      "barrel_type": "胶桶",
+      "is_palletizable": true,
+      "no_pallet_qty": null,
+      "pallet_qty_1x1": null,
+      "pallet_qty_1_1x1_1": null
+    },
+    {
+      "name": "125kg新款胶桶",
+      "dims": "510*510*810mm",
+      "cbm": 0.21,
+      "tare_kg": 6.0,
+      "gross_kg": 131.0,
+      "net_kg": 125.0,
+      "barrel_type": "胶桶",
+      "is_palletizable": true,
+      "no_pallet_qty": 116,
+      "pallet_qty_1x1": 4,
+      "pallet_qty_1_1x1_1": 5
+    },
+    {
+      "name": "150kg新款胶桶",
+      "dims": "450*450*970mm",
+      "cbm": 0.196,
+      "tare_kg": 9.0,
+      "gross_kg": 159.0,
+      "net_kg": 150.0,
+      "barrel_type": "胶桶",
+      "is_palletizable": true,
+      "no_pallet_qty": null,
+      "pallet_qty_1x1": null,
+      "pallet_qty_1_1x1_1": null
+    },
+    {
+      "name": "200kg双层铁口桶",
+      "dims": "590*590*930mm",
+      "cbm": 0.31,
+      "tare_kg": 10.0,
+      "gross_kg": 210.0,
+      "net_kg": 200.0,
+      "barrel_type": "胶桶",
+      "is_palletizable": true,
+      "no_pallet_qty": 80,
+      "pallet_qty_1x1": null,
+      "pallet_qty_1_1x1_1": null
+    },
+    {
+      "name": "1吨桶(IBC)",
+      "dims": "1200*1000*1150mm",
+      "cbm": 1.38,
+      "tare_kg": 58.0,
+      "gross_kg": 1058.0,
+      "net_kg": 1000.0,
+      "barrel_type": "IBC",
+      "is_palletizable": false,
+      "no_pallet_qty": 20,
+      "pallet_qty_1x1": null,
+      "pallet_qty_1_1x1_1": null
+    }
+  ],
+  "pallets": [
+    {
+      "name": "1.0*1.0m",
+      "dims": "1000*1000mm (H150mm)",
+      "weight_kg": 17.0,
+      "cbm": 0.04
+    },
+    {
+      "name": "1.1*1.1m",
+      "dims": "1100*1100mm (H150mm)",
+      "weight_kg": 18.5,
+      "cbm": 0.06
+    }
+  ],
+  "container_20gp": {
+    "max_cbm": 28.0,
+    "max_weight_kg": 21000.0
+  },
+  "container_40gp": {
+    "max_cbm": 56.0,
+    "max_weight_kg": 27000.0
+  }
+}

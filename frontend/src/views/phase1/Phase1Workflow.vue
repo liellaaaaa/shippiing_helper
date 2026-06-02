@@ -72,36 +72,12 @@
           <template #header>
             <div class="card-header">
               <span>包装计算</span>
-              <el-button size="small" type="primary" @click="runPackagingCalc" :disabled="!orderParsed">
-                {{ packagingResult ? '重新计算' : '计算包装' }}
-              </el-button>
             </div>
           </template>
-
-          <div v-if="!packagingResult" class="pkg-placeholder">
-            <p>点击上方按钮进行包装计算</p>
-          </div>
-
-          <div v-else class="pkg-result">
-            <el-descriptions :column="2" border size="small">
-              <el-descriptions-item label="包装类型">{{ packagingResult.packaging_type }}</el-descriptions-item>
-              <el-descriptions-item label="卡板规格">{{ packagingResult.pallet_spec || '无卡板' }}</el-descriptions-item>
-              <el-descriptions-item label="总桶数">{{ packagingResult.drums }}</el-descriptions-item>
-              <el-descriptions-item label="卡板数">{{ packagingResult.pallets }}</el-descriptions-item>
-              <el-descriptions-item label="每板桶数">{{ packagingResult.drums_per_pallet }}</el-descriptions-item>
-              <el-descriptions-item label="20GP判定">
-                <el-tag :type="packagingResult.fits_20gp === '适合' ? 'success' : 'danger'" size="small">
-                  {{ packagingResult.fits_20gp }}
-                </el-tag>
-              </el-descriptions-item>
-              <el-descriptions-item label="产品净重">{{ packagingResult.net_weight_kg }} kg</el-descriptions-item>
-              <el-descriptions-item label="总毛重">{{ packagingResult.gross_weight_kg }} kg</el-descriptions-item>
-              <el-descriptions-item label="总体积" :span="2">{{ packagingResult.volume_cbm }} CBM</el-descriptions-item>
-            </el-descriptions>
-            <div v-if="packagingResult.packing_scheme" class="packing-scheme">
-              <p>{{ packagingResult.packing_scheme }}</p>
-            </div>
-          </div>
+          <PackagingCalculator
+            ref="calcRef"
+            @calculated="onPackagingCalculated"
+          />
         </el-card>
       </div>
     </div>
@@ -138,6 +114,7 @@ import PiUploadDragger from '@/components/phase1/PiUploadDragger.vue'
 import { ordersApi, type ParsedOrderSchema } from '@/api/orders'
 import { uploadPiFile, type PiUploadResponse } from '@/api/pi'
 import { saveOrderPiRecord, type PackagingResult } from '@/api/phase1'
+import PackagingCalculator from '@/components/phase1/PackagingCalculator.vue'
 
 // State
 const orderText = ref('')
@@ -149,6 +126,8 @@ const piFileName = ref('')
 const saving = ref(false)
 const savedOrderId = ref<number | null>(null)
 const packagingResult = ref<PackagingResult | null>(null)
+const calcRef = ref<InstanceType<typeof PackagingCalculator>>()
+const selectedPackageRef = ref('')
 
 // Order Form
 const orderForm = ref({
@@ -243,6 +222,24 @@ function syncMergedRowsFromForms() {
   }
 }
 
+function syncCalculatorFromOrder() {
+  if (!calcRef.value) return
+  const qty = orderForm.value.quantity_kg || 0
+  if (qty > 0) {
+    calcRef.value.setQuantity(qty)
+  }
+  // 根据 spec_kg 推断包装种类
+  const specMap: Record<number, string> = {
+    25: '25kg正方罐（蓝色）', 30: '30kg蓝桶',
+    50: '50kg蓝桶(大口)', 60: '60kg蓝桶', 125: '125kg新款胶桶',
+    150: '150kg新款胶桶', 200: '200kg双层铁口桶', 1000: '1吨桶(IBC)',
+  }
+  const pkgName = specMap[orderForm.value.spec_kg]
+  if (pkgName) {
+    calcRef.value.selectPackage(pkgName)
+  }
+}
+
 function onMergedValChange(row: MergedRow, val: string) {
   row.mergedVal = val
   const of = orderForm.value
@@ -251,13 +248,29 @@ function onMergedValChange(row: MergedRow, val: string) {
     case 'customer_code': of.customer_code = val; break
     case 'internal_code': of.internal_code = val; break
     case 'product_cn': of.product_cn = val; break
-    case 'spec_kg': of.spec_kg = parseFloat(val) || 0; break
-    case 'quantity_kg': of.quantity_kg = parseFloat(val) || 0; break
+    case 'spec_kg': of.spec_kg = parseFloat(val) || 0; syncCalculatorFromOrder(); break
+    case 'quantity_kg': of.quantity_kg = parseFloat(val) || 0; syncCalculatorFromOrder(); break
     case 'unit_price': of.unit_price = parseFloat(val) || 0; break
     case 'total_amount': of.total_amount = parseFloat(val) || 0; break
     case 'hs_code': of.hs_code = val; break
     case 'customs_name': of.customs_name = val; break
     case 'order_requirement': of.order_requirement = val; break
+  }
+}
+
+function onPackagingCalculated(result: any) {
+  // 同步到 packagingResult（兼容原有保存逻辑）
+  packagingResult.value = {
+    packaging_type: selectedPackageRef.value || result.pallet_type || '',
+    pallet_spec: result.pallet_type || '',
+    drums: result.drums,
+    pallets: result.pallets,
+    drums_per_pallet: result.drums_per_pallet,
+    net_weight_kg: orderForm.value.quantity_kg || 0,
+    gross_weight_kg: result.total_weight_kg,
+    volume_cbm: result.total_cbm,
+    fits_20gp: result.fits_20gp ? '适合' : '超出',
+    no_pallet: !result.pallet_type,
   }
 }
 
@@ -290,9 +303,7 @@ async function handleOrderParse(text: string) {
     orderParsed.value = true
 
     syncMergedRowsFromForms()
-    if (orderForm.value.order_requirement) {
-      runPackagingCalc()
-    }
+    syncCalculatorFromOrder()
 
     ElMessage.success('订单解析成功')
   } catch (err: any) {

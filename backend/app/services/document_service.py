@@ -150,3 +150,32 @@ class DocumentService:
             db.close()
         doc_key = f"msds_{product_name}_{int(time.time())}"
         return content, doc_key, base64.b64encode(content).decode()
+
+    def generate_template_instance(self, template_type: str) -> Tuple[bytes, str, str]:
+        """加载空白模板（不填充 marker），返回 (content, doc_key, encoded_content)。"""
+        type_map = {
+            "booking": ("booking", "xlsx"),
+            "loi":     ("loi",     "docx"),
+            "msds":    ("msds",    "docx"),
+        }
+        if template_type not in type_map:
+            raise ValueError(f"Unknown template type: {template_type}")
+        key_prefix, file_ext = type_map[template_type]
+        template_path = TEMPLATES[template_type]
+        if not os.path.exists(template_path):
+            raise FileNotFoundError(f"Template not found: {template_path}")
+
+        if file_ext == "xlsx":
+            wb = openpyxl.load_workbook(template_path)
+            buf = BytesIO()
+            wb.save(buf)
+            content = buf.getvalue()
+        else:
+            doc = Document(template_path)
+            buf = BytesIO()
+            doc.save(buf)
+            content = buf.getvalue()
+
+        timestamp = int(time.time())
+        doc_key = f"{key_prefix}_template_{timestamp}"
+        return content, doc_key, base64.b64encode(content).decode()

@@ -1,7 +1,5 @@
 import axios from 'axios'
 
-const BASE_URL = '/api/v1'
-
 export const phase2Api = {
   generateBooking(orderId: number) {
     return axios.get('/documents/booking', { params: { order_id: orderId } })
@@ -34,5 +32,11 @@ export const phase2Api = {
   },
   getJwt(documentKey: string, fileType: string) {
     return axios.post('/onlyoffice/jwt', null, { params: { documentKey, fileType } })
+  },
+  openBlankTemplate(type: 'booking' | 'loi' | 'msds') {
+    return axios.get(`/documents/template/${type}`)
+  },
+  listMyTemplates() {
+    return axios.get('/documents/my-templates')
   },
 }

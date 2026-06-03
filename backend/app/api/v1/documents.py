@@ -52,3 +52,19 @@ async def get_doc_history(order_id: int):
                   "created_at": d.created_at.isoformat() if d.created_at else None} for d in docs]
     finally:
         db.close()
+
+
+@router.get("/template/{template_type}")
+async def open_blank_template(template_type: str):
+    if template_type not in ("booking", "loi", "msds"):
+        return {"error": "Invalid template type"}
+    svc = DocumentService()
+    try:
+        _, doc_key, _ = svc.generate_template_instance(template_type)
+        file_ext = "xlsx" if template_type == "booking" else "docx"
+        jwt_token = oo_svc.generate_jwt_token(doc_key, file_ext)
+        config = oo_svc.build_editor_config(jwt_token, doc_key, file_ext)
+        api_base = os.getenv("API_BASE_URL", "http://localhost:8000")
+        return {**config, "downloadUrl": f"{api_base}/api/v1/onlyoffice/download/{doc_key}"}
+    except FileNotFoundError as e:
+        return {"error": str(e)}

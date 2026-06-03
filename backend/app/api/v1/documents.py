@@ -68,3 +68,22 @@ async def open_blank_template(template_type: str):
         return {**config, "downloadUrl": f"{api_base}/api/v1/onlyoffice/download/{doc_key}"}
     except FileNotFoundError as e:
         return {"error": str(e)}
+
+
+@router.get("/my-templates")
+async def list_my_templates():
+    db = SessionLocal()
+    try:
+        docs = db.query(ShipmentDoc).filter(
+            ShipmentDoc.order_id == None  # noqa: E711 — independent template instances
+        ).order_by(desc(ShipmentDoc.created_at)).all()
+        return [{
+            "doc_key": d.doc_key,
+            "doc_type": d.doc_type,
+            "file_name": d.file_name,
+            "version": d.version,
+            "created_by": d.created_by,
+            "created_at": d.created_at.isoformat() if d.created_at else None,
+        } for d in docs]
+    finally:
+        db.close()

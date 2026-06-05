@@ -27,7 +27,7 @@
         </el-table-column>
         <el-table-column label="卡板规格" width="140">
           <template #default="{ row }">
-            <el-select v-model="row.pallet_spec" placeholder="选择托盘" size="small" :disabled="!row.packaging_name">
+            <el-select v-model="row.pallet_spec" placeholder="选择托盘" size="small" :disabled="!row.packaging_name" @change="() => onRowPackageChange(row, row.packaging_name)">
               <el-option v-for="p in palletTypes" :key="p.name" :label="p.name" :value="p.name" />
             </el-select>
           </template>
@@ -35,6 +35,18 @@
         <el-table-column label="数量(kg)" width="120">
           <template #default="{ row }">
             <el-input-number v-model="row.quantity_kg" size="small" :min="0" controls-position="right" @change="() => onRowPackageChange(row, row.packaging_name)" />
+          </template>
+        </el-table-column>
+        <el-table-column label="每卡板桶数" width="100">
+          <template #default="{ row }">
+            <el-input-number
+              v-model="row.drums_per_pallet"
+              size="small"
+              :min="1"
+              controls-position="right"
+              class="drums-per-pallet-input"
+              @change="() => onRowCapacityChange(row)"
+            />
           </template>
         </el-table-column>
         <el-table-column label="桶数" width="70" align="center">
@@ -95,6 +107,7 @@ interface PackingRow {
   drums: number
   pallets: number
   drums_per_pallet: number
+  drums_per_pallet_auto: number  // 自动填的标准值，供比较用
   total_cbm: number
   total_weight_kg: number
   fits_20gp: boolean
@@ -132,6 +145,7 @@ function addRow(productName = '', quantityKg = 0) {
     drums: 0,
     pallets: 0,
     drums_per_pallet: 0,
+    drums_per_pallet_auto: 0,
     total_cbm: 0,
     total_weight_kg: 0,
     fits_20gp: false,
@@ -149,6 +163,23 @@ function removeRow(index: number) {
   recalcSummary()
 }
 
+async function onRowCapacityChange(row: PackingRow) {
+  // 用户手动修改了每卡板桶数，按实际值重新计算
+  if (!row.packaging_name || row.quantity_kg <= 0 || row.drums_per_pallet <= 0) return
+  const pkg = packageTypes.value.find(p => p.name === row.packaging_name)
+  if (!pkg) return
+
+  const drums = Math.ceil(row.quantity_kg / pkg.net_kg)
+  row.drums = drums
+  const pallets = Math.ceil(drums / row.drums_per_pallet)
+  row.pallets = pallets
+  row.total_cbm = drums * pkg.cbm
+  row.total_weight_kg = drums * pkg.gross_kg + pallets * 20
+  row.fits_20gp = row.total_cbm <= 28 && row.total_weight_kg <= 21000
+  row.fits_40gp = row.total_cbm <= 67 && row.total_weight_kg <= 27000
+  recalcSummary()
+}
+
 async function onRowPackageChange(row: PackingRow, packagingName: string) {
   if (!packagingName || row.quantity_kg <= 0) {
     row.drums = 0; row.pallets = 0; row.drums_per_pallet = 0
@@ -157,6 +188,7 @@ async function onRowPackageChange(row: PackingRow, packagingName: string) {
     return
   }
   try {
+    const pkg = packageTypes.value.find(p => p.name === packagingName)
     const schemes = await packagingApi.calculateSchemes({
       packaging_name: packagingName,
       order_qty_kg: row.quantity_kg,
@@ -171,6 +203,12 @@ async function onRowPackageChange(row: PackingRow, packagingName: string) {
       row.total_weight_kg = match.total_weight_kg
       row.fits_20gp = match.fits_20gp
       row.fits_40gp = match.fits_40gp
+    }
+    // 自动填标准容量（只有用户没手动改过时才填）
+    if (pkg && (!row.drums_per_pallet || row.drums_per_pallet === row.drums_per_pallet_auto)) {
+      const is1x1 = row.pallet_spec && row.pallet_spec.includes('1.0*1.0')
+      row.drums_per_pallet_auto = is1x1 ? pkg.pallet_qty_1x1 : pkg.pallet_qty_1_1x1_1
+      row.drums_per_pallet = row.drums_per_pallet_auto
     }
     recalcSummary()
   } catch (e) {
@@ -230,4 +268,5 @@ defineExpose({ addRow, clearRows, setQuantity, selectPackage, getSummary })
 .pkg-select-popper { min-width: 320px !important; }
 .pkg-opt { font-weight: 500; }
 .pkg-dims { font-size: 12px; color: #909399; margin-left: 8px; }
+.drums-per-pallet-input { width: 80px; }
 </style>

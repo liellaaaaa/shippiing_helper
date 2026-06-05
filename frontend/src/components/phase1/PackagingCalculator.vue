@@ -1,120 +1,81 @@
 <template>
   <div class="packaging-calculator">
-    <div class="calc-form">
-      <div class="form-row">
-        <span class="form-label">包装种类</span>
-        <el-select
-          v-model="selectedPackage"
-          placeholder="选择包装种类"
-          size="small"
-          filterable
-          @change="onPackageChange"
-        >
-          <el-option
-            v-for="p in packageTypes"
-            :key="p.name"
-            :label="p.name"
-            :value="p.name"
-          >
-            <span class="pkg-opt">{{ p.name }}</span>
-            <span class="pkg-dims">{{ p.dims }}</span>
-          </el-option>
-        </el-select>
+    <div class="calc-table-wrapper">
+      <!-- 表头工具栏 -->
+      <div class="calc-toolbar">
+        <el-button size="small" @click="addRow">+ 添加产品</el-button>
       </div>
 
-      <div class="form-row">
-        <span class="form-label">订单数量</span>
-        <el-input-number
-          v-model="orderQtyKg"
-          :min="0"
-          :step="100"
-          size="small"
-          controls-position="right"
-        />
-        <span class="unit">kg</span>
-      </div>
-
-      <div class="form-row">
-        <span class="form-label">卡板</span>
-        <el-radio-group v-model="usePallet" size="small">
-          <el-radio-button :value="false">不打卡板</el-radio-button>
-          <el-radio-button :value="true">打卡板</el-radio-button>
-        </el-radio-group>
-      </div>
-
-      <div v-if="usePallet" class="form-row">
-        <span class="form-label">托盘规格</span>
-        <el-select v-model="selectedPallet" placeholder="选择托盘" size="small">
-          <el-option
-            v-for="p in palletTypes"
-            :key="p.name"
-            :label="p.name"
-            :value="p.name"
-          />
-        </el-select>
-      </div>
-
-      <el-button
-        type="primary"
-        size="default"
-        :loading="calculating"
-        :disabled="!selectedPackage || orderQtyKg <= 0"
-        @click="runCalculate"
-      >
-        计算包装
-      </el-button>
-    </div>
-
-    <!-- 结果展示 -->
-    <div v-if="result" class="calc-result">
-      <el-divider content-position="left">计算结果</el-divider>
-      <el-descriptions :column="2" border size="small">
-        <el-descriptions-item label="总桶数">
-          <strong>{{ result.drums }}</strong>
-        </el-descriptions-item>
-        <el-descriptions-item label="托盘数">
-          <strong>{{ result.pallets || 0 }}</strong>
-        </el-descriptions-item>
-        <el-descriptions-item label="每托桶数">{{ result.drums_per_pallet || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="总体积">{{ result.total_cbm }} CBM</el-descriptions-item>
-        <el-descriptions-item label="总毛重">{{ result.total_weight_kg }} kg</el-descriptions-item>
-        <el-descriptions-item label="货柜判断">
-          <el-tag
-            :type="result.recommended === '20GP' ? 'success' : result.recommended === '40GP' ? 'warning' : 'danger'"
-            size="small"
-          >
-            {{ result.recommended }}
-          </el-tag>
-        </el-descriptions-item>
-      </el-descriptions>
-
-      <!-- 20GP/40GP 明细 -->
-      <div class="container-badges">
-        <el-tag :type="result.fits_20gp ? 'success' : 'info'" size="small">20GP {{ result.fits_20gp ? '✅' : '❌' }}</el-tag>
-        <el-tag :type="result.fits_40gp ? 'success' : 'info'" size="small">40GP {{ result.fits_40gp ? '✅' : '❌' }}</el-tag>
-      </div>
-    </div>
-
-    <!-- 全方案比较 -->
-    <div v-if="allSchemes.length > 1" class="all-schemes">
-      <el-divider content-position="left">可用方案对比</el-divider>
-      <el-table :data="allSchemes" border size="small" max-height="200">
-        <el-table-column prop="pallet_type" label="卡板" width="100">
+      <!-- 多行计算表格 -->
+      <el-table :data="rows" border size="small" class="calc-table">
+        <el-table-column label="产品" width="150">
           <template #default="{ row }">
-            {{ row.pallet_type ? row.pallet_type : '不打卡板' }}
+            <el-select v-model="row.product_name" placeholder="选择产品" size="small" filterable allow-create>
+              <el-option v-for="p in productOptions" :key="p" :label="p" :value="p" />
+            </el-select>
           </template>
         </el-table-column>
-        <el-table-column prop="drums" label="桶数" width="70" />
-        <el-table-column prop="pallets" label="托数" width="70" />
-        <el-table-column prop="drums_per_pallet" label="每托桶数" width="90" />
-        <el-table-column prop="total_cbm" label="总体积(CBM)" width="110" />
-        <el-table-column prop="total_weight_kg" label="总毛重(kg)" width="110" />
-        <el-table-column prop="recommended" label="推荐货柜" width="90">
+        <el-table-column label="包装种类" width="220">
           <template #default="{ row }">
-            <el-tag :type="row.recommended === '20GP' ? 'success' : 'warning'" size="small">{{ row.recommended }}</el-tag>
+            <el-select v-model="row.packaging_name" placeholder="选择包装" size="small" filterable popper-class="pkg-select-popper" @change="(val) => onRowPackageChange(row, val)">
+              <el-option v-for="p in packageTypes" :key="p.name" :label="p.name" :value="p.name">
+                <span class="pkg-opt">{{ p.name }}</span>
+                <span class="pkg-dims">{{ p.dims }}</span>
+              </el-option>
+            </el-select>
+          </template>
+        </el-table-column>
+        <el-table-column label="卡板规格" width="140">
+          <template #default="{ row }">
+            <el-select v-model="row.pallet_spec" placeholder="选择托盘" size="small" :disabled="!row.packaging_name">
+              <el-option v-for="p in palletTypes" :key="p.name" :label="p.name" :value="p.name" />
+            </el-select>
+          </template>
+        </el-table-column>
+        <el-table-column label="数量(kg)" width="120">
+          <template #default="{ row }">
+            <el-input-number v-model="row.quantity_kg" size="small" :min="0" controls-position="right" @change="() => onRowPackageChange(row, row.packaging_name)" />
+          </template>
+        </el-table-column>
+        <el-table-column label="桶数" width="70" align="center">
+          <template #default="{ row }"><span>{{ row.drums || '-' }}</span></template>
+        </el-table-column>
+        <el-table-column label="托盘数" width="70" align="center">
+          <template #default="{ row }"><span>{{ row.pallets || '-' }}</span></template>
+        </el-table-column>
+        <el-table-column label="总体积" width="90" align="center">
+          <template #default="{ row }"><span>{{ row.total_cbm ? row.total_cbm.toFixed(3) : '-' }}</span></template>
+        </el-table-column>
+        <el-table-column label="总毛重" width="90" align="center">
+          <template #default="{ row }"><span>{{ row.total_weight_kg ? row.total_weight_kg.toFixed(1) : '-' }}</span></template>
+        </el-table-column>
+        <el-table-column label="20GP" width="70" align="center">
+          <template #default="{ row }">
+            <el-tag :type="row.fits_20gp ? 'success' : 'info'" size="small">{{ row.fits_20gp ? '✅' : '❌' }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="60">
+          <template #default="{ $index }">
+            <el-button text type="danger" size="small" @click="removeRow($index)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
+
+      <!-- 汇总行 -->
+      <div v-if="rows.length > 0" class="calc-summary">
+        <el-divider content-position="left">包装汇总</el-divider>
+        <el-descriptions :column="5" border size="small">
+          <el-descriptions-item label="总桶数"><strong>{{ summary.total_drums }}</strong></el-descriptions-item>
+          <el-descriptions-item label="总托盘数"><strong>{{ summary.total_pallets }}</strong></el-descriptions-item>
+          <el-descriptions-item label="总体积(CBM)"><strong>{{ summary.total_cbm.toFixed(3) }}</strong></el-descriptions-item>
+          <el-descriptions-item label="总毛重(kg)"><strong>{{ summary.total_weight_kg.toFixed(1) }}</strong></el-descriptions-item>
+          <el-descriptions-item label="货柜判断">
+            <el-tag :type="summary.fits_20gp ? 'success' : summary.fits_40gp ? 'warning' : 'danger'" size="small">
+              {{ summary.fits_20gp ? '20GP ✅' : summary.fits_40gp ? '40GP ✅' : '超出' }}
+            </el-tag>
+          </el-descriptions-item>
+        </el-descriptions>
+      </div>
     </div>
   </div>
 </template>
@@ -122,21 +83,30 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import packagingApi, { type PackageType, type PalletType, type PackingScheme } from '@/api/packaging'
+import packagingApi, { type PackageType, type PalletType } from '@/api/packaging'
 
-const emit = defineEmits<{
-  (e: 'calculated', result: PackingScheme): void
-}>()
+// Task 3A: PackingRow interface
+interface PackingRow {
+  id: string
+  product_name: string
+  packaging_name: string
+  pallet_spec: string
+  quantity_kg: number
+  drums: number
+  pallets: number
+  drums_per_pallet: number
+  total_cbm: number
+  total_weight_kg: number
+  fits_20gp: boolean
+  fits_40gp: boolean
+}
 
+// Task 3A: Replace result with rows array
 const packageTypes = ref<PackageType[]>([])
 const palletTypes = ref<PalletType[]>([])
-const selectedPackage = ref('')
-const selectedPallet = ref('1.1*1.1m')
-const orderQtyKg = ref(0)
-const usePallet = ref(false)
-const calculating = ref(false)
-const result = ref<PackingScheme | null>(null)
-const allSchemes = ref<any[]>([])
+const productOptions = ref<string[]>([])
+const rows = ref<PackingRow[]>([])
+const summary = ref({ total_drums: 0, total_pallets: 0, total_cbm: 0, total_weight_kg: 0, fits_20gp: false, fits_40gp: false })
 
 onMounted(async () => {
   try {
@@ -151,80 +121,113 @@ onMounted(async () => {
   }
 })
 
-function onPackageChange() {
-  result.value = null
-  allSchemes.value = []
-}
-
-async function runCalculate() {
-  if (!selectedPackage.value || orderQtyKg.value <= 0) return
-  calculating.value = true
-  result.value = null
-  allSchemes.value = []
-  try {
-    // 查所有方案
-    const schemes = await packagingApi.calculateSchemes({
-      packaging_name: selectedPackage.value,
-      order_qty_kg: orderQtyKg.value,
-      use_pallet: usePallet.value,
-    })
-    allSchemes.value = schemes
-
-    // 选中的方案
-    if (usePallet.value) {
-      const match = schemes.find(s => s.pallet_type === selectedPallet.value)
-      result.value = match || schemes[0]
-    } else {
-      result.value = schemes.find(s => !s.pallet_type) || schemes[0]
+// Task 3C: Row operation functions
+function addRow(productName = '', quantityKg = 0) {
+  rows.value.push({
+    id: Date.now().toString(),
+    product_name: productName,
+    packaging_name: '',
+    pallet_spec: '1.1*1.1m',
+    quantity_kg: quantityKg,
+    drums: 0,
+    pallets: 0,
+    drums_per_pallet: 0,
+    total_cbm: 0,
+    total_weight_kg: 0,
+    fits_20gp: false,
+    fits_40gp: false,
+  })
+  if (productName) {
+    if (!productOptions.value.includes(productName)) {
+      productOptions.value.push(productName)
     }
-
-    if (result.value) {
-      emit('calculated', result.value)
-    }
-  } catch (e: any) {
-    ElMessage.error(e?.response?.data?.detail || '计算失败')
-  } finally {
-    calculating.value = false
   }
 }
 
-// 供父组件调用，初始化数量
+function removeRow(index: number) {
+  rows.value.splice(index, 1)
+  recalcSummary()
+}
+
+async function onRowPackageChange(row: PackingRow, packagingName: string) {
+  if (!packagingName || row.quantity_kg <= 0) {
+    row.drums = 0; row.pallets = 0; row.drums_per_pallet = 0
+    row.total_cbm = 0; row.total_weight_kg = 0; row.fits_20gp = false; row.fits_40gp = false
+    recalcSummary()
+    return
+  }
+  try {
+    const schemes = await packagingApi.calculateSchemes({
+      packaging_name: packagingName,
+      order_qty_kg: row.quantity_kg,
+      use_pallet: !!row.pallet_spec,
+    })
+    const match = schemes.find((s: any) => s.pallet_type === row.pallet_spec) || schemes[0]
+    if (match) {
+      row.drums = match.drums
+      row.pallets = match.pallets
+      row.drums_per_pallet = match.drums_per_pallet
+      row.total_cbm = match.total_cbm
+      row.total_weight_kg = match.total_weight_kg
+      row.fits_20gp = match.fits_20gp
+      row.fits_40gp = match.fits_40gp
+    }
+    recalcSummary()
+  } catch (e) {
+    console.error('行计算失败', e)
+  }
+}
+
+function recalcSummary() {
+  const s = { total_drums: 0, total_pallets: 0, total_cbm: 0, total_weight_kg: 0, fits_20gp: true, fits_40gp: true }
+  for (const r of rows.value) {
+    s.total_drums += r.drums || 0
+    s.total_pallets += r.pallets || 0
+    s.total_cbm += r.total_cbm || 0
+    s.total_weight_kg += r.total_weight_kg || 0
+    if (!r.fits_20gp) s.fits_20gp = false
+    if (!r.fits_40gp) s.fits_40gp = false
+  }
+  summary.value = s
+}
+
+function clearRows() {
+  rows.value = []
+  summary.value = { total_drums: 0, total_pallets: 0, total_cbm: 0, total_weight_kg: 0, fits_20gp: false, fits_40gp: false }
+}
+
+function getSummary() {
+  return summary.value
+}
+
+// Task 3D: Backward compatibility functions for parent component
 function setQuantity(kg: number) {
-  orderQtyKg.value = kg
+  if (rows.value.length > 0) {
+    rows.value[0].quantity_kg = kg
+    if (rows.value[0].packaging_name) {
+      onRowPackageChange(rows.value[0], rows.value[0].packaging_name)
+    }
+  }
 }
 
-// 供父组件调用，选中包装种类
 function selectPackage(name: string) {
-  const found = packageTypes.value.find(p => p.name === name)
-  if (found) selectedPackage.value = name
+  if (rows.value.length > 0) {
+    rows.value[0].packaging_name = name
+  }
 }
 
-defineExpose({ setQuantity, selectPackage })
+// Task 3D: Update defineExpose
+defineExpose({ addRow, clearRows, setQuantity, selectPackage, getSummary })
 </script>
 
 <style scoped>
+/* Task 3E: Updated CSS */
 .packaging-calculator { padding: 4px 0; }
-.calc-form {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  align-items: center;
-  margin-bottom: 12px;
-}
-.form-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.form-label {
-  font-size: 13px;
-  color: #606266;
-  white-space: nowrap;
-}
-.unit { font-size: 13px; color: #909399; }
+.calc-table-wrapper { padding: 4px 0; }
+.calc-toolbar { margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+.calc-table { margin-bottom: 12px; }
+.calc-summary { margin-top: 8px; }
+.pkg-select-popper { min-width: 320px !important; }
 .pkg-opt { font-weight: 500; }
 .pkg-dims { font-size: 12px; color: #909399; margin-left: 8px; }
-.calc-result { margin-top: 8px; }
-.container-badges { display: flex; gap: 8px; margin-top: 8px; }
-.all-schemes { margin-top: 8px; }
 </style>

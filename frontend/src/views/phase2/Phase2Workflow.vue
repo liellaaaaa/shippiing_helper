@@ -82,7 +82,7 @@
           </svg>
           MSDS
         </el-button>
-        <el-dropdown @command="(cmd: string) => openBlankTemplate(cmd)" trigger="click">
+        <el-dropdown @command="(cmd: 'booking' | 'loi' | 'msds') => openBlankTemplate(cmd)" trigger="click">
           <el-button size="small">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px">
               <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>
@@ -111,11 +111,7 @@
     <div class="main">
       <!-- Left: Reference Panel -->
       <aside class="ref-panel">
-        <ReferencePanel
-          :order-id="selectedOrderId"
-          :product-name="currentProductName"
-          :internal-code="currentInternalCode"
-        />
+        <ReferencePanel :order-id="selectedOrderId" />
       </aside>
 
       <!-- Right: Document Editor -->
@@ -178,7 +174,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import ReferencePanel from './components/ReferencePanel.vue'
@@ -199,9 +195,6 @@ const currentConfig = ref<any>({})
 const showMsdsDialog = ref(false)
 const selectedProductForMsds = ref('')
 const showMyDocuments = ref(false)
-
-const currentProductName = computed(() => currentOrderItems.value[0]?.product_cn || '')
-const currentInternalCode = computed(() => currentOrderItems.value[0]?.internal_code || '')
 
 // Auto-fill from route query
 if (route.query.orderId) {

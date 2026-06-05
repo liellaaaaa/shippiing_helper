@@ -39,4 +39,37 @@ export const phase2Api = {
   listMyTemplates() {
     return axios.get('/documents/my-templates')
   },
+
+  // ── 数据中心 ───────────────────────────────────────────────
+  searchDataCenter(query: string) {
+    return axios.get('/api/v1/data-center/search', { params: { q: query } })
+  },
+  getDataCenterFileUrl(fileId: number) {
+    return `/api/v1/data-center/files/${fileId}`
+  },
+  getDataCenterSummary(fileId: number) {
+    return axios.get(`/api/v1/data-center/summary/${fileId}`)
+  },
+  uploadCorrectedMsds(fileId: number, file: File, user: string = 'admin') {
+    const formData = new FormData()
+    formData.append('file', file)
+    return axios.post(`/api/v1/data-center/upload-corrected/${fileId}`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      params: { user },
+    })
+  },
+  reindexDataCenter() {
+    return axios.post('/api/v1/data-center/reindex')
+  },
+
+  // ── 运输鉴定报告 ─────────────────────────────────────────────
+  searchTransportReports(query: string) {
+    return axios.get('/api/v1/transport-reports/search', { params: { q: query } })
+  },
+  getTransportReportFileUrl(filename: string) {
+    return `/api/v1/transport-reports/files/${encodeURIComponent(filename)}`
+  },
+  reindexTransportReports() {
+    return axios.post('/api/v1/transport-reports/reindex')
+  },
 }

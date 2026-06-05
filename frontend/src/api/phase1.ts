@@ -19,13 +19,7 @@ export interface PackagingResult {
   no_pallet: boolean
 }
 
-export interface OrderData {
-  order_no: string
-  customer_code?: string
-  customer_name?: string
-  sales_person?: string
-  order_date?: string
-  delivery_date?: string
+export interface OrderDataItem {
   internal_code: string
   product_cn?: string
   product_en?: string
@@ -37,6 +31,16 @@ export interface OrderData {
   customs_name?: string
   order_requirement?: string
   notes?: string
+}
+
+export interface OrderData {
+  order_no: string
+  customer_code?: string
+  customer_name?: string
+  sales_person?: string
+  order_date?: string
+  delivery_date?: string
+  items: OrderDataItem[]  // 多产品支持
 }
 
 export interface PiData {

@@ -7,7 +7,6 @@
     :append-to-body="true"
   >
     <div v-if="loading" class="loading-state">
-      <el-icon class="is-loading"><loading /></el-icon>
       <span>加载中...</span>
     </div>
 
@@ -28,8 +27,8 @@
       >
         <div class="doc-icon">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path v-if="doc.doc_type === 'booking'" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
-            <path v-else d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
           </svg>
         </div>
         <div class="doc-info">
@@ -52,8 +51,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { phase2Api } from '@/api/phase2'
-import { ElIcon } from 'element-plus'
-import { Loading } from '@element-plus/icons-vue'
 
 const props = defineProps<{ modelValue: boolean }>()
 const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void; (e: 'open-doc', doc: any): void }>()

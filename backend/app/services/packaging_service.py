@@ -4,7 +4,7 @@
 import os
 import math
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 
@@ -52,6 +52,67 @@ class PackingResult:
     fits_20gp: bool
     fits_40gp: bool
     recommended: str
+
+
+# === 订单级别汇总计算新增 ===
+
+@dataclass
+class OrderProductInput:
+    """订单中单个产品的输入"""
+    product_name: str
+    packaging_name: str          # 如 "125kg新款胶桶"
+    quantity_kg: float           # 订单总净重 kg
+    specification_kg: float     # 单桶/单袋净重 kg
+    barrel_type: str             # "胶桶" / "编织袋" / "IBC"
+    pallet_spec: str = "1.1*1.1m"  # 默认卡板规格
+
+
+@dataclass
+class ProductPackagingResult:
+    """单个产品的包装计算结果"""
+    product_name: str
+    packaging_name: str
+    specification_kg: float
+
+    drums: int                  # 桶数/袋数
+    drums_per_pallet: int       # 每板桶数
+    pallets: int                # 所需卡板数
+    pallet_spec: str            # 使用的卡板规格
+
+    net_weight_kg: float         # 产品净重
+    drum_tare_kg: float         # 桶身皮重
+    pallet_tare_kg: float       # 卡板皮重
+    gross_weight_kg: float     # 总毛重
+    drum_cbm: float             # 桶身体积
+    pallet_cbm: float           # 卡板体积
+    total_volume_cbm: float    # 总体积
+
+
+@dataclass
+class PalletDetail:
+    """按卡板尺寸分组的详情"""
+    pallet_spec: str
+    pallet_count: int
+    drums_on_pallets: int
+    volume_cbm: float
+    weight_kg: float
+
+
+@dataclass
+class OrderPackagingResult:
+    """订单级别包装汇总结果"""
+    total_drums: int
+    total_pallets: int
+    total_volume_cbm: float
+    total_weight_kg: float
+    total_net_weight_kg: float
+    pallet_details: list[PalletDetail]  # 按卡板尺寸分组
+    product_details: list[ProductPackagingResult]  # 各产品明细
+    container_20gp_fit: bool
+    container_40hq_fit: bool
+    recommended: str
+    load_rate_20gp: float
+    load_rate_40hq: float
 
 
 def _load_data() -> dict:
@@ -233,3 +294,177 @@ def calculate_all_schemes(
             pass
 
     return results
+
+
+def calculate_single_product(
+    packaging_name: str,
+    quantity_kg: float,
+    specification_kg: float,
+    barrel_type: str,
+    pallet_spec: str = "1.1*1.1m",
+) -> ProductPackagingResult:
+    """
+    计算单个产品的包装需求
+
+    Args:
+        packaging_name: 包装类型名称，如 "125kg新款胶桶"
+        quantity_kg: 订单总净重 kg
+        specification_kg: 单桶/单袋净重 kg
+        barrel_type: 包装方式: "胶桶" / "纸桶" / "编织袋" / "IBC"
+        pallet_spec: 卡板规格
+
+    Returns:
+        ProductPackagingResult: 单产品包装计算结果
+    """
+    pkg = find_package(packaging_name)
+    if not pkg:
+        raise ValueError(f"未找到包装种类: {packaging_name}")
+
+    # 桶数 = ceil(order_qty / net_kg_per_drum)
+    drums = math.ceil(quantity_kg / specification_kg)
+
+    # 确定每托盘桶数
+    if "1.0*1.0" in pallet_spec:
+        drums_per_pallet = pkg.pallet_qty_1x1 or 0
+    elif "1.1*1.1" in pallet_spec:
+        drums_per_pallet = pkg.pallet_qty_1_1x1_1 or 0
+    else:
+        drums_per_pallet = 0
+
+    if drums_per_pallet == 0:
+        # 编织袋类产品不需要卡板
+        pallets = 0
+        drum_tare = drums * pkg.tare_kg
+        pallet_tare = 0
+        drum_cbm = drums * pkg.cbm
+        pallet_cbm = 0
+    else:
+        pallets = math.ceil(drums / drums_per_pallet)
+        pallet = find_pallet(pallet_spec)
+        drum_tare = drums * pkg.tare_kg
+        pallet_tare = pallets * pallet.weight_kg if pallet else 0
+        drum_cbm = drums * pkg.cbm
+        pallet_cbm = pallets * pallet.cbm if pallet else 0
+
+    total_volume = drum_cbm + pallet_cbm
+    gross_weight = drums * pkg.gross_kg + (pallets * find_pallet(pallet_spec).weight_kg if pallets > 0 and pallet_spec in ["1.0*1.0m", "1.1*1.1m"] else 0)
+
+    return ProductPackagingResult(
+        product_name=packaging_name,
+        packaging_name=packaging_name,
+        specification_kg=specification_kg,
+        drums=drums,
+        drums_per_pallet=drums_per_pallet,
+        pallets=pallets,
+        pallet_spec=pallet_spec,
+        net_weight_kg=quantity_kg,
+        drum_tare_kg=round(drum_tare, 1),
+        pallet_tare_kg=round(pallet_tare, 1),
+        gross_weight_kg=round(gross_weight, 1),
+        drum_cbm=round(drum_cbm, 4),
+        pallet_cbm=round(pallet_cbm, 4),
+        total_volume_cbm=round(total_volume, 4),
+    )
+
+
+def calculate_order_packaging(products: list[OrderProductInput]) -> OrderPackagingResult:
+    """
+    订单级别包装汇总计算
+
+    处理逻辑:
+    1. 按产品分别计算包装（桶数、卡板数、体积、重量）
+    2. 汇总到订单级别，按卡板规格分组输出 pallet_details
+    3. 判断货柜适应性(20GP/40HQ)
+
+    Args:
+        products: 订单中的产品列表，每个产品包含包装类型、数量、规格等信息
+
+    Returns:
+        OrderPackagingResult: 包含汇总结果和各产品明细
+    """
+    product_details: list[ProductPackagingResult] = []
+    total_drums = 0
+    total_pallets = 0
+    total_net_weight = 0.0
+    total_drum_tare = 0.0
+    total_pallet_tare = 0.0
+    total_drum_cbm = 0.0
+    total_pallet_cbm = 0.0
+
+    # 逐产品计算
+    for prod in products:
+        result = calculate_single_product(
+            packaging_name=prod.packaging_name,
+            quantity_kg=prod.quantity_kg,
+            specification_kg=prod.specification_kg,
+            barrel_type=prod.barrel_type,
+            pallet_spec=prod.pallet_spec,
+        )
+        product_details.append(result)
+        total_drums += result.drums
+        total_pallets += result.pallets
+        total_net_weight += result.net_weight_kg
+        total_drum_tare += result.drum_tare_kg
+        total_pallet_tare += result.pallet_tare_kg
+        total_drum_cbm += result.drum_cbm
+        total_pallet_cbm += result.pallet_cbm
+
+    total_volume = total_drum_cbm + total_pallet_cbm
+    total_weight = total_net_weight + total_drum_tare + total_pallet_tare
+
+    # 按卡板规格分组
+    pallet_groups: dict[str, dict] = {}
+    for prod_result in product_details:
+        if prod_result.pallets > 0:
+            spec = prod_result.pallet_spec
+            if spec not in pallet_groups:
+                pallet_groups[spec] = {"count": 0, "drums": 0, "volume": 0.0, "weight": 0.0}
+            pallet_groups[spec]["count"] += prod_result.pallets
+            pallet_groups[spec]["drums"] += prod_result.drums
+            pallet_groups[spec]["volume"] += prod_result.pallet_cbm
+            pallet = find_pallet(spec)
+            pallet_groups[spec]["weight"] += prod_result.pallets * (pallet.weight_kg if pallet else 0)
+
+    pallet_details: list[PalletDetail] = []
+    for spec, data in pallet_groups.items():
+        pallet = find_pallet(spec)
+        pallet_details.append(PalletDetail(
+            pallet_spec=spec,
+            pallet_count=data["count"],
+            drums_on_pallets=data["drums"],
+            volume_cbm=round(data["volume"], 4),
+            weight_kg=round(data["weight"], 1),
+        ))
+
+    # 货柜判断
+    specs = get_container_specs()
+    spec_20gp = specs["20GP"]
+    spec_40gp = specs["40GP"]
+
+    fits_20gp = total_volume <= spec_20gp.max_cbm and total_weight <= spec_20gp.max_weight_kg
+    fits_40hq = total_volume <= 67.0 and total_weight <= 27000.0  # 40HQ limits
+
+    load_rate_20gp = round(total_volume / spec_20gp.max_cbm * 100, 1) if spec_20gp.max_cbm > 0 else 0
+    load_rate_40hq = round(total_volume / 67.0 * 100, 1) if 67.0 > 0 else 0
+
+    if fits_20gp:
+        recommended = "20GP"
+    elif fits_40hq:
+        recommended = "40HQ"
+    else:
+        recommended = "超限"
+
+    return OrderPackagingResult(
+        total_drums=total_drums,
+        total_pallets=total_pallets,
+        total_volume_cbm=round(total_volume, 3),
+        total_weight_kg=round(total_weight, 1),
+        total_net_weight_kg=round(total_net_weight, 1),
+        pallet_details=pallet_details,
+        product_details=product_details,
+        container_20gp_fit=fits_20gp,
+        container_40hq_fit=fits_40hq,
+        recommended=recommended,
+        load_rate_20gp=load_rate_20gp,
+        load_rate_40hq=load_rate_40hq,
+    )

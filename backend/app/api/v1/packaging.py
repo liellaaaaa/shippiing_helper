@@ -8,9 +8,12 @@ from app.services.packaging_service import (
     get_pallet_types,
     calculate,
     calculate_all_schemes,
+    calculate_order_packaging,
     PackageSpec,
     PalletSpec,
+    OrderProductInput,
 )
+from app.schemas.order_pi_record import OrderPackagingResultSchema
 
 
 router = APIRouter(prefix="/api/v1/packaging", tags=["包装计算"])
@@ -128,5 +131,84 @@ def calculate_all_packaging_schemes(req: CalculateRequest):
             }
             for s in schemes
         ]
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+class OrderProductItem(BaseModel):
+    """订单中单个产品的输入"""
+    product_name: str
+    packaging_name: str
+    quantity_kg: float
+    specification_kg: float
+    barrel_type: str = "胶桶"
+    pallet_spec: str = "1.1*1.1m"
+
+
+class OrderPackagingRequest(BaseModel):
+    products: list[OrderProductItem]
+
+
+@router.post("/calculate-order", response_model=OrderPackagingResultSchema, summary="订单级别包装汇总计算")
+def calculate_order_packaging_endpoint(req: OrderPackagingRequest):
+    """
+    订单级别包装汇总计算 — 支持多产品。
+
+    输入订单中的多个产品，输出汇总后的：
+    - 总桶数、总卡板数、总体积、总重量
+    - 按卡板尺寸分组的详情
+    - 各产品明细
+    - 货柜适应性判断
+    """
+    try:
+        products = [
+            OrderProductInput(
+                product_name=p.product_name,
+                packaging_name=p.packaging_name,
+                quantity_kg=p.quantity_kg,
+                specification_kg=p.specification_kg,
+                barrel_type=p.barrel_type,
+                pallet_spec=p.pallet_spec,
+            )
+            for p in req.products
+        ]
+        result = calculate_order_packaging(products)
+        return OrderPackagingResultSchema(
+            total_drums=result.total_drums,
+            total_pallets=result.total_pallets,
+            total_volume_cbm=result.total_volume_cbm,
+            total_weight_kg=result.total_weight_kg,
+            total_net_weight_kg=result.total_net_weight_kg,
+            pallet_details=[
+                {
+                    "pallet_spec": p.pallet_spec,
+                    "pallet_count": p.pallet_count,
+                    "drums_on_pallets": p.drums_on_pallets,
+                    "volume_cbm": p.volume_cbm,
+                    "weight_kg": p.weight_kg,
+                }
+                for p in result.pallet_details
+            ],
+            product_details=[
+                {
+                    "product_name": p.product_name,
+                    "packaging_name": p.packaging_name,
+                    "specification_kg": p.specification_kg,
+                    "drums": p.drums,
+                    "drums_per_pallet": p.drums_per_pallet,
+                    "pallets": p.pallets,
+                    "pallet_spec": p.pallet_spec,
+                    "net_weight_kg": p.net_weight_kg,
+                    "gross_weight_kg": p.gross_weight_kg,
+                    "volume_cbm": p.total_volume_cbm,
+                }
+                for p in result.product_details
+            ],
+            container_20gp_fit=result.container_20gp_fit,
+            container_40hq_fit=result.container_40hq_fit,
+            recommended=result.recommended,
+            load_rate_20gp=result.load_rate_20gp,
+            load_rate_40hq=result.load_rate_40hq,
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

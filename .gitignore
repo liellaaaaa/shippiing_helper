@@ -19,6 +19,12 @@ node_modules/
 *.log
 package-lock.json
 
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/package-lock.json
+frontend/*.local.js
+
 # Data
 data/
 *.db

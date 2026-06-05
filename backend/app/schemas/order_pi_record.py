@@ -18,13 +18,8 @@ class PackagingResult(BaseModel):
     no_pallet: bool = False
 
 
-class OrderData(BaseModel):
-    order_no: str
-    customer_code: Optional[str] = None
-    customer_name: Optional[str] = None
-    sales_person: Optional[str] = None
-    order_date: Optional[str] = None
-    delivery_date: Optional[str] = None
+class OrderDataItem(BaseModel):
+    """单个产品的订单数据"""
     internal_code: str
     product_cn: Optional[str] = None
     product_en: Optional[str] = None
@@ -36,6 +31,17 @@ class OrderData(BaseModel):
     customs_name: Optional[str] = None
     order_requirement: Optional[str] = None
     notes: Optional[str] = None
+
+
+class OrderData(BaseModel):
+    """订单头数据 + 多产品明细"""
+    order_no: str
+    customer_code: Optional[str] = None
+    customer_name: Optional[str] = None
+    sales_person: Optional[str] = None
+    order_date: Optional[str] = None
+    delivery_date: Optional[str] = None
+    items: list[OrderDataItem] = []  # 多产品支持
 
 
 class PiData(BaseModel):
@@ -106,3 +112,42 @@ class RecordListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+class ProductPackagingItem(BaseModel):
+    """单个产品的包装计算结果（用于多产品汇总）"""
+    product_name: str
+    packaging_name: str
+    specification_kg: float
+    drums: int
+    drums_per_pallet: int
+    pallets: int
+    pallet_spec: str
+    net_weight_kg: float
+    gross_weight_kg: float
+    volume_cbm: float
+
+
+class PalletDetailItem(BaseModel):
+    """按卡板尺寸分组的详情"""
+    pallet_spec: str
+    pallet_count: int
+    drums_on_pallets: int
+    volume_cbm: float
+    weight_kg: float
+
+
+class OrderPackagingResultSchema(BaseModel):
+    """订单级别包装汇总结果"""
+    total_drums: int
+    total_pallets: int
+    total_volume_cbm: float
+    total_weight_kg: float
+    total_net_weight_kg: float
+    pallet_details: list[PalletDetailItem]
+    product_details: list[ProductPackagingItem]
+    container_20gp_fit: bool
+    container_40hq_fit: bool
+    recommended: str
+    load_rate_20gp: float
+    load_rate_40hq: float

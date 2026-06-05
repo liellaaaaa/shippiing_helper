@@ -55,8 +55,8 @@ class PiService:
                 self.db.flush()  # Get the ID
 
             pi_data_updated_count = 0
+            seen_pi_data_codes: set = set()
 
-            # Insert new items
             for item in request.items:
                 pi_item = PiContractItem(
                     pi_contract_id=contract.id,
@@ -73,10 +73,12 @@ class PiService:
                 )
                 self.db.add(pi_item)
 
-                # Upsert to pi_data
-                updated = self._upsert_pi_data(item)
-                if updated:
-                    pi_data_updated_count += 1
+                # 批次内去重：同一 internal_code 只 upsert pi_data 一次
+                if item.internal_code and item.internal_code not in seen_pi_data_codes:
+                    updated = self._upsert_pi_data(item)
+                    if updated:
+                        pi_data_updated_count += 1
+                        seen_pi_data_codes.add(item.internal_code)
 
             self.db.commit()
             return contract.id, len(request.items), pi_data_updated_count

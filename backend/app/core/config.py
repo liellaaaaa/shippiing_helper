@@ -6,14 +6,14 @@ import os
 ROOT = Path(__file__).parent.parent.parent.parent.resolve()
 
 TEMPLATES = {
-    "booking": str(ROOT / "参考/02.订舱出货/长晟出口海运BOOKING模板.xlsx"),
-    "loi":     str(ROOT / "参考/02.订舱出货/源文件/LOI-op-非危险品保函模板.docx"),
-    # msds 标准模板由人工创建后放于此路径；若不存在，DocumentService 抛 FileNotFoundError
-    "msds":    str(ROOT / "参考/02.订舱出货/MSDS标准模板.docx"),
+    "booking": str(ROOT / "references" / "长晟出口海运BOOKING模板.xls"),
+    "loi":     str(ROOT / "references" / "LOI-op-非危险品保函模板.docx"),
+    "msds":    str(ROOT / "references" / "MSDS" / "MSDS标准模板.docx"),
 }
 
-MSDS_DIR = str(ROOT / "参考/02.订舱出货/源文件/MSDS")
-EXPORT_CODES_FILE = str(ROOT / "参考/02.订舱出货/2024.12.5 最新出口商品编码及报关成分.xlsx")
+MSDS_DIR = str(ROOT / "references" / "MSDS")
+TRANSPORT_REPORTS_DIR = str(ROOT / "references" / "海运鉴定报告")
+EXPORT_CODES_FILE = str(ROOT / "references" / "2024.12.5 最新出口商品编码及报关成分.xlsx")
 
 DOCS_DIR = os.path.join(ROOT, "data", "docs")
 os.makedirs(DOCS_DIR, exist_ok=True)

@@ -84,7 +84,7 @@ def merge_quoted_lines(lines: list[str]) -> list[str]:
     形成"引号开头行"、"多行内容"、"引号结尾行"分离的情况。
 
     逻辑：
-    - 若上一行末字段以 " 开头但不以 " 结尾 → 引号未关闭，后续行并入
+    - 若上一行的"订单要求"列(col9/field 10)以 " 开头但未以 " 结尾 → 引号未关闭，后续行并入
     - 若本行首字段以 " 结尾 → 引号关闭，本行剩余字段成新行
     """
     if not lines:
@@ -94,6 +94,8 @@ def merge_quoted_lines(lines: list[str]) -> list[str]:
     # Tracks whether we've opened a quote from a previous line and haven't closed it yet.
     # Once True after a quote opens, stays True until a closing field resets it.
     in_open_quote = False
+    # Col index of the order_requirement field
+    REQ_COL = 9
 
     i = 0
     while i < len(lines):
@@ -104,20 +106,29 @@ def merge_quoted_lines(lines: list[str]) -> list[str]:
             # Open quote from a previous line — merge continuation lines
             if len(line_cols) == 1 and not line.endswith('"'):
                 prev_parts = result[-1].split("\t")
-                prev_parts[-1] = prev_parts[-1] + "\n" + line.strip()
+                if len(prev_parts) > REQ_COL:
+                    prev_parts[REQ_COL] = prev_parts[REQ_COL] + "\n" + line.strip()
+                else:
+                    prev_parts[-1] = prev_parts[-1] + "\n" + line.strip()
                 result[-1] = "\t".join(prev_parts)
                 i += 1
                 continue
             elif line.endswith('"') and not line.startswith('"'):
                 prev_parts = result[-1].split("\t")
-                prev_parts[-1] = prev_parts[-1] + "\n" + line.strip()
+                if len(prev_parts) > REQ_COL:
+                    prev_parts[REQ_COL] = prev_parts[REQ_COL] + "\n" + line.strip()
+                else:
+                    prev_parts[-1] = prev_parts[-1] + "\n" + line.strip()
                 result[-1] = "\t".join(prev_parts)
                 in_open_quote = False
                 i += 1
                 continue
             elif len(line_cols) > 1 and line_cols[0].endswith('"') and not line_cols[0].startswith('"'):
                 prev_parts = result[-1].split("\t")
-                prev_parts[-1] = prev_parts[-1] + "\n" + line_cols[0]
+                if len(prev_parts) > REQ_COL:
+                    prev_parts[REQ_COL] = prev_parts[REQ_COL] + "\n" + line_cols[0]
+                else:
+                    prev_parts[-1] = prev_parts[-1] + "\n" + line_cols[0]
                 result[-1] = "\t".join(prev_parts)
                 rest = "\t".join(line_cols[1:])
                 if rest.strip():
@@ -126,24 +137,27 @@ def merge_quoted_lines(lines: list[str]) -> list[str]:
                 i += 1
                 continue
 
-        # Before appending, check if prev row's last field opened a quote.
+        # Before appending, check if prev row's "订单要求" col opened a quote.
         # If so, merge current line into prev row instead of appending.
         if result:
             prev_parts = result[-1].split("\t")
-            last_field = prev_parts[-1] if prev_parts else ""
-            if last_field.startswith('"') and not last_field.endswith('"'):
+            req_field = prev_parts[REQ_COL] if len(prev_parts) > REQ_COL else prev_parts[-1]
+            if req_field.startswith('"') and not req_field.endswith('"'):
                 # Prev row opened a quote — merge current line (continuation) into it
-                prev_parts[-1] = prev_parts[-1] + "\n" + line.strip()
+                if len(prev_parts) > REQ_COL:
+                    prev_parts[REQ_COL] = prev_parts[REQ_COL] + "\n" + line.strip()
+                else:
+                    prev_parts[-1] = prev_parts[-1] + "\n" + line.strip()
                 result[-1] = "\t".join(prev_parts)
                 # Quote is still open for next lines
                 i += 1
                 continue
 
-        # No open quote from prev row — check if CURRENT row opens one (for next iteration)
+        # No open quote from prev row — check if CURRENT row's REQ col opens one (for next iteration)
         if result:
             prev_parts = result[-1].split("\t")
-            last_field = prev_parts[-1] if prev_parts else ""
-            if last_field.startswith('"') and not last_field.endswith('"'):
+            req_field = prev_parts[REQ_COL] if len(prev_parts) > REQ_COL else prev_parts[-1]
+            if req_field.startswith('"') and not req_field.endswith('"'):
                 in_open_quote = True
 
         result.append(line)

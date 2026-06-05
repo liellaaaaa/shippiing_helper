@@ -64,6 +64,7 @@ async def upload_pi_file(
 
     try:
         result = parse_pi_bytes(content, file.filename or "unknown.xlsx")
+        print(f"[DEBUG] parse_pi_bytes result: pi_no={result.pi_no}, items={len(result.items)}, filename={file.filename}")
 
         # 自动持久化到 pi_contracts 表
         db = SessionLocal()

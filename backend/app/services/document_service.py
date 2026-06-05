@@ -40,10 +40,19 @@ class DocumentService:
         ws = wb.active
         db = SessionLocal()
         try:
+            # 支持多产品：查询同一订单号的所有记录
             record = db.query(OrderPiRecord).filter(OrderPiRecord.id == order_id).first()
             pi = None
             if record and record.pi_no:
                 pi = db.query(PiContract).filter(PiContract.pi_no == record.pi_no).first()
+
+            # 获取同一订单号的所有产品记录
+            all_records = []
+            if record and record.order_no:
+                all_records = db.query(OrderPiRecord).filter(
+                    OrderPiRecord.order_no == record.order_no
+                ).all()
+
             shipper_row, shipper_col = find_marker_cell(ws, "{{MARK_SHIPPER}}")
             port_row, port_col = find_marker_cell(ws, "{{MARK_PORT}}")
             goods_row, goods_col = find_marker_cell(ws, "{{MARK_GOODS_TABLE}}")
@@ -54,7 +63,21 @@ class DocumentService:
                 ws.cell(shipper_row + 1, shipper_col + 1).value = pi.consignee_name or ""
                 ws.cell(shipper_row + 1, shipper_col + 2).value = pi.consignee_address or ""
                 ws.cell(port_row, port_col + 1).value = pi.destination or ""
-            if record:
+
+            # 填充货物明细表（支持多产品）
+            items = []
+            if all_records:
+                items = [
+                    (
+                        r.product_cn or "",
+                        r.product_en or "",
+                        r.hs_code or "",
+                        r.gross_weight_kg or 0,
+                        r.volume_cbm or 0,
+                    )
+                    for r in all_records
+                ]
+            elif record:
                 items = [(
                     record.product_cn or "",
                     record.product_en or "",
@@ -62,8 +85,7 @@ class DocumentService:
                     record.gross_weight_kg or 0,
                     record.volume_cbm or 0,
                 )]
-            else:
-                items = []
+
             for i, (cn, en, hs, gw, vol) in enumerate(items):
                 r = goods_row + i
                 ws.cell(r, goods_col).value = cn
@@ -88,19 +110,48 @@ class DocumentService:
         try:
             record = db.query(OrderPiRecord).filter(OrderPiRecord.id == order_id).first()
             pi = db.query(PiContract).filter(PiContract.pi_no == pi_no).first() if pi_no else None
+
+            # 获取同一订单号的所有产品（用于汇总）
+            all_records = []
+            if record and record.order_no:
+                all_records = db.query(OrderPiRecord).filter(
+                    OrderPiRecord.order_no == record.order_no
+                ).all()
+
             doc = Document(template_path)
-            replacements = {
-                "{{shipper}}": "HONGHAO CHEMICAL CO., LTD.",
-                "{{consignee}}": (pi.consignee_name or "") if pi else "",
-                "{{consignee_address}}": (pi.consignee_address or "") if pi else "",
-                "{{port_of_discharge}}": (pi.destination or "") if pi else "",
-                "{{product_name_cn}}": (record.product_cn or "") if record else "",
-                "{{product_name_en}}": (record.product_en or "") if record else "",
-                "{{hs_code}}": (record.hs_code or "") if record else "",
-                "{{gross_weight}}": str(record.gross_weight_kg) if record and record.gross_weight_kg else "",
-                "{{volume}}": str(record.volume_cbm) if record and record.volume_cbm else "",
-                "{{date}}": time.strftime("%Y 年 %m 月 %d 日"),
-            }
+
+            # 汇总多产品信息
+            if len(all_records) > 1:
+                # 多产品：汇总显示
+                total_gw = sum(r.gross_weight_kg or 0 for r in all_records)
+                total_vol = sum(r.volume_cbm or 0 for r in all_records)
+                product_names = " / ".join([r.product_cn or "" for r in all_records if r.product_cn])
+                replacements = {
+                    "{{shipper}}": "HONGHAO CHEMICAL CO., LTD.",
+                    "{{consignee}}": (pi.consignee_name or "") if pi else "",
+                    "{{consignee_address}}": (pi.consignee_address or "") if pi else "",
+                    "{{port_of_discharge}}": (pi.destination or "") if pi else "",
+                    "{{product_name_cn}}": product_names,
+                    "{{product_name_en}}": "",
+                    "{{hs_code}}": (all_records[0].hs_code or "") if all_records else "",
+                    "{{gross_weight}}": str(round(total_gw, 1)),
+                    "{{volume}}": str(round(total_vol, 3)),
+                    "{{date}}": time.strftime("%Y 年 %m 月 %d 日"),
+                }
+            else:
+                # 单产品
+                replacements = {
+                    "{{shipper}}": "HONGHAO CHEMICAL CO., LTD.",
+                    "{{consignee}}": (pi.consignee_name or "") if pi else "",
+                    "{{consignee_address}}": (pi.consignee_address or "") if pi else "",
+                    "{{port_of_discharge}}": (pi.destination or "") if pi else "",
+                    "{{product_name_cn}}": (record.product_cn or "") if record else "",
+                    "{{product_name_en}}": (record.product_en or "") if record else "",
+                    "{{hs_code}}": (record.hs_code or "") if record else "",
+                    "{{gross_weight}}": str(record.gross_weight_kg) if record and record.gross_weight_kg else "",
+                    "{{volume}}": str(record.volume_cbm) if record and record.volume_cbm else "",
+                    "{{date}}": time.strftime("%Y 年 %m 月 %d 日"),
+                }
             for para in doc.paragraphs:
                 for key, val in replacements.items():
                     if key in para.text:

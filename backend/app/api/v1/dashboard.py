@@ -1,14 +1,12 @@
 """FR-5.x 数据看板 API — 合并数据查询与导出，以及 Phase 1 落库"""
 
 import io
-import json
 from fastapi import APIRouter, Query, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from typing import Optional
 from app.services.export_service import ExportService
-from app.services.merge_service import MergeService
 from app.services.save_service import SaveService
-from app.api.deps import get_merge_service, get_save_service
+from app.api.deps import get_save_service
 from app.schemas.order_pi_record import (
     SaveRecordRequest,
     SaveRecordResponse,
@@ -22,125 +20,91 @@ router = APIRouter(prefix="/api/v1/dashboard", tags=["数据看板"])
 
 @router.get("/orders")
 async def get_dashboard_orders(
-    search: Optional[str] = Query(None, description="模糊搜索：订单号 / 客户编码"),
-    status: Optional[str] = Query(None, description="关联状态筛选，逗号分隔：full,partial,none"),
+    search: Optional[str] = Query(None, description="模糊搜索：订单号 / 客户编码 / PI号"),
+    status: Optional[str] = Query(None, description="状态筛选：pending / confirmed"),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
-    merge_service: MergeService = Depends(get_merge_service),
+    save_service: SaveService = Depends(get_save_service),
 ):
     """
     获取数据看板合并数据（支持分页和筛选）。
 
-    - search：支持订单号、客户编码模糊匹配
-    - status：关联状态筛选，支持多选（如 'partial,none'）
-    - 默认按关联状态降序排列（问题数据置顶）
+    直接查询 order_pi_records 表（落库合并数据），返回格式与旧接口兼容。
+    diff_status 统一为 "一致"（落库数据已是合并结果，无差异），
+    association_status 统一为 "full"（落库即已确认关联）。
     """
-    # 获取订单列表（不限状态，获取全部用于导出）
-    all_orders = merge_service.get_order_list(tab="all", search=search, page=1, page_size=10000)
+    result = save_service.query_records(
+        status=status,
+        search=search,
+        page=page,
+        page_size=page_size,
+    )
 
-    # 状态筛选
-    if status:
-        status_list = [s.strip() for s in status.split(",")]
-        filtered_orders = [
-            o for o in all_orders.orders
-            if o.association_status in status_list
-        ]
-    else:
-        filtered_orders = all_orders.orders
-
-    # 按关联状态降序排列（none > partial > full）
-    status_order = {"none": 0, "partial": 1, "full": 2}
-    filtered_orders.sort(key=lambda x: status_order.get(x.association_status, 2))
-
-    # 分页
-    total = len(filtered_orders)
-    start = (page - 1) * page_size
-    end = start + page_size
-    page_orders = filtered_orders[start:end]
-
-    # 聚合每个订单的 items
+    # 字段映射为旧 DashboardOrder 格式
     rows = []
-    for order in page_orders:
-        comparison = merge_service.get_order_comparison(order.id)
-        if not comparison:
-            continue
-        for item in comparison.items:
-            rows.append({
-                "order_id": order.id,
-                "order_no": order.order_no,
-                "customer_code": order.customer_code,
-                "salesperson": order.salesperson,
-                "internal_code": item.internal_code,
-                "product_cn": item.product_cn or "",
-                "order_quantity": item.order.quantity if item.order else None,
-                "order_unit_price": item.order.unit_price if item.order else None,
-                "order_total": item.order.total_amount if item.order else None,
-                "pi_quantity": item.pi.quantity if item.pi else None,
-                "pi_unit_price": item.pi.unit_price if item.pi else None,
-                "pi_total": item.pi.total_amount if item.pi else None,
-                "association_status": order.association_status,
-                "diff_status": item.diff.status,
-            })
+    for r in result.records:
+        rows.append({
+            "order_id": r.id,
+            "order_no": r.order_no or "",
+            "customer_code": r.customer_code or "",
+            "salesperson": r.sales_person or "",
+            "internal_code": r.internal_code or "",
+            "product_cn": r.product_cn or "",
+            "order_quantity": r.quantity_kg,
+            "order_unit_price": None,
+            "order_total": None,
+            "pi_quantity": None,
+            "pi_unit_price": None,
+            "pi_total": None,
+            "association_status": "full",
+            "diff_status": "一致",
+        })
 
     return {
         "orders": rows,
-        "total": total,
-        "page": page,
-        "page_size": page_size,
+        "total": result.total,
+        "page": result.page,
+        "page_size": result.page_size,
     }
 
 
 @router.get("/export")
 async def export_dashboard_excel(
     search: Optional[str] = Query(None, description="模糊搜索"),
-    status: Optional[str] = Query(None, description="关联状态筛选"),
-    merge_service: MergeService = Depends(get_merge_service),
+    status: Optional[str] = Query(None, description="状态筛选：pending / confirmed"),
+    save_service: SaveService = Depends(get_save_service),
 ):
     """
     导出数据看板 Excel 文件。
 
-    - 不分页，按关联状态降序导出全部数据
+    - 直接从 order_pi_records 表导出全部数据
     - 包含表头样式（加粗、背景色）和边框
     """
     export_service = ExportService()
 
-    # 获取全部数据
-    all_orders = merge_service.get_order_list(tab="all", search=search, page=1, page_size=10000)
+    # 获取全部数据（不分页，page_size=10000）
+    result = save_service.query_records(
+        status=status,
+        search=search,
+        page=1,
+        page_size=10000,
+    )
 
-    # 状态筛选
-    if status:
-        status_list = [s.strip() for s in status.split(",")]
-        filtered_orders = [
-            o for o in all_orders.orders
-            if o.association_status in status_list
-        ]
-    else:
-        filtered_orders = all_orders.orders
-
-    # 按关联状态降序排列
-    status_order = {"none": 0, "partial": 1, "full": 2}
-    filtered_orders.sort(key=lambda x: status_order.get(x.association_status, 2))
-
-    # 聚合 items
+    # 字段映射
     rows = []
-    for order in filtered_orders:
-        comparison = merge_service.get_order_comparison(order.id)
-        if not comparison:
-            continue
-        for item in comparison.items:
-            rows.append({
-                "order_no": order.order_no,
-                "customer_code": order.customer_code or "",
-                "salesperson": order.salesperson or "",
-                "internal_code": item.internal_code,
-                "product_cn": item.product_cn or "",
-                "order_quantity": item.order.quantity if item.order else "",
-                "pi_quantity": item.pi.quantity if item.pi else "",
-                "diff_status": item.diff.status,
-                "association_status": order.association_status,
-            })
+    for r in result.records:
+        rows.append({
+            "order_no": r.order_no or "",
+            "customer_code": r.customer_code or "",
+            "salesperson": r.sales_person or "",
+            "internal_code": r.internal_code or "",
+            "product_cn": r.product_cn or "",
+            "order_quantity": r.quantity_kg or "",
+            "pi_quantity": "",
+            "diff_status": "一致",
+            "association_status": "已关联",
+        })
 
-    # 生成 Excel
     excel_bytes = export_service.generate_excel_bytes(rows)
     filename = export_service.generate_filename()
 

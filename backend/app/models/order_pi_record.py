@@ -8,7 +8,7 @@ class OrderPiRecord(Base):
     __tablename__ = "order_pi_records"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    order_no = Column(String(100))
+    order_no = Column(String(100), index=True)
     customer_code = Column(String(100))
     customer_name = Column(String(200))
     pi_no = Column(String(100))

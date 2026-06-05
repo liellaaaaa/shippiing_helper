@@ -19,85 +19,35 @@ class SaveService:
 
     def save_record(self, request: SaveRecordRequest) -> int:
         """
-        执行落库：轨道A合并 + 轨道B挂载。
+        执行落库：支持多产品 — 每个产品单独一条 record。
 
         合并规则（报关品名/H.S.Code 优先级）：
         - 报关品名: order > pi > knowledge
         - H.S.Code: pi > order
 
         数据来源：
-        - order_data: 外贸销售订单表（粘贴/上传）
+        - order_data: 外贸销售订单表（粘贴/上传），含多产品 items
         - pi_data: PI合同文件（上传解析）
-        - packaging_result: 包装计算模块输出
+        - packaging_result: 包装计算模块输出（订单级别汇总）
         """
         order_d = request.order_data
         pi_d = request.pi_data
         pkg = request.packaging_result
 
-        # 构建记录字段
-        record = OrderPiRecord()
-
         # ── 公共字段（订单头） ──
-        record.order_no = order_d.order_no
-        record.customer_code = order_d.customer_code or (pi_d.customer_code if pi_d else None)
-        record.customer_name = order_d.customer_name
-        record.sales_person = order_d.sales_person
-        record.order_date = order_d.order_date
-        record.delivery_date = order_d.delivery_date
-        record.order_requirement = order_d.order_requirement
-        record.notes = order_d.notes
+        order_no = order_d.order_no
+        customer_code = order_d.customer_code or (pi_d.customer_code if pi_d else None)
+        customer_name = order_d.customer_name
+        sales_person = order_d.sales_person
+        order_date = order_d.order_date
+        delivery_date = order_d.delivery_date
+        order_requirement = order_d.order_requirement
+        notes = order_d.notes
 
-        # ── 产品明细 ──
-        record.internal_code = order_d.internal_code
-        record.product_cn = order_d.product_cn
-        record.product_en = order_d.product_en
-        record.spec_kg = order_d.spec_kg
-
-        # 数量/单价/金额 — 优先 PI（轨道A合并）
-        if pi_d and pi_d.quantity is not None:
-            record.quantity_kg = pi_d.quantity
-        else:
-            record.quantity_kg = order_d.quantity_kg
-
-        if pi_d and pi_d.unit_price is not None:
-            record.unit_price = pi_d.unit_price
-        else:
-            record.unit_price = order_d.unit_price
-
-        if pi_d and pi_d.total_amount is not None:
-            record.total_amount = pi_d.total_amount
-        else:
-            record.total_amount = order_d.total_amount
-
-        # H.S.Code — 优先 PI
-        if pi_d and pi_d.hs_code:
-            record.hs_code = pi_d.hs_code
-        else:
-            record.hs_code = order_d.hs_code
-
-        # 报关品名 — 优先订单
-        if order_d.customs_name:
-            record.customs_name = order_d.customs_name
-        elif pi_d and pi_d.customs_name:
-            record.customs_name = pi_d.customs_name
-        else:
-            record.customs_name = None
-
-        # ── PI 专用字段 ──
-        if pi_d:
-            record.pi_no = pi_d.pi_no
-            record.pi_date = pi_d.pi_date
-
-        # ── 包装计算结果（轨道B） ──
+        # 包装计算结果（轨道B）- 订单级别汇总
+        packaging_json = None
         if pkg:
-            record.drum_count = pkg.drums
-            record.pallet_count = pkg.pallets
-            record.drums_per_pallet = pkg.drums_per_pallet
-            record.net_weight_kg = pkg.net_weight_kg
-            record.gross_weight_kg = pkg.gross_weight_kg
-            record.volume_cbm = pkg.volume_cbm
-            record.fits_20gp = pkg.fits_20gp
-            record.packaging_result_json = json.dumps({
+            packaging_json = json.dumps({
                 "packaging_type": pkg.packaging_type,
                 "pallet_spec": pkg.pallet_spec,
                 "drums": pkg.drums,
@@ -111,21 +61,92 @@ class SaveService:
                 "packing_scheme": pkg.packing_scheme,
                 "no_pallet": pkg.no_pallet,
             }, ensure_ascii=False)
-            record.pallet_spec = pkg.pallet_spec
-            # 查找 packaging_type_id（按名称匹配）
-            from app.models.order import PackagingType
-            pkg_type = self.db.query(PackagingType).filter(
-                PackagingType.name == pkg.packaging_type
-            ).first()
-            if pkg_type:
-                record.packaging_type_id = pkg_type.id
 
-        record.status = "confirmed"
+        # ── 遍历每个产品，创建独立的 record ──
+        first_record_id = None
+        from app.models.order import PackagingType
 
-        self.db.add(record)
+        for i, item in enumerate(order_d.items):
+            record = OrderPiRecord()
+
+            # 订单头字段
+            record.order_no = order_no
+            record.customer_code = customer_code
+            record.customer_name = customer_name
+            record.sales_person = sales_person
+            record.order_date = order_date
+            record.delivery_date = delivery_date
+            record.order_requirement = order_requirement
+            record.notes = notes
+
+            # ── 产品明细 ──
+            record.internal_code = item.internal_code
+            record.product_cn = item.product_cn
+            record.product_en = item.product_en
+            record.spec_kg = item.spec_kg
+
+            # 数量/单价/金额 — 优先 PI（轨道A合并）
+            if pi_d and pi_d.quantity is not None:
+                record.quantity_kg = pi_d.quantity
+            else:
+                record.quantity_kg = item.quantity_kg
+
+            if pi_d and pi_d.unit_price is not None:
+                record.unit_price = pi_d.unit_price
+            else:
+                record.unit_price = item.unit_price
+
+            if pi_d and pi_d.total_amount is not None:
+                record.total_amount = pi_d.total_amount
+            else:
+                record.total_amount = item.total_amount
+
+            # H.S.Code — 优先 PI
+            if pi_d and pi_d.hs_code:
+                record.hs_code = pi_d.hs_code
+            else:
+                record.hs_code = item.hs_code
+
+            # 报关品名 — 优先订单
+            if item.customs_name:
+                record.customs_name = item.customs_name
+            elif pi_d and pi_d.customs_name:
+                record.customs_name = pi_d.customs_name
+            else:
+                record.customs_name = None
+
+            # ── PI 专用字段 ──
+            if pi_d:
+                record.pi_no = pi_d.pi_no
+                record.pi_date = pi_d.pi_date
+
+            # ── 包装计算结果（轨道B） ──
+            if pkg:
+                record.drum_count = pkg.drums
+                record.pallet_count = pkg.pallets
+                record.drums_per_pallet = pkg.drums_per_pallet
+                record.net_weight_kg = pkg.net_weight_kg
+                record.gross_weight_kg = pkg.gross_weight_kg
+                record.volume_cbm = pkg.volume_cbm
+                record.fits_20gp = pkg.fits_20gp
+                record.packaging_result_json = packaging_json
+                record.pallet_spec = pkg.pallet_spec
+                # 查找 packaging_type_id（按名称匹配）
+                pkg_type = self.db.query(PackagingType).filter(
+                    PackagingType.name == pkg.packaging_type
+                ).first()
+                if pkg_type:
+                    record.packaging_type_id = pkg_type.id
+
+            record.status = "confirmed"
+
+            self.db.add(record)
+            self.db.flush()  # 获取 id
+            if first_record_id is None:
+                first_record_id = record.id
+
         self.db.commit()
-        self.db.refresh(record)
-        return record.id
+        return first_record_id or -1
 
     def query_records(
         self,

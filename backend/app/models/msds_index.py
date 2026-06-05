@@ -14,4 +14,5 @@ class MSDSIndex(Base):
     ph = Column(String(50))
     composition_summary = Column(Text)
     file_path = Column(String(500), nullable=False)
+    file_format = Column(String(10))   # "pdf" or "doc"
     loaded = Column(Integer, default=0)

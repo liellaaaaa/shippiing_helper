@@ -534,100 +534,143 @@ def _parse_rows_from_text(text: str) -> list[list[str]]:
     return rows
 
 
-def parse_proforma_invoice_from_text(text: str) -> PiContractUploadResponse:
+def parse_proforma_invoice_from_text(text: str, filename: str = "") -> PiContractUploadResponse:
     """从 OCR 文本直接解析 Proforma Invoice（用于 PDF）"""
 
-    def ef(text, pat):
-        label = re.sub(r"\s*:\s*$", "", pat)
-        m = re.search(rf"(?i){label}\s*[:：]\s*([^\n]+)", text)
-        return m.group(1).strip() if m else None
-
-    def ef_next_line(text, pat):
-        label = re.sub(r"\s*:\s*$", "", pat)
-        idx = re.search(rf"(?i){label}\s*[:：]", text)
+    def scan(label_pat):
+        """先找标签同行值，若值看起来像另一标签或为空则检查下一行"""
+        idx = re.search(label_pat, text, re.IGNORECASE)
         if not idx:
             return None
         start = idx.end()
-        rest = text[start:]
-        lines = rest.split("\n", 2)
-        if len(lines) >= 2 and lines[1].strip():
-            return lines[1].strip()
-        return None
+        after = text[start:]
+        # 取本行剩余内容
+        same = after.split(chr(10))[0].strip()
+        # 如果同行值是另一个标签（纯大写+标点）或为空，尝试下一行
+        if not same or re.match(r"^[A-Z]{2,}[:：;]?\s*$", same):
+            rest = after.split(chr(10), 2)
+            if len(rest) >= 2 and rest[1].strip():
+                return rest[1].strip()
+            return None
+        return same
 
-    def strip_note(text):
-        m = re.match(r"([^,]+(?:,[^,]+){0,2}),\s*[A-Za-z ]+$", text)
-        if m:
-            return m.group(1).strip()
-        return text.strip()
+    def scan_next_line(label_pat):
+        """标签在第N行，值在第N+1行"""
+        idx = re.search(label_pat, text, re.IGNORECASE)
+        if not idx:
+            return None
+        start = idx.end()
+        after = text[start:]
+        lines = after.split(chr(10), 2)
+        return lines[1].strip() if len(lines) >= 2 and lines[1].strip() else None
 
-    pi_no_raw = ef(text, r"Order\s+No\.?\s*:")
-    if pi_no_raw and re.match(r"^\d+\]\s*\#", pi_no_raw.strip()):
-        pi_no = ef_next_line(text, r"Order\s+No\.?\s*:") or pi_no_raw
+    # 1) PI/Order No — 多种 OCR 变形
+    pi_no = (
+        scan(r"ORDER\s+NO\s*[:;.]?") or
+        scan(r"PI\s+NO\s*[:;.]?") or
+        scan(r"PI\s+NUMBER\s*[:;.]?") or
+        scan(r"ORDER\s+NUMBER\s*[:;.]?") or
+        scan_next_line(r"ORDER\s+NO\s*[:;.]?") or
+        scan_next_line(r"PI\s+NO\s*[:;.]?") or
+        scan_next_line(r"'\s*PI\s+NO\s*;?") or
+        # 最后一搏：扫描文本中第一个 HT 格式的订单号（支持8位或10位日期）
+    (re.search(r"HT\d{8,10}[A-Z0-9]*", text) or None) and (lambda m: m.group(0)) or None
+    )
+    # PDF文件从文件名提取PI号作为最终兜底
+    if not pi_no and filename:
+        fn_pi = re.search(r"HT\d{8,10}[A-Z0-9]*", os.path.basename(filename))
+        pi_no = fn_pi.group(0) if fn_pi else None
+    if pi_no and len(pi_no) >= 8:
+        pass
     else:
-        pi_no = pi_no_raw
+        pi_no = None
 
-    consignee_name = ef(text, r"NAME")
-    consignee_address = ef(text, r"ADD\s*:")
-    destination = ef(text, r"\.\s*Destination\s+:")
-    hs_code = ef(text, r"\.\s*H\.S\.\s*Code")
-    pi_date_raw = ef(text, r"Date\s+:")
-    pi_date = strip_note(pi_date_raw) if pi_date_raw else None
+    # 2) consignee NAME
+    consignee_name = scan(r"NAME\s*:")
+    if not consignee_name:
+        # 尝试 NAME: 在行首
+        m = re.search(r"(?mi)^NAME\s*:\s*(.+)$", text, re.MULTILINE)
+        consignee_name = m.group(1).strip() if m else None
 
+    # 3) consignee ADD
+    consignee_address = scan(r"ADD\s*:") or scan(r"ADDRESS\s*:")
+
+    # 4) destination
+    destination = scan(r"[0-9]\.\s*DEST\s*:") or scan(r"DEST\s*INAT\s*ION\s*:")
+
+    # 5) date
+    pi_date = scan(r"DATE\s*:")
+
+    # 产品明细行解析（支持品名单行+数字下一行的OCR分拆格式）
     items = []
-    lines = text.split("\n")
-    table_started = False
-    item_index = 0
-
+    lines = text.split(chr(10))
+    started = False
+    idx2 = 0
+    pending_desc = None  # 跨行：上一行品名，下一行数字
     for line in lines:
-        stripped = line.strip()
-        if not stripped:
+        s = line.strip()
+        if not s:
             continue
-        if "DESCRIPTION OF GOODS" in stripped.upper() or "QUANTITY" in stripped.upper():
-            table_started = True
+        if "DESCRIPTION" in s.upper() or "QUANTITY" in s.upper():
+            started = True
             continue
-        if not table_started:
+        if not started:
             continue
-        if stripped.startswith("1. Packing") or stripped.startswith("2. All") or stripped.startswith("3. This") or "Payment terms and" in stripped:
+        if s.startswith("1.") and "Packing" in s or s.startswith("TOTAL") or "Payment" in s:
             break
-        m = re.match(r"(.+?)\s+([\d.]+)\s*\|\s*([\d,]+)\s*\|\s*US\$([\d,.]+)\s+US\$([\d,.]+)", stripped)
+
+        # 尝试匹配「品名+数量+金额」单行（标准格式）
+        m = re.match(r"(.+?)\s+([\d,]+\.?\d*)\s+\|?\s*([\d,]+\.?\d*)\s+\|?\s*US?\\\$?\s+([\d,]+\.?\d*)", s)
         if m:
-            desc, hs, qty, unit_price, amount = m.groups()
-            customs_name = desc.strip()
-            hs_code_val = hs.strip()
-            try:
-                qty_val = float(qty.replace(",", ""))
-                unit_val = float(unit_price.replace(",", ""))
-                amount_val = float(amount.replace(",", ""))
-            except ValueError:
-                qty_val = unit_val = amount_val = None
-            item_index += 1
-            notes_parts = []
-            if destination:
-                notes_parts.append(f"目的地: {destination}")
-            items.append(PiContractItemRow(
-                row_index=item_index,
-                status="success",
-                error_msg=None,
-                internal_code=None,
-                quantity=qty_val,
-                unit_price=unit_val,
-                total_amount=amount_val,
-                product_color=None,
-                hs_code=hs_code_val,
-                customs_name=customs_name,
-                customs_composition=None,
-                order_customs_name=None,
-                notes="; ".join(notes_parts) if notes_parts else None,
-            ))
+            desc, qty_raw, price_raw, amount_raw = m.groups()
+        else:
+            # 尝试「两个数字」（数量+金额），结合 pending_desc 使用
+            num_m = re.match(r"^([\d,]+\.?\d*)\s+([\d,]+\.?\d*)$", s)
+            if num_m and pending_desc:
+                qty_raw, amount_raw = num_m.groups()
+                price_raw = None
+                desc = pending_desc
+            else:
+                # 可能是品名行（无数字或文字为主），暂存为 pending_desc
+                if not re.match(r"^[\d,. ]+$", s):
+                    pending_desc = s
+                continue
+
+        try:
+            qty_val = float(qty_raw.replace(",", "")) if qty_raw else None
+            price_val = float(price_raw.replace(",", "")) if price_raw else None
+            amount_val = float(amount_raw.replace(",", "")) if amount_raw else None
+        except ValueError:
+            qty_val = price_val = amount_val = None
+        idx2 += 1
+        notes = []
+        if destination:
+            notes.append(f"目的地: {destination}")
+        items.append(PiContractItemRow(
+            row_index=idx2,
+            status="success",
+            error_msg=None,
+            internal_code=None,
+            quantity=qty_val,
+            unit_price=price_val,
+            total_amount=amount_val,
+            product_color=None,
+            hs_code=None,
+            customs_name=desc.strip() if desc else s,
+            customs_composition=None,
+            order_customs_name=None,
+            notes="; ".join(notes) if notes else None,
+        ))
+        pending_desc = None  # 使用后清除
 
     if not pi_no:
         raise ValueError("无法识别 PI 编号，请确认文件格式")
 
-    fields_recognized = sum(1 for v in [pi_no, consignee_name, destination] if v)
+    recognized = sum(1 for v in [pi_no] if v)
     confidence = ConfidenceInfo(
-        recognized=fields_recognized,
-        total=3,
-        percentage=f"{fields_recognized/3*100:.0f}%",
+        recognized=recognized,
+        total=1,
+        percentage="100%" if recognized else "0%",
         failed_rows=0,
     )
 
@@ -643,7 +686,6 @@ def parse_proforma_invoice_from_text(text: str) -> PiContractUploadResponse:
         items=items,
         confidence=confidence,
     )
-
 
 def _auto_parse_rows(rows: list[list[str]]) -> PiContractUploadResponse:
     """
@@ -684,6 +726,6 @@ def parse_pi_bytes(content: bytes, filename: str) -> PiContractUploadResponse:
         return _auto_parse_rows(rows)
     elif ext == ".pdf":
         text = _extract_text_from_pdf_bytes(content)
-        return parse_proforma_invoice_from_text(text)
+        return parse_proforma_invoice_from_text(text, filename)
     else:
         raise ValueError(f"不支持的文件格式: {ext}，仅支持 .xlsx、.xls 和 .pdf")

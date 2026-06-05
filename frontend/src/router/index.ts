@@ -3,6 +3,7 @@ import Layout from '@/views/Layout.vue'
 import Phase1Workflow from '@/views/phase1/Phase1Workflow.vue'
 import Phase2Workflow from '@/views/phase2/Phase2Workflow.vue'
 import Dashboard from '@/views/phase1/Dashboard.vue'
+import DataCenter from '@/views/data-center/DataCenter.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -32,6 +33,12 @@ const router = createRouter({
           name: 'Phase2Workflow',
           component: Phase2Workflow,
           meta: { title: '文档编辑' }
+        },
+        {
+          path: 'data-center',
+          name: 'DataCenter',
+          component: DataCenter,
+          meta: { title: '数据中心' }
         }
       ]
     }

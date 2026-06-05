@@ -110,13 +110,22 @@ shipping_helper/
 │   └── app/
 │       ├── api/
 │       │   ├── v1/
-│       │   │   └── orders.py      # REST API: /api/v1/orders
+│       │   │   ├── orders.py      # REST API: /api/v1/orders
+│       │   │   ├── pi.py          # PI upload/save/query API
+│       │   │   ├── packaging.py   # Packaging calculation API
+│       │   │   ├── phase2.py      # Phase 2 document generation API
+│       │   │   └── dashboard.py   # Dashboard data API
 │       │   └── deps.py            # FastAPI dependency injection
 │       ├── core/
-│       │   ├── order_parser.py   # Delimiter detection, aggregation, dedup
-│       │   └── knowledge_filler.py # HS code + customs name auto-fill
+│       │   ├── order_parser.py    # Delimiter detection, aggregation, dedup
+│       │   ├── knowledge_filler.py # HS code + customs name auto-fill
+│       │   └── pi_parser.py       # PI file parsing (.xlsx/.xls/.pdf)
 │       ├── services/
-│       │   └── order_service.py   # Service layer (transactional save)
+│       │   ├── order_service.py   # Order service layer
+│       │   ├── pi_service.py      # PI service layer
+│       │   ├── packaging_service.py # Packaging calculation (drums, pallets, 20GP)
+│       │   ├── save_service.py    # Transactional save for order+PI+packaging
+│       │   └── document_service.py # Document template + BLOB storage
 │       ├── models/
 │       │   └── order.py          # SQLAlchemy models
 │       ├── schemas/
@@ -126,14 +135,30 @@ shipping_helper/
 ├── frontend/
 │   └── src/
 │       ├── api/
-│       │   └── orders.ts         # Axios API client
+│       │   ├── orders.ts        # Axios API client
+│       │   ├── pi.ts            # PI API client
+│       │   ├── phase1.ts        # Phase 1 API client
+│       │   ├── phase2.ts        # Phase 2 API client
+│       │   └── packaging.ts     # Packaging API client
 │       ├── components/
 │       │   └── phase1/
-│       │       ├── PasteTextarea.vue
-│       │       └── OrderPreviewForm.vue
+│       │       ├── PasteTextarea.vue       # Order paste input
+│       │       ├── OrderPreviewForm.vue   # Order preview + edit
+│       │       ├── PiUploadDragger.vue     # PI file upload drag-and-drop
+│       │       ├── PiPreviewTable.vue     # PI preview table
+│       │       ├── PackagingCalculator.vue # Multi-row packaging calculator
+│       │       └── ColumnMappingModal.vue  # PI column mapping modal
 │       └── views/
-│           └── phase1/
-│               └── OrderPaste.vue
+│           ├── phase1/
+│           │   ├── OrderPaste.vue         # Order paste page
+│           │   └── Phase1Workflow.vue     # Phase 1 workflow page
+│           └── phase2/
+│               ├── Phase2Workflow.vue     # Phase 2 main workflow
+│               └── components/
+│                   ├── ReferencePanel.vue  # 4-tab reference panel
+│                   ├── DocumentEditor.vue  # OnlyOffice editor wrapper
+│                   ├── MyDocumentsDrawer.vue # Saved template instances
+│                   └── DataCenterPanel.vue # Data center panel
 ├── docs/
 │   ├── PRD-ShippingHelper-Web.md        # Main PRD
 │   ├── PRD-ShippingHelper-Web-P1v2.md  # Phase 1 spec
@@ -142,6 +167,7 @@ shipping_helper/
 │   ├── API-ShippingHelper-v1.md        # API reference
 │   ├── TEST-ShippingHelper-v1.md       # Integration test docs
 │   └── superpower/plans/              # Implementation plans
+│   └── superpower/specs/             # Design specs
 ├── 参考/                              # Legacy PyQt5 reference
 └── data/
     └── shipping_helper.db            # SQLite database
@@ -186,14 +212,15 @@ The `参考/` folder contains the Python implementation that should inform imple
 2. ~~Order paste parsing~~ ✅
 3. ~~PI file extraction (.xls/.xlsx/.pdf OCR)~~ ✅
 4. ~~Data merging (internal_code association)~~ ✅
-5. ~~Packaging calculation (13 types, 2 pallets, 20GP judgment)~~ ✅
-6. Data dashboard (OnlyOffice read-only)
+5. ~~Packaging calculation (13 types, 2 pallets, 20GP judgment, per-pallet capacity)~~ ✅
+6. ~~Data dashboard (read-only order + PI merge preview)~~ ✅
 
 **Phase 2** (Document Generation):
 1. ~~Shipment data management~~ ✅
 2. ~~Template management~~ ✅
 3. ~~Document generation (Booking, MSDS, LOI via OnlyOffice)~~ ✅
-4. Data display (left dashboard, right editor)
+4. ~~Data display (left dashboard, right editor)~~ ✅
+5. ~~Blank template and My Templates support~~ ✅
 
 ---
 
@@ -238,8 +265,8 @@ docker run -d -p 8080:80 onlyoffice/documentserver
 | Order paste parsing | ✅ done | Tab/CRLF delimiter, smart aggregation, dedup, knowledge fill |
 | PI file extraction | ✅ done | .xlsx/.xls/.pdf upload, column mapping, confidence, pi_data upsert, OCR |
 | Data merging | ✅ done | internal_code association, order-PI merge |
-| Packaging calculation | ✅ done | 13 drum types, 2 pallets, 20GP judgment, PackagingCalculator component |
-| Data dashboard | pending | OnlyOffice read-only |
+| Packaging calculation | ✅ done | 13 drum types, 2 pallets, 20GP judgment, multi-row calculator, per-pallet capacity |
+| Data dashboard | ✅ done | Read-only order + PI merge preview in Phase1Workflow |
 
 **Completed Files:**
 - `backend/app/models/order.py` — orders + order_items + packaging_types + products_knowledge

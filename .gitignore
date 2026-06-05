@@ -52,6 +52,6 @@ Thumbs.db
 .env.*.local
 
 # Reference files (large binary .doc/.pdf files)
-references/MSDS/
-backend/references/MSDS/
-backend/references/包装定义参考/
+references/*
+backend/references/*
+参考/*

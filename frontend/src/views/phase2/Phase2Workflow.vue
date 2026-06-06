@@ -200,25 +200,27 @@
 
       <!-- Right: Document Editor -->
       <main class="editor-panel">
-        <div v-if="!currentDocKey" class="editor-empty">
-          <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity=".25">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-            <polyline points="14 2 14 8 20 8"/>
-            <line x1="16" y1="13" x2="20" y2="17"/><line x1="20" y1="13" x2="16" y2="17"/>
-          </svg>
-          <p class="empty-title">点击上方按钮生成文档</p>
-          <p class="empty-sub">订舱单 / LOI保函 / MSDS</p>
-        </div>
-        <DocumentEditor
-          v-else
-          :key="currentDocKey"
-          :document-server-url="currentConfig.documentServerUrl"
-          :doc-key="currentDocKey"
-          :token="currentConfig.token"
-          :download-url="currentConfig.downloadUrl"
-          :url="currentConfig.url"
-          :doc-type="currentConfig.docType"
-        />
+        <el-card class="editor-card" shadow="never">
+          <div v-if="!currentDocKey" class="editor-empty">
+            <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity=".25">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="20" y2="17"/><line x1="20" y1="13" x2="16" y2="17"/>
+            </svg>
+            <p class="empty-title">点击上方按钮生成文档</p>
+            <p class="empty-sub">订舱单 / LOI保函 / MSDS</p>
+          </div>
+          <DocumentEditor
+            v-else
+            :key="currentDocKey"
+            :document-server-url="currentConfig.documentServerUrl"
+            :doc-key="currentDocKey"
+            :token="currentConfig.token"
+            :download-url="currentConfig.downloadUrl"
+            :url="currentConfig.url"
+            :doc-type="currentConfig.docType"
+          />
+        </el-card>
         <MyDocumentsDrawer v-model="showMyDocuments" @open-doc="onOpenMyDoc" />
       </main>
     </div>
@@ -557,8 +559,24 @@ onMounted(() => {
 .editor-panel {
   display: flex;
   flex-direction: column;
-  background: var(--el-fill-color-page, #f0f2f5);
+  padding: 16px;
+  background: var(--el-bg-color-page, #f0f2f5);
+  overflow-y: auto;
+}
+
+.editor-card {
+  border-radius: 8px;
   overflow: hidden;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+:deep(.el-card__body) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  min-height: 0;
 }
 
 .editor-empty {
@@ -566,9 +584,8 @@ onMounted(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 100%;
+  flex: 1;
   gap: 12px;
-  color: var(--el-text-color-placeholder, #c0c4cc);
 }
 .empty-title {
   font-size: 15px;

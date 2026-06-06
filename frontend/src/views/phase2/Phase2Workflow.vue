@@ -399,9 +399,10 @@ onMounted(() => {
 <style scoped>
 /* ── Root ─────────────────────────────────────── */
 .phase2 {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
+  padding: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+  min-height: 100vh;
   background: var(--el-bg-color-page, #f5f7fa);
   font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
 }
@@ -454,19 +455,14 @@ onMounted(() => {
 .main-layout {
   display: grid;
   grid-template-columns: 420px 1fr;
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
+  gap: 20px;
+  align-items: start;
 }
 
 /* ── Info Panel (Left) ───────────────────── */
 .info-panel {
   display: flex;
   flex-direction: column;
-  padding: 16px;
-  background: #fafafa;
-  border-right: 1px solid var(--el-border-color-light, #e4e7ed);
-  overflow-y: auto;
 }
 
 .info-card {
@@ -559,17 +555,12 @@ onMounted(() => {
 .editor-panel {
   display: flex;
   flex-direction: column;
-  padding: 16px;
-  background: var(--el-bg-color-page, #f0f2f5);
-  overflow-y: auto;
 }
 
 .editor-card {
   border-radius: 8px;
   overflow: hidden;
   flex: 1;
-  display: flex;
-  flex-direction: column;
 }
 :deep(.el-card__body) {
   flex: 1;

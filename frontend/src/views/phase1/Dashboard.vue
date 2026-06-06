@@ -42,8 +42,6 @@
       <!-- 数据表格 -->
       <el-table
         :data="orderList"
-        border
-        stripe
         v-loading="loading"
         row-key="order_id"
         class="data-table"
@@ -96,16 +94,16 @@
           </template>
         </el-table-column>
 
-        <el-table-column prop="order_no" label="订单号" width="140" />
-        <el-table-column prop="customer_code" label="客户编码" width="120" />
-        <el-table-column prop="salesperson" label="业务员" width="100" />
-        <el-table-column prop="pi_no" label="PI号" width="120" />
+        <el-table-column prop="order_no" label="订单号" min-width="140" />
+        <el-table-column prop="customer_code" label="客户编码" min-width="120" />
+        <el-table-column prop="salesperson" label="业务员" min-width="100" />
+        <el-table-column prop="pi_no" label="PI号" min-width="120" />
         <el-table-column prop="product_count" label="产品数" width="80" align="center">
           <template #default="{ row }">
             <el-tag type="info" size="small">{{ row.product_count }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="100">
+        <el-table-column label="操作">
           <template #default="{ row }">
             <el-button
               type="danger"
@@ -230,7 +228,7 @@ onMounted(() => {
 .toolbar-right { display: flex; gap: 8px; }
 .search-input { width: 240px; }
 
-.data-table { margin-bottom: 16px; }
+.data-table { margin-bottom: 16px; width: 100%; }
 
 /* 可展开产品区域 */
 .product-expand {

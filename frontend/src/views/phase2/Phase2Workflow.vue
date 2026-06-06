@@ -132,6 +132,8 @@
           :doc-key="currentDocKey"
           :token="currentConfig.token"
           :download-url="currentConfig.downloadUrl"
+          :url="currentConfig.url"
+          :doc-type="currentConfig.docType"
         />
         <MyDocumentsDrawer v-model="showMyDocuments" @open-doc="onOpenMyDoc" />
       </main>
@@ -182,12 +184,13 @@ import DocumentEditor from './components/DocumentEditor.vue'
 import MyDocumentsDrawer from './components/MyDocumentsDrawer.vue'
 import { ArrowDown } from '@element-plus/icons-vue'
 import { phase2Api } from '@/api/phase2'
+import { getOrderList, getOrderComparison, getOrderPiContracts, type OrderListItem } from '@/api/merge'
 
 const route = useRoute()
 
 const selectedOrderId = ref<number | null>(null)
 const selectedPiNo = ref<string>('')
-const orderList = ref<any[]>([])
+const orderList = ref<OrderListItem[]>([])
 const piList = ref<any[]>([])
 const currentOrderItems = ref<any[]>([])
 const currentDocKey = ref('')
@@ -202,18 +205,27 @@ if (route.query.orderId) {
 }
 
 async function loadOrderList() {
-  const res = await fetch('/api/v1/merge/orders?tab=completed&page_size=100')
-  const data = await res.json()
+  const data = await getOrderList({ tab: 'completed', page_size: 100 })
   orderList.value = data.orders || []
 }
 
 async function onOrderChange(orderId: number) {
   selectedPiNo.value = ''
-  const res = await fetch(`/api/v1/merge/orders/${orderId}/comparison`)
-  const data = await res.json()
-  currentOrderItems.value = data.items || []
-  if (data.pi_no) selectedPiNo.value = data.pi_no
-  piList.value = []
+  if (!orderId) return
+  try {
+    const data = await getOrderComparison(orderId)
+    currentOrderItems.value = data.items || []
+    if (data.pi_no) selectedPiNo.value = data.pi_no
+    // Build PI list from all PI contracts linked to this order
+    const pis = await getOrderPiContracts(orderId)
+    piList.value = pis
+    // Auto-select first PI if available
+    if (pis.length > 0 && !selectedPiNo.value) {
+      selectedPiNo.value = pis[0].pi_no
+    }
+  } catch (e) {
+    piList.value = []
+  }
 }
 
 async function openBlankTemplate(type: 'booking' | 'loi' | 'msds') {
@@ -233,7 +245,7 @@ function onOpenMyDoc(doc: any) {
     token: doc.token,
     documentServerUrl: currentConfig.value.documentServerUrl,
     documentKey: doc.doc_key,
-    downloadUrl: `/api/v1/onlyoffice/download/${doc.doc_key}`,
+    downloadUrl: `/api/v1/onlyoffice/download/${encodeURIComponent(doc.doc_key)}`,
   }
 }
 

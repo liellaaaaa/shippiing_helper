@@ -1,8 +1,9 @@
 import os, hashlib, base64
 from io import BytesIO
 from fastapi import APIRouter, UploadFile, File, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import desc
+from urllib.parse import unquote
 from app.database import SessionLocal
 from app.models.shipment_doc import ShipmentDoc
 from app.services.onlyoffice_service import OnlyOfficeService
@@ -26,16 +27,40 @@ def extract_order_id_from_key(doc_key: str):
 
 @router.post("/jwt")
 async def create_jwt(documentKey: str = Query(...), fileType: str = Query(...)):
+    doc_key = unquote(documentKey)
     svc = OnlyOfficeService()
-    token = svc.generate_jwt_token(documentKey, fileType)
-    config = svc.build_editor_config(token, documentKey, fileType)
+    token = svc.generate_jwt_token(doc_key, fileType)
+    config = svc.build_editor_config(token, doc_key, fileType)
     api_base = os.getenv("API_BASE_URL", "http://localhost:8000")
-    return {**config, "downloadUrl": f"{api_base}/api/v1/onlyoffice/download/{documentKey}"}
+    encoded_key = quote(doc_key, safe="")
+    return {**config, "downloadUrl": f"{api_base}/api/v1/onlyoffice/download/{encoded_key}"}
 
 
 @router.post("/callback")
-async def onlyoffice_callback(doc_key: str = Query(...), user: str = Query(default="admin"), file: UploadFile = File(...)):
+async def onlyoffice_callback(
+    doc_key: str = Query(...),
+    user: str = Query(default="admin"),
+    file: UploadFile = File(default=None),
+):
+    import logging
+    logger = logging.getLogger("uvicorn")
+    doc_key = unquote(doc_key)
+    logger.warning(f"[onlyoffice-callback] doc_key={doc_key} user={user}")
+
+    # OnlyOffice sends two types of callbacks:
+    # 1. JSON status update (no file) — when document is saved/closed
+    # 2. Multipart file upload (with file) — when Document Server sends the actual file
+    if file is None:
+        # JSON status update — acknowledge without saving
+        logger.warning(f"[onlyoffice-callback] status update (no file), doc_key={doc_key}")
+        return {"error": 0}
+
     content = await file.read()
+    logger.warning(f"[onlyoffice-callback] file size={len(content)} bytes, content_hash={hashlib.md5(content).hexdigest()}")
+    if len(content) == 0:
+        logger.warning(f"[onlyoffice-callback] empty file, ignoring")
+        return {"error": 0}
+
     content_hash = hashlib.md5(content).hexdigest()
     db = SessionLocal()
     try:
@@ -62,8 +87,18 @@ async def onlyoffice_callback(doc_key: str = Query(...), user: str = Query(defau
         db.close()
 
 
+MEDIA_TYPES = {
+    "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "xls":  "application/vnd.ms-excel",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "doc":  "application/msword",
+    "pdf":  "application/pdf",
+}
+
+
 @router.get("/download/{doc_key}")
 async def download_doc(doc_key: str):
+    doc_key = unquote(doc_key)
     db = SessionLocal()
     try:
         doc = db.query(ShipmentDoc).filter(
@@ -72,7 +107,14 @@ async def download_doc(doc_key: str):
         if not doc:
             return {"error": "Document not found"}
         content = base64.b64decode(doc.file_blob)
-        suffix = doc.file_name.split(".")[-1] if "." in doc.file_name else "bin"
-        return FileResponse(BytesIO(content), media_type="application/octet-stream", filename=doc.file_name)
+        suffix = doc.file_name.split(".")[-1].lower() if "." in doc.file_name else "bin"
+        media_type = MEDIA_TYPES.get(suffix, "application/octet-stream")
+        from starlette.concurrency import iterate_in_threadpool
+        async def content_generator(data):
+            async for chunk in iterate_in_threadpool([data]):
+                yield chunk
+        return StreamingResponse(content_generator(content), media_type=media_type, headers={
+            "content-disposition": f'attachment; filename="{doc.file_name}"'
+        })
     finally:
         db.close()

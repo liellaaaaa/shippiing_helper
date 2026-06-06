@@ -1,14 +1,75 @@
 # backend/app/services/document_service.py
 import openpyxl
-from typing import Tuple
+import xlrd
+from typing import Tuple, Optional
 import os, time, base64
 from io import BytesIO
 from docx import Document
-from app.core.config import TEMPLATES  # DOCS_DIR no longer used — files stored in DB only
+from docx.shared import Pt, RGBColor
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from app.core.config import TEMPLATES, MSDS_DIR
 from app.services.msds_service import MSDSService
 from app.database import SessionLocal
-from app.models.order_pi_record import OrderPiRecord
-from app.models.pi_contract import PiContract
+from app.models.order import Order, OrderItem
+from app.models.pi_contract import PiContract, PiContractItem
+
+
+def convert_doc_to_docx(doc_path: str) -> bytes:
+    """
+    将 .doc 文件（binary，非 OLE）转换为 .docx 格式。
+    使用 antiword 提取纯文本，再按段落写入 python-docx 文档。
+    返回 docx 内容的 bytes。
+    """
+    text = _extract_doc_text(doc_path)
+    doc = Document()
+    for line in text.split("\n"):
+        line = line.rstrip()
+        if not line:
+            p = doc.add_paragraph("")
+        else:
+            doc.add_paragraph(line)
+    buf = BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
+def _extract_doc_text(doc_path: str) -> str:
+    """从 .doc 文件提取纯文本（antiword 优先，chardet 回退）。"""
+    import subprocess, chardet
+    # 优先尝试 antiword
+    try:
+        result = subprocess.run(
+            ["antiword", doc_path],
+            capture_output=True,
+            timeout=30,
+        )
+        if result.returncode == 0 and result.stdout:
+            return result.stdout.decode("utf-8", errors="ignore")
+    except (subprocess.SubprocessError, FileNotFoundError):
+        pass
+    # 回退：chardet 检测编码
+    try:
+        with open(doc_path, "rb") as f:
+            raw = f.read()
+        detected = chardet.detect(raw)
+        encoding = detected.get("encoding", "latin-1") or "latin-1"
+        return raw.decode(encoding, errors="ignore")
+    except Exception:
+        return ""
+
+
+def convert_xls_to_xlsx(template_path: str) -> bytes:
+    """用 xlrd 读取 .xls，用 openpyxl 写出 .xlsx，保持单元格数据不变。"""
+    wb_xls = xlrd.open_workbook(template_path)
+    ws_xls = wb_xls.sheet_by_index(0)
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    for r in range(ws_xls.nrows):
+        for c in range(ws_xls.ncols):
+            ws.cell(r + 1, c + 1).value = ws_xls.cell_value(r, c)
+    buf = BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
 
 
 def find_marker_cell(ws, marker_text: str) -> Tuple[int, int]:
@@ -33,74 +94,14 @@ class DocumentService:
         self.msds_service = MSDSService()
 
     def generate_booking(self, order_id: int) -> Tuple[bytes, str, str]:
+        """生成订舱单：转换 .xls → .xlsx（marker 由用户在 OnlyOffice 中手动填写）。"""
         template_path = TEMPLATES["booking"]
         if not os.path.exists(template_path):
             raise FileNotFoundError(f"Booking template not found: {template_path}")
-        wb = openpyxl.load_workbook(template_path)
-        ws = wb.active
-        db = SessionLocal()
-        try:
-            # 支持多产品：查询同一订单号的所有记录
-            record = db.query(OrderPiRecord).filter(OrderPiRecord.id == order_id).first()
-            pi = None
-            if record and record.pi_no:
-                pi = db.query(PiContract).filter(PiContract.pi_no == record.pi_no).first()
-
-            # 获取同一订单号的所有产品记录
-            all_records = []
-            if record and record.order_no:
-                all_records = db.query(OrderPiRecord).filter(
-                    OrderPiRecord.order_no == record.order_no
-                ).all()
-
-            shipper_row, shipper_col = find_marker_cell(ws, "{{MARK_SHIPPER}}")
-            port_row, port_col = find_marker_cell(ws, "{{MARK_PORT}}")
-            goods_row, goods_col = find_marker_cell(ws, "{{MARK_GOODS_TABLE}}")
-            ws.cell(shipper_row, shipper_col + 1).value = "HONGHAO CHEMICAL CO., LTD."
-            ws.cell(shipper_row, shipper_col + 2).value = "广东省清远市清新区太和镇百合花园综合楼"
-            ws.cell(shipper_row, shipper_col + 3).value = "TEL: 0763-6866888"
-            if pi:
-                ws.cell(shipper_row + 1, shipper_col + 1).value = pi.consignee_name or ""
-                ws.cell(shipper_row + 1, shipper_col + 2).value = pi.consignee_address or ""
-                ws.cell(port_row, port_col + 1).value = pi.destination or ""
-
-            # 填充货物明细表（支持多产品）
-            items = []
-            if all_records:
-                items = [
-                    (
-                        r.product_cn or "",
-                        r.product_en or "",
-                        r.hs_code or "",
-                        r.gross_weight_kg or 0,
-                        r.volume_cbm or 0,
-                    )
-                    for r in all_records
-                ]
-            elif record:
-                items = [(
-                    record.product_cn or "",
-                    record.product_en or "",
-                    record.hs_code or "",
-                    record.gross_weight_kg or 0,
-                    record.volume_cbm or 0,
-                )]
-
-            for i, (cn, en, hs, gw, vol) in enumerate(items):
-                r = goods_row + i
-                ws.cell(r, goods_col).value = cn
-                ws.cell(r, goods_col + 1).value = en
-                ws.cell(r, goods_col + 2).value = hs
-                ws.cell(r, goods_col + 3).value = gw
-                ws.cell(r, goods_col + 4).value = vol
-            clear_markers(ws)
-            buf = BytesIO()
-            wb.save(buf)
-            content = buf.getvalue()
-        finally:
-            db.close()
+        # 用 xlrd 读取 .xls，再用 openpyxl 写成 .xlsx（OnlyOffice 原生支持 .xlsx）
+        content_xlsx = convert_xls_to_xlsx(template_path)
         doc_key = f"booking_{order_id}_{int(time.time())}"
-        return content, doc_key, base64.b64encode(content).decode()
+        return content_xlsx, doc_key, base64.b64encode(content_xlsx).decode()
 
     def generate_loi(self, order_id: int, pi_no: str) -> Tuple[bytes, str, str]:
         template_path = TEMPLATES["loi"]
@@ -108,50 +109,33 @@ class DocumentService:
             raise FileNotFoundError(f"LOI template not found: {template_path}")
         db = SessionLocal()
         try:
-            record = db.query(OrderPiRecord).filter(OrderPiRecord.id == order_id).first()
-            pi = db.query(PiContract).filter(PiContract.pi_no == pi_no).first() if pi_no else None
+            order = db.query(Order).filter(Order.id == order_id).first()
+            if not order:
+                raise ValueError(f"Order not found: {order_id}")
 
-            # 获取同一订单号的所有产品（用于汇总）
-            all_records = []
-            if record and record.order_no:
-                all_records = db.query(OrderPiRecord).filter(
-                    OrderPiRecord.order_no == record.order_no
-                ).all()
+            pi = db.query(PiContract).filter_by(pi_no=pi_no).first() if pi_no else None
+
+            # 获取该订单所有产品
+            all_items = db.query(OrderItem).filter(OrderItem.order_id == order_id).all()
 
             doc = Document(template_path)
 
             # 汇总多产品信息
-            if len(all_records) > 1:
-                # 多产品：汇总显示
-                total_gw = sum(r.gross_weight_kg or 0 for r in all_records)
-                total_vol = sum(r.volume_cbm or 0 for r in all_records)
-                product_names = " / ".join([r.product_cn or "" for r in all_records if r.product_cn])
-                replacements = {
-                    "{{shipper}}": "HONGHAO CHEMICAL CO., LTD.",
-                    "{{consignee}}": (pi.consignee_name or "") if pi else "",
-                    "{{consignee_address}}": (pi.consignee_address or "") if pi else "",
-                    "{{port_of_discharge}}": (pi.destination or "") if pi else "",
-                    "{{product_name_cn}}": product_names,
-                    "{{product_name_en}}": "",
-                    "{{hs_code}}": (all_records[0].hs_code or "") if all_records else "",
-                    "{{gross_weight}}": str(round(total_gw, 1)),
-                    "{{volume}}": str(round(total_vol, 3)),
-                    "{{date}}": time.strftime("%Y 年 %m 月 %d 日"),
-                }
-            else:
-                # 单产品
-                replacements = {
-                    "{{shipper}}": "HONGHAO CHEMICAL CO., LTD.",
-                    "{{consignee}}": (pi.consignee_name or "") if pi else "",
-                    "{{consignee_address}}": (pi.consignee_address or "") if pi else "",
-                    "{{port_of_discharge}}": (pi.destination or "") if pi else "",
-                    "{{product_name_cn}}": (record.product_cn or "") if record else "",
-                    "{{product_name_en}}": (record.product_en or "") if record else "",
-                    "{{hs_code}}": (record.hs_code or "") if record else "",
-                    "{{gross_weight}}": str(record.gross_weight_kg) if record and record.gross_weight_kg else "",
-                    "{{volume}}": str(record.volume_cbm) if record and record.volume_cbm else "",
-                    "{{date}}": time.strftime("%Y 年 %m 月 %d 日"),
-                }
+            total_gw = sum(it.gross_weight_kg or 0 for it in all_items)
+            total_vol = sum(it.volume_cbm or 0 for it in all_items)
+            product_names = " / ".join([it.product_cn or "" for it in all_items if it.product_cn])
+            replacements = {
+                "{{shipper}}": "HONGHAO CHEMICAL CO., LTD.",
+                "{{consignee}}": (pi.consignee_name or "") if pi else "",
+                "{{consignee_address}}": (pi.consignee_address or "") if pi else "",
+                "{{port_of_discharge}}": (pi.destination or "") if pi else "",
+                "{{product_name_cn}}": product_names,
+                "{{product_name_en}}": (all_items[0].product_en or "") if all_items else "",
+                "{{hs_code}}": (all_items[0].hs_code or "") if all_items else "",
+                "{{gross_weight}}": str(round(total_gw, 1)),
+                "{{volume}}": str(round(total_vol, 3)),
+                "{{date}}": time.strftime("%Y 年 %m 月 %d 日"),
+            }
             for para in doc.paragraphs:
                 for key, val in replacements.items():
                     if key in para.text:
@@ -168,12 +152,55 @@ class DocumentService:
 
     def generate_msds(self, product_name: str) -> Tuple[bytes, str, str]:
         template_path = TEMPLATES["msds"]
-        if not os.path.exists(template_path):
-            raise FileNotFoundError(f"MSDS template not found: {template_path}")
         db = SessionLocal()
         try:
             msds_index = self.msds_service.get_msds_by_product(product_name, db)
-            doc = Document(template_path)
+            # Find a usable template: prefer standard .docx, then matched .docx, then any .docx in MSDS_DIR
+            effective_template: Optional[str] = None
+            if template_path.endswith(".docx") and os.path.exists(template_path):
+                effective_template = template_path
+            elif msds_index:
+                matched_path = msds_index.file_path
+                if matched_path.endswith(".docx") and os.path.exists(matched_path):
+                    effective_template = matched_path
+                else:
+                    # .doc file is not loadable by python-docx — try to find a .docx fallback in the dir
+                    msds_dir = os.path.dirname(matched_path) if os.path.exists(os.path.dirname(matched_path)) else MSDS_DIR
+                    for fname in os.listdir(msds_dir):
+                        if fname.endswith(".docx"):
+                            candidate = os.path.join(msds_dir, fname)
+                            if os.path.exists(candidate):
+                                effective_template = candidate
+                                break
+            if not effective_template:
+                # Last resort: scan MSDS_DIR for any .docx
+                for fname in os.listdir(MSDS_DIR):
+                    if fname.endswith(".docx"):
+                        candidate = os.path.join(MSDS_DIR, fname)
+                        if os.path.exists(candidate):
+                            effective_template = candidate
+                            break
+            if not effective_template:
+                # 尝试把 matched .doc 文件转成 .docx（从零构建表格结构）
+                if msds_index and msds_index.file_path.endswith(".doc") and os.path.exists(msds_index.file_path):
+                    content = self._build_msds_docx_from_doc(msds_index.file_path, product_name)
+                    doc_key = f"msds_{product_name}_{int(time.time())}"
+                    return content, doc_key, base64.b64encode(content).decode()
+                else:
+                    # 最后尝试：将 MSDS_DIR 中任意第一个 .doc 转换为 .docx
+                    for fname in os.listdir(MSDS_DIR):
+                        if fname.endswith(".doc"):
+                            candidate = os.path.join(MSDS_DIR, fname)
+                            if os.path.exists(candidate):
+                                try:
+                                    content = self._build_msds_docx_from_doc(candidate, product_name)
+                                    doc_key = self._sanitize_doc_key(f"msds_{product_name}_{int(time.time())}")
+                                    return content, doc_key, base64.b64encode(content).decode()
+                                except Exception:
+                                    continue
+                    raise FileNotFoundError(f"MSDS template not found for product: {product_name}")
+
+            doc = Document(effective_template)
             tables = doc.tables
             if msds_index and tables:
                 text = self.msds_service.extract_text(msds_index.file_path)
@@ -199,8 +226,80 @@ class DocumentService:
             content = buf.getvalue()
         finally:
             db.close()
-        doc_key = f"msds_{product_name}_{int(time.time())}"
+        doc_key = self._sanitize_doc_key(f"msds_{product_name}_{int(time.time())}")
         return content, doc_key, base64.b64encode(content).decode()
+
+    @staticmethod
+    def _sanitize_doc_key(key: str) -> str:
+        """Remove chars that OnlyOffice server-side routing mishandles."""
+        import re
+        return re.sub(r"[\(\)\s/\\]+", "_", key).strip("_")
+
+    def _build_msds_docx_from_doc(self, doc_path: str, product_name: str) -> bytes:
+        """
+        将 .doc 文件转换为包含标准 MSDS 表格结构的 .docx。
+        从源 .doc 提取文本填充到预设表格中。
+        """
+        text = self.msds_service.extract_text(doc_path)
+        composition = self.msds_service.extract_composition_table(text)
+        props = self.msds_service.extract_physical_props(text)
+
+        doc = Document()
+
+        # 标题
+        title = doc.add_heading("物质安全数据表 (MSDS)", level=1)
+        title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        # 产品名
+        doc.add_paragraph(f"产品名称：{product_name}").runs[0].bold = True
+        doc.add_paragraph("")
+
+        # 表1：理化特性
+        doc.add_heading("1. 理化特性", level=2)
+        table1 = doc.add_table(rows=4, cols=2)
+        table1.style = "Table Grid"
+        fields = [
+            ("外观与性状", props.get("physical_form", "")),
+            ("离子型", props.get("ion_type", "")),
+            ("pH值", props.get("ph", "")),
+            ("沸点/熔点", ""),
+        ]
+        for i, (label, value) in enumerate(fields):
+            table1.rows[i].cells[0].text = label
+            table1.rows[i].cells[1].text = value
+
+        doc.add_paragraph("")
+
+        # 表2：成分组成
+        doc.add_heading("2. 成分组成", level=2)
+        table2 = doc.add_table(rows=1 + len(composition), cols=3)
+        table2.style = "Table Grid"
+        # 表头
+        hdr = table2.rows[0].cells
+        hdr[0].text = "序号"
+        hdr[1].text = "组分名称"
+        hdr[2].text = "CAS No. / 含量"
+        for cell in hdr:
+            cell.paragraphs[0].runs[0].bold = True
+        # 数据行
+        for i, item in enumerate(composition):
+            row = table2.rows[i + 1].cells
+            row[0].text = str(i + 1)
+            row[1].text = item.get("component", "")
+            row[2].text = item.get("percentage", "")
+
+        doc.add_paragraph("")
+
+        # 附加信息（来自原文）
+        doc.add_heading("3. 其他信息", level=2)
+        for line in text.split("\n")[:50]:
+            line = line.strip()
+            if line and len(line) > 3:
+                doc.add_paragraph(line)
+
+        buf = BytesIO()
+        doc.save(buf)
+        return buf.getvalue()
 
     def generate_template_instance(self, template_type: str) -> Tuple[bytes, str, str]:
         """加载空白模板（不填充 marker），返回 (content, doc_key, encoded_content)。"""
@@ -213,16 +312,38 @@ class DocumentService:
             raise ValueError(f"Unknown template type: {template_type}")
         key_prefix, file_ext = type_map[template_type]
         template_path = TEMPLATES[template_type]
-        if not os.path.exists(template_path):
+        # Find effective template: .docx directly, or .xls for booking
+        effective_template: Optional[str] = None
+        if os.path.exists(template_path):
+            if template_path.endswith(".docx"):
+                effective_template = template_path
+            elif template_path.endswith(".xls"):
+                effective_template = template_path  # .xls will be converted to .xlsx below
+        # For MSDS, also scan MSDS_DIR as fallback
+        if not effective_template and template_type == "msds":
+            for fname in os.listdir(MSDS_DIR):
+                candidate = os.path.join(MSDS_DIR, fname)
+                if fname.endswith(".docx") and os.path.exists(candidate):
+                    effective_template = candidate
+                    break
+                elif fname.endswith(".doc") and os.path.exists(candidate):
+                    try:
+                        converted = convert_doc_to_docx(candidate)
+                        temp_path = os.path.join(MSDS_DIR, f"_blank_converted_{fname}.docx")
+                        with open(temp_path, "wb") as f:
+                            f.write(converted)
+                        effective_template = temp_path
+                        break
+                    except Exception:
+                        continue
+        if not effective_template:
             raise FileNotFoundError(f"Template not found: {template_path}")
 
         if file_ext == "xlsx":
-            wb = openpyxl.load_workbook(template_path)
-            buf = BytesIO()
-            wb.save(buf)
-            content = buf.getvalue()
+            # .xls 模板 → .xlsx
+            content = convert_xls_to_xlsx(effective_template)
         else:
-            doc = Document(template_path)
+            doc = Document(effective_template)
             buf = BytesIO()
             doc.save(buf)
             content = buf.getvalue()

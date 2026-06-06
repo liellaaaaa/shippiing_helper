@@ -96,7 +96,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column prop="order_no" label="订单号" width="140" fixed />
+        <el-table-column prop="order_no" label="订单号" width="140" />
         <el-table-column prop="customer_code" label="客户编码" width="120" />
         <el-table-column prop="salesperson" label="业务员" width="100" />
         <el-table-column prop="pi_no" label="PI号" width="120" />
@@ -105,7 +105,7 @@
             <el-tag type="info" size="small">{{ row.product_count }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="100" fixed="right">
+        <el-table-column label="操作" width="100">
           <template #default="{ row }">
             <el-button
               type="danger"

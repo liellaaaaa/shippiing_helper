@@ -198,94 +198,11 @@
         </el-card>
       </aside>
 
-      <!-- Right: Document Editor / Workspace -->
+      <!-- Right: Document Editor -->
       <main class="editor-panel">
-        <!-- Workspace (no document open) -->
-        <div v-if="!currentDocKey" class="workspace">
-          <el-card class="preview-card">
-            <template #header>
-              <div class="card-header">
-                <span class="card-title">快捷操作</span>
-              </div>
-            </template>
-            <div class="workspace-actions">
-              <el-button type="primary" size="large" :disabled="!selectedOrderId" @click="showBookingDialog = true" class="ws-btn">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:8px">
-                  <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>
-                </svg>
-                生成订舱单
-              </el-button>
-              <el-button type="primary" size="large" :disabled="!selectedOrderId || !selectedPiNo" @click="openDocument('loi')" class="ws-btn">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:8px">
-                  <path d="M14 2H6a2 2 0 0 1 2v20a2 2 0 0 1-2 2H18a2 2 0 0 1-2-2V8l4-4z"/><path d="M14 2v6h6M16 13l4-4 4 4"/>
-                </svg>
-                生成LOI保函
-              </el-button>
-              <el-button size="large" @click="showMsdsDialog = true" class="ws-btn">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:8px">
-                  <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M8 13h8M8 17h8M8 9h2"/>
-                </svg>
-                生成MSDS
-              </el-button>
-            </div>
-          </el-card>
-
-          <el-card class="preview-card" style="margin-top: 12px;">
-            <template #header>
-              <div class="card-header">
-                <span class="card-title">我的模板</span>
-                <el-button text size="small" @click="showMyDocuments = true">查看全部</el-button>
-              </div>
-            </template>
-            <div class="recent-docs">
-              <div class="empty-icon">
-                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#d0d5dd" stroke-width="1.5">
-                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-                </svg>
-              </div>
-              <div class="recent-hint">暂无已保存的模板</div>
-              <el-button type="primary" plain size="small" @click="showMyDocuments = true" style="margin-top: 8px;">浏览模板库</el-button>
-            </div>
-          </el-card>
-
-          <el-card class="preview-card" style="margin-top: 12px;">
-            <template #header>
-              <div class="card-header">
-                <span class="card-title">模板字段速查</span>
-              </div>
-            </template>
-            <div class="ref-table">
-              <div class="ref-row ref-header">
-                <span>字段名</span>
-                <span>含义</span>
-              </div>
-              <div class="ref-row">
-                <code class="field-code">MARK_SHIPPER</code>
-                <span class="field-desc">发货人</span>
-              </div>
-              <div class="ref-row">
-                <code class="field-code">MARK_PORT</code>
-                <span class="field-desc">卸货港</span>
-              </div>
-              <div class="ref-row">
-                <code class="field-code">MARK_GOODS_TABLE</code>
-                <span class="field-desc">货物明细表</span>
-              </div>
-              <div class="ref-row">
-                <code class="field-code">MARK_CONSIGNEE</code>
-                <span class="field-desc">收货人</span>
-              </div>
-              <div class="ref-row">
-                <code class="field-code">MARK_NOTIFY</code>
-                <span class="field-desc">通知人</span>
-              </div>
-            </div>
-          </el-card>
-        </div>
-
-        <!-- Document Editor (when document is open) -->
-        <div v-else class="doc-workspace">
+        <el-card class="editor-card" body-style="padding: 0;">
           <DocumentEditor
+            v-if="currentDocKey"
             :key="currentDocKey"
             :document-server-url="currentConfig.documentServerUrl"
             :doc-key="currentDocKey"
@@ -294,7 +211,17 @@
             :url="currentConfig.url"
             :doc-type="currentConfig.docType"
           />
-        </div>
+          <div v-else class="editor-empty">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#bfbfbf" stroke-width="1.2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <polyline points="10 9 9 9 8 9"/>
+            </svg>
+            <p>请从上方选择订单并生成文档</p>
+          </div>
+        </el-card>
       </main>
     </div>
 
@@ -630,116 +557,27 @@ onMounted(() => {
 .editor-panel {
   display: flex;
   flex-direction: column;
+}
+
+.editor-card {
+  border-radius: 8px;
+  overflow: hidden;
   min-height: calc(100vh - 140px);
 }
 
-/* Workspace (no document open) */
-.workspace {
+.editor-empty {
   display: flex;
   flex-direction: column;
-  flex: 1;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100vh - 180px);
   gap: 12px;
+  color: #bfbfbf;
 }
-.workspace .preview-card {
-  border-radius: 8px;
-  border: 1px solid var(--el-border-color-light, #e4e7ed);
-  background: var(--el-fill-color, #fff);
-}
-:deep(.workspace .preview-card .el-card__header) {
-  padding: 12px 16px;
-  background: var(--el-fill-color-light, #f5f7fa);
-  border-bottom: 1px solid var(--el-border-color-light, #e4e7ed);
-}
-:deep(.workspace .preview-card .el-card__body) {
-  padding: 16px;
-}
-
-.workspace-actions {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-}
-.ws-btn {
-  height: 72px;
+.editor-empty p {
   font-size: 14px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  border-radius: 8px;
-  font-weight: 500;
-}
-
-.recent-hint {
-  font-size: 13px;
-  color: #909399;
-  text-align: center;
-  padding: 8px 0 4px 0;
-}
-.empty-icon {
-  display: flex;
-  justify-content: center;
-  padding: 12px 0 4px 0;
-}
-.recent-docs {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-/* Template field reference (workspace version) */
-.workspace .ref-table {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.workspace .ref-row {
-  display: grid;
-  grid-template-columns: 160px 1fr;
-  gap: 12px;
-  font-size: 13px;
-  align-items: center;
-}
-.workspace .ref-row.ref-header {
-  font-weight: 600;
-  color: #909399;
-  border-bottom: 1px solid var(--el-border-color-light, #e4e7ed);
-  padding-bottom: 6px;
-  font-size: 12px;
-}
-.workspace .field-code {
-  font-family: 'JetBrains Mono', monospace;
-  color: var(--el-color-primary, #409eff);
-  background: var(--el-fill-color-light, #f5f7fa);
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: 500;
-}
-.workspace .field-desc {
-  color: #606266;
-  font-size: 13px;
-}
-
-/* Document workspace (editor open) */
-.doc-workspace {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-:deep(.doc-workspace .el-card) {
-  border-radius: 8px;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-:deep(.doc-workspace .el-card__body) {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  padding: 0;
-  min-height: 0;
+  color: #bfbfbf;
+  margin: 0;
 }
 
 /* ── Dialogs ─────────────────────────── */

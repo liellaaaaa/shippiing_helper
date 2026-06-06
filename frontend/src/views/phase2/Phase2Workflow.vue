@@ -405,7 +405,6 @@ onMounted(() => {
   max-width: 1400px;
   margin: 0 auto;
   min-height: 100vh;
-  background: var(--el-bg-color-page, #f5f7fa);
   font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
 }
 
@@ -416,7 +415,6 @@ onMounted(() => {
   gap: 16px;
   height: 56px;
   padding: 0 20px;
-  background: var(--el-fill-color-lighter, #f5f7fa);
   border-bottom: 1px solid var(--el-border-color-light, #e4e7ed);
   flex-shrink: 0;
 }
@@ -468,27 +466,25 @@ onMounted(() => {
 }
 
 .info-card {
-  border-radius: 8px;
-  border: 1px solid var(--el-border-color-light, #e4e7ed);
+  border-radius: 12px;
 }
 :deep(.el-card__header) {
   padding: 10px 14px;
-  background: var(--el-fill-color, #fff);
   border-bottom: 1px solid var(--el-border-color-light, #e4e7ed);
 }
 :deep(.el-card__body) {
   padding: 12px 14px;
 }
 .card-header {
+  font-weight: 600;
+  font-size: 15px;
   display: flex;
-  align-items: center;
   justify-content: space-between;
+  align-items: center;
 }
 .card-title {
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
-  color: var(--el-text-color-primary, #303133);
-  letter-spacing: 0.03em;
 }
 
 .info-rows {
@@ -560,7 +556,7 @@ onMounted(() => {
 }
 
 .editor-card {
-  border-radius: 8px;
+  border-radius: 12px;
   overflow: hidden;
   min-height: calc(100vh - 140px);
 }

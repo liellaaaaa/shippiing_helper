@@ -27,9 +27,9 @@
             </template>
             <el-option
               v-for="o in orderList"
-              :key="o.id"
+              :key="o.order_id"
               :label="o.order_no + ' · ' + o.customer_code"
-              :value="o.id"
+              :value="o.order_id"
             />
           </el-select>
         </div>
@@ -268,12 +268,13 @@ import MyDocumentsDrawer from './components/MyDocumentsDrawer.vue'
 import { ArrowDown } from '@element-plus/icons-vue'
 import { phase2Api } from '@/api/phase2'
 import { getOrderList, getOrderComparison, getOrderPiContracts, type OrderListItem } from '@/api/merge'
+import { getDashboardOrders, type DashboardOrder } from '@/api/dashboard'
 
 const route = useRoute()
 
 const selectedOrderId = ref<number | null>(null)
 const selectedPiNo = ref<string>('')
-const orderList = ref<OrderListItem[]>([])
+const orderList = ref<DashboardOrder[]>([])
 const piList = ref<any[]>([])
 const currentOrderItems = ref<any[]>([])
 const currentDocKey = ref('')
@@ -303,7 +304,7 @@ if (route.query.orderId) {
 }
 
 async function loadOrderList() {
-  const data = await getOrderList({ tab: 'completed', page_size: 100 })
+  const data = await getDashboardOrders({ page_size: 100 })
   orderList.value = data.orders || []
 }
 

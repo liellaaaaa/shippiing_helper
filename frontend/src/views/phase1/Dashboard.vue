@@ -53,13 +53,13 @@
             <div class="product-expand">
               <div class="expand-header">
                 <span class="expand-col">内部编码</span>
-                <span class="expand-col">产品名称</span>
+                <span class="expand-col">产品中文名</span>
+                <span class="expand-col">报关名称</span>
                 <span class="expand-col">规格kg</span>
                 <span class="expand-col">数量kg</span>
                 <span class="expand-col">单价</span>
                 <span class="expand-col">金额</span>
                 <span class="expand-col">H.S.Code</span>
-                <span class="expand-col">报关品名</span>
                 <span class="expand-col">桶数</span>
                 <span class="expand-col">托数</span>
                 <span class="expand-col">毛重kg</span>
@@ -73,12 +73,12 @@
               >
                 <span class="expand-col mono">{{ p.internal_code }}</span>
                 <span class="expand-col">{{ p.product_cn }}</span>
+                <span class="expand-col">{{ p.customs_name || '-' }}</span>
                 <span class="expand-col">{{ p.spec_kg ?? '-' }}</span>
                 <span class="expand-col">{{ p.quantity_kg ?? '-' }}</span>
                 <span class="expand-col">{{ p.unit_price != null ? p.unit_price.toFixed(2) : '-' }}</span>
                 <span class="expand-col">{{ p.total_amount != null ? p.total_amount.toFixed(2) : '-' }}</span>
                 <span class="expand-col mono">{{ p.hs_code || '-' }}</span>
-                <span class="expand-col">{{ p.customs_name || '-' }}</span>
                 <span class="expand-col">{{ p.drum_count ?? '-' }}</span>
                 <span class="expand-col">{{ p.pallet_count ?? '-' }}</span>
                 <span class="expand-col">{{ p.gross_weight_kg != null ? p.gross_weight_kg.toFixed(1) : '-' }}</span>
@@ -97,7 +97,6 @@
         <el-table-column prop="order_no" label="订单号" min-width="140" />
         <el-table-column prop="customer_code" label="客户编码" min-width="120" />
         <el-table-column prop="salesperson" label="业务员" min-width="100" />
-        <el-table-column prop="pi_no" label="PI号" min-width="120" />
         <el-table-column prop="product_count" label="产品数" width="80" align="center">
           <template #default="{ row }">
             <el-tag type="info" size="small">{{ row.product_count }}</el-tag>
@@ -237,7 +236,7 @@ onMounted(() => {
 }
 .expand-header {
   display: grid;
-  grid-template-columns: 100px 1fr 70px 80px 70px 90px 80px 100px 60px 60px 80px 80px 70px;
+  grid-template-columns: 100px 1fr 1fr 70px 80px 70px 90px 80px 60px 60px 80px 80px 70px;
   gap: 0;
   padding: 6px 12px;
   font-size: 11px;
@@ -248,7 +247,7 @@ onMounted(() => {
 }
 .expand-row {
   display: grid;
-  grid-template-columns: 100px 1fr 70px 80px 70px 90px 80px 100px 60px 60px 80px 80px 70px;
+  grid-template-columns: 100px 1fr 1fr 70px 80px 70px 90px 80px 60px 60px 80px 80px 70px;
   gap: 0;
   padding: 6px 12px;
   font-size: 12px;

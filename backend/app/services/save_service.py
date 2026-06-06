@@ -36,8 +36,17 @@ class SaveService:
         pkg = request.packaging_result
         packaging_items = request.packaging_items or []
 
-        # 构建 internal_code -> packaging_item 的映射
-        pkg_by_code: dict[str, dict] = {item.get('internal_code') or item.get('product_name'): item for item in packaging_items}
+        # 构建 key -> packaging_item 的映射
+        # 前端 getRows() 返回 internal_code: r.internal_code（如 "CF253E"）
+        # 同时也用 product_name（如 "还原清洗剂"）作为备选 key
+        pkg_map: dict[str, dict] = {}
+        for item in packaging_items:
+            ic = (item.get('internal_code') or '').strip()
+            pn = (item.get('product_name') or '').strip()
+            if ic:
+                pkg_map[ic] = item
+            if pn and pn != ic:
+                pkg_map[pn] = item
 
         # ── 公共字段（订单头） ──
         order_no = order_d.order_no
@@ -90,18 +99,24 @@ class SaveService:
             record.product_en = item.product_en
             record.spec_kg = item.spec_kg
 
-            # 数量/单价/金额 — 优先 PI（轨道A合并）
-            if pi_d and pi_d.quantity is not None:
+            # 数量/单价/金额 — PI 只填充缺失值（PI 是单值，不应覆盖每个产品各自的字段）
+            if item.quantity_kg is not None and item.quantity_kg != 0:
+                record.quantity_kg = item.quantity_kg
+            elif pi_d and pi_d.quantity is not None:
                 record.quantity_kg = pi_d.quantity
             else:
                 record.quantity_kg = item.quantity_kg
 
-            if pi_d and pi_d.unit_price is not None:
+            if item.unit_price is not None and item.unit_price != 0:
+                record.unit_price = item.unit_price
+            elif pi_d and pi_d.unit_price is not None:
                 record.unit_price = pi_d.unit_price
             else:
                 record.unit_price = item.unit_price
 
-            if pi_d and pi_d.total_amount is not None:
+            if item.total_amount is not None and item.total_amount != 0:
+                record.total_amount = item.total_amount
+            elif pi_d and pi_d.total_amount is not None:
                 record.total_amount = pi_d.total_amount
             else:
                 record.total_amount = item.total_amount
@@ -126,7 +141,8 @@ class SaveService:
                 record.pi_date = pi_d.pi_date
 
             # ── 包装计算结果（轨道B）—— 优先使用 per-product 数据 ──
-            item_pkg = pkg_by_code.get(item.internal_code)
+            # 前端 getRows() 用 product_cn 中文名（如 "还原清洗剂"）作为 internal_code key
+            item_pkg = pkg_map.get(item.internal_code or '') or pkg_map.get(item.product_cn or '')
             if item_pkg:
                 # 使用每个产品各自的包装计算结果
                 record.drum_count = item_pkg.get('drums')
@@ -259,21 +275,20 @@ class SaveService:
                 "order_no": ono,
                 "customer_code": first.customer_code or "",
                 "salesperson": first.sales_person or "",
-                "pi_no": first.pi_no or "",
                 "status": first.status,
                 "created_at": first.created_at.isoformat() if first.created_at else None,
+                "total_quantity": sum(r.quantity_kg or 0 for r in items),
                 "products": [
                     {
                         "id": r.id,
                         "internal_code": r.internal_code or "",
                         "product_cn": r.product_cn or "",
-                        "product_en": r.product_en or "",
+                        "customs_name": r.customs_name or "",
                         "spec_kg": r.spec_kg,
                         "quantity_kg": r.quantity_kg,
                         "unit_price": r.unit_price,
                         "total_amount": r.total_amount,
                         "hs_code": r.hs_code or "",
-                        "customs_name": r.customs_name or "",
                         "drum_count": r.drum_count,
                         "pallet_count": r.pallet_count,
                         "gross_weight_kg": r.gross_weight_kg,

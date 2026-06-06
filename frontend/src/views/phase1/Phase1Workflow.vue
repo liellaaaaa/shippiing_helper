@@ -74,9 +74,14 @@
 
           <el-table :data="orderForm.items" border stripe size="small" max-height="350">
             <el-table-column prop="internal_code" label="内部编码" width="100" />
-            <el-table-column prop="product_cn" label="产品名称" min-width="120" />
-            <el-table-column prop="spec_kg" label="规格kg" width="80" />
-            <el-table-column prop="quantity_kg" label="数量kg" width="90">
+            <el-table-column prop="product_cn" label="产品中文名" min-width="120" />
+            <el-table-column prop="customs_name" label="报关名称" min-width="100">
+              <template #default="{ row }">
+                <el-input v-model="row.customs_name" size="small" />
+              </template>
+            </el-table-column>
+            <el-table-column prop="spec_kg" label="规格" width="80" />
+            <el-table-column prop="quantity_kg" label="数量" width="90">
               <template #default="{ row }">
                 <el-input-number
                   v-model="row.quantity_kg"
@@ -87,24 +92,9 @@
                 />
               </template>
             </el-table-column>
-            <el-table-column prop="unit_price" label="单价" width="80">
-              <template #default="{ row }">
-                <el-input-number v-model="row.unit_price" size="small" :min="0" controls-position="right" class="price-input" />
-              </template>
-            </el-table-column>
-            <el-table-column prop="total_amount" label="金额" width="100">
-              <template #default="{ row }">
-                {{ row.unit_price && row.quantity_kg ? (row.unit_price * row.quantity_kg).toFixed(2) : '—' }}
-              </template>
-            </el-table-column>
             <el-table-column prop="hs_code" label="H.S.Code" width="100">
               <template #default="{ row }">
                 <el-input v-model="row.hs_code" size="small" />
-              </template>
-            </el-table-column>
-            <el-table-column prop="customs_name" label="报关品名" min-width="100">
-              <template #default="{ row }">
-                <el-input v-model="row.customs_name" size="small" />
               </template>
             </el-table-column>
           </el-table>
@@ -237,7 +227,7 @@ function syncCalculatorFromOrder() {
   if (!calcRef.value) return
   calcRef.value.clearRows()
   for (const item of orderForm.value.items) {
-    calcRef.value.addRow(item.product_cn || '', item.quantity_kg || 0)
+    calcRef.value.addRow(item.internal_code || '', item.product_cn || '', item.quantity_kg || 0)
   }
 }
 

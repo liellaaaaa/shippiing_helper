@@ -198,20 +198,88 @@
         </el-card>
       </aside>
 
-      <!-- Right: Document Editor -->
+      <!-- Right: Document Editor / Workspace -->
       <main class="editor-panel">
-        <el-card class="editor-card" shadow="never">
-          <div v-if="!currentDocKey" class="editor-empty">
-            <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity=".25">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-              <polyline points="14 2 14 8 20 8"/>
-              <line x1="16" y1="13" x2="20" y2="17"/><line x1="20" y1="13" x2="16" y2="17"/>
-            </svg>
-            <p class="empty-title">点击上方按钮生成文档</p>
-            <p class="empty-sub">订舱单 / LOI保函 / MSDS</p>
-          </div>
+        <!-- Workspace (no document open) -->
+        <div v-if="!currentDocKey" class="workspace">
+          <el-card class="preview-card">
+            <template #header>
+              <div class="card-header">
+                <span class="card-title">快捷操作</span>
+              </div>
+            </template>
+            <div class="workspace-actions">
+              <el-button type="primary" size="large" :disabled="!selectedOrderId" @click="showBookingDialog = true" class="ws-btn">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:8px">
+                  <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>
+                </svg>
+                生成订舱单
+              </el-button>
+              <el-button type="primary" size="large" :disabled="!selectedOrderId || !selectedPiNo" @click="openDocument('loi')" class="ws-btn">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:8px">
+                  <path d="M14 2H6a2 2 0 0 1 2v20a2 2 0 0 1-2 2H18a2 2 0 0 1-2-2V8l4-4z"/><path d="M14 2v6h6M16 13l4-4 4 4"/>
+                </svg>
+                生成LOI保函
+              </el-button>
+              <el-button size="large" @click="showMsdsDialog = true" class="ws-btn">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:8px">
+                  <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M8 13h8M8 17h8M8 9h2"/>
+                </svg>
+                生成MSDS
+              </el-button>
+            </div>
+          </el-card>
+
+          <el-card class="preview-card" style="margin-top: 12px;">
+            <template #header>
+              <div class="card-header">
+                <span class="card-title">我的模板</span>
+                <el-button text size="small" @click="showMyDocuments = true">查看全部</el-button>
+              </div>
+            </template>
+            <div class="recent-docs">
+              <div class="recent-hint">点击左侧"我的模板"查看所有已保存的模板</div>
+            </div>
+          </el-card>
+
+          <el-card class="preview-card" style="margin-top: 12px;">
+            <template #header>
+              <div class="card-header">
+                <span class="card-title">模板字段速查</span>
+              </div>
+            </template>
+            <div class="ref-table">
+              <div class="ref-row ref-header">
+                <span>字段名</span>
+                <span>含义</span>
+              </div>
+              <div class="ref-row">
+                <code class="field-code">MARK_SHIPPER</code>
+                <span class="field-desc">发货人</span>
+              </div>
+              <div class="ref-row">
+                <code class="field-code">MARK_PORT</code>
+                <span class="field-desc">卸货港</span>
+              </div>
+              <div class="ref-row">
+                <code class="field-code">MARK_GOODS_TABLE</code>
+                <span class="field-desc">货物明细表</span>
+              </div>
+              <div class="ref-row">
+                <code class="field-code">MARK_CONSIGNEE</code>
+                <span class="field-desc">收货人</span>
+              </div>
+              <div class="ref-row">
+                <code class="field-code">MARK_NOTIFY</code>
+                <span class="field-desc">通知人</span>
+              </div>
+            </div>
+          </el-card>
+        </div>
+
+        <!-- Document Editor (when document is open) -->
+        <div v-else class="doc-workspace">
           <DocumentEditor
-            v-else
             :key="currentDocKey"
             :document-server-url="currentConfig.documentServerUrl"
             :doc-key="currentDocKey"
@@ -220,8 +288,7 @@
             :url="currentConfig.url"
             :doc-type="currentConfig.docType"
           />
-        </el-card>
-        <MyDocumentsDrawer v-model="showMyDocuments" @open-doc="onOpenMyDoc" />
+        </div>
       </main>
     </div>
 
@@ -253,6 +320,8 @@
         <el-button type="primary" @click="generateMsds" :disabled="!selectedProductForMsds">生成文档</el-button>
       </template>
     </el-dialog>
+
+    <MyDocumentsDrawer v-model="showMyDocuments" @open-doc="onOpenMyDoc" />
 
   </div>
 </template>
@@ -557,36 +626,93 @@ onMounted(() => {
   flex-direction: column;
 }
 
-.editor-card {
-  border-radius: 8px;
-  overflow: hidden;
-  flex: 1;
+/* Workspace (no document open) */
+.workspace {
+  display: flex;
+  flex-direction: column;
 }
-:deep(.el-card__body) {
+.preview-card {
+  border-radius: 8px;
+}
+:deep(.preview-card .el-card__header) {
+  padding: 10px 14px;
+}
+:deep(.preview-card .el-card__body) {
+  padding: 12px 14px;
+}
+
+.workspace-actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.ws-btn {
+  height: 60px;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 6px;
+}
+
+.recent-hint {
+  font-size: 12px;
+  color: #909399;
+  text-align: center;
+  padding: 12px 0;
+}
+
+/* Template field reference */
+.ref-table {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ref-row {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 8px;
+  font-size: 12px;
+  align-items: start;
+}
+.ref-row.ref-header {
+  font-weight: 600;
+  color: #909399;
+  border-bottom: 1px solid var(--el-border-color-light, #e4e7ed);
+  padding-bottom: 4px;
+}
+.field-code {
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--el-color-primary, #409eff);
+  background: var(--el-fill-color-light, #f5f7fa);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+}
+.field-desc {
+  color: #606266;
+}
+
+/* Document workspace (editor open) */
+.doc-workspace {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+:deep(.doc-workspace .el-card) {
+  border-radius: 8px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+:deep(.doc-workspace .el-card__body) {
   flex: 1;
   display: flex;
   flex-direction: column;
   padding: 0;
   min-height: 0;
-}
-
-.editor-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  flex: 1;
-  gap: 12px;
-}
-.empty-title {
-  font-size: 15px;
-  margin: 0;
-  color: var(--el-text-color-secondary, #606266);
-}
-.empty-sub {
-  font-size: 12px;
-  margin: 0;
-  color: var(--el-text-color-placeholder, #c0c4cc);
 }
 
 /* ── Dialogs ─────────────────────────── */

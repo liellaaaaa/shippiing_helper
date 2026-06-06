@@ -11,6 +11,7 @@ export interface OrderListItem {
   association_status: 'full' | 'partial' | 'none'
   items_count: number
   linked_count: number
+  pi_no?: string
   created_at?: string
 }
 
@@ -48,6 +49,7 @@ export interface OrderComparisonResponse {
   order_id: number
   order_no: string
   customer_code?: string
+  pi_no?: string
   items: ComparisonItem[]
 }
 
@@ -63,5 +65,10 @@ export const getOrderList = async (params: {
 
 export const getOrderComparison = async (orderId: number): Promise<OrderComparisonResponse> => {
   const response = await axios.get<OrderComparisonResponse>(`${BASE_URL}/orders/${orderId}/comparison`)
+  return response.data
+}
+
+export const getOrderPiContracts = async (orderId: number): Promise<{pi_no: string; consignee: string; destination: string}[]> => {
+  const response = await axios.get<{pi_no: string; consignee: string; destination: string}[]>(`${BASE_URL}/orders/${orderId}/pi-contracts`)
   return response.data
 }

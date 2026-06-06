@@ -17,7 +17,7 @@
         </el-table-column>
         <el-table-column label="包装种类" width="220">
           <template #default="{ row }">
-            <el-select v-model="row.packaging_name" placeholder="选择包装" size="small" filterable popper-class="pkg-select-popper" @change="(val) => onRowPackageChange(row, val)">
+            <el-select v-model="row.packaging_name" placeholder="选择包装" size="small" filterable popper-class="pkg-select-popper" @change="(val: string) => onRowPackageChange(row, val)">
               <el-option v-for="p in packageTypes" :key="p.name" :label="p.name" :value="p.name">
                 <span class="pkg-opt">{{ p.name }}</span>
                 <span class="pkg-dims">{{ p.dims }}</span>
@@ -94,7 +94,6 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
 import packagingApi, { type PackageType, type PalletType } from '@/api/packaging'
 
 // Task 3A: PackingRow interface
@@ -207,7 +206,7 @@ async function onRowPackageChange(row: PackingRow, packagingName: string) {
     // 自动填标准容量（只有用户没手动改过时才填）
     if (pkg && (!row.drums_per_pallet || row.drums_per_pallet === row.drums_per_pallet_auto)) {
       const is1x1 = row.pallet_spec && row.pallet_spec.includes('1.0*1.0')
-      row.drums_per_pallet_auto = is1x1 ? pkg.pallet_qty_1x1 : pkg.pallet_qty_1_1x1_1
+      row.drums_per_pallet_auto = is1x1 ? (pkg.pallet_qty_1x1 ?? 0) : (pkg.pallet_qty_1_1x1_1 ?? 0)
       row.drums_per_pallet = row.drums_per_pallet_auto
     }
     recalcSummary()

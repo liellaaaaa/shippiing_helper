@@ -236,14 +236,7 @@ const canMerge = computed(() => orderParsed.value && orderForm.value.items.lengt
 function syncCalculatorFromOrder() {
   if (!calcRef.value) return
   calcRef.value.clearRows()
-  // 自动推荐包装种类
-  const specMap: Record<number, string> = {
-    25: '25kg正方罐（蓝色）', 30: '30kg蓝桶', 50: '50kg蓝桶(大口)',
-    60: '60kg蓝桶', 125: '125kg新款胶桶', 150: '150kg新款胶桶',
-    200: '200kg双环闭口桶', 1000: '1吨桶(IBC)',
-  }
   for (const item of orderForm.value.items) {
-    const pkgName = specMap[item.spec_kg] || ''
     calcRef.value.addRow(item.product_cn || '', item.quantity_kg || 0)
   }
 }

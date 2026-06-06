@@ -7,6 +7,7 @@ ROOT = Path(__file__).parent.parent.parent.parent.resolve()
 
 TEMPLATES = {
     "booking": str(ROOT / "references" / "长晟出口海运BOOKING模板.xls"),
+    "booking_xlsx": str(ROOT / "references" / "长晟出口海运BOOKING模板.xlsx"),
     "loi":     str(ROOT / "references" / "LOI-op-非危险品保函模板.docx"),
     "msds":    str(ROOT / "references" / "MSDS" / "MSDS标准模板.docx"),
 }

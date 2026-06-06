@@ -93,13 +93,25 @@ class DocumentService:
     def __init__(self):
         self.msds_service = MSDSService()
 
-    def generate_booking(self, order_id: int) -> Tuple[bytes, str, str]:
-        """生成订舱单：转换 .xls → .xlsx（marker 由用户在 OnlyOffice 中手动填写）。"""
-        template_path = TEMPLATES["booking"]
+    def generate_booking(self, order_id: int, template_type: str = "xls") -> Tuple[bytes, str, str]:
+        """
+        生成订舱单：支持选择模板格式。
+        template_type: "xls" (默认，转换 .xls) 或 "xlsx" (直接使用 .xlsx)
+        marker 由用户在 OnlyOffice 中手动填写。
+        """
+        template_key = f"booking_{template_type}" if template_type == "xlsx" else "booking"
+        template_path = TEMPLATES.get(template_key, TEMPLATES["booking"])
         if not os.path.exists(template_path):
             raise FileNotFoundError(f"Booking template not found: {template_path}")
-        # 用 xlrd 读取 .xls，再用 openpyxl 写成 .xlsx（OnlyOffice 原生支持 .xlsx）
-        content_xlsx = convert_xls_to_xlsx(template_path)
+
+        if template_type == "xlsx" and template_path.endswith(".xlsx"):
+            # 直接读取 .xlsx，不转换
+            with open(template_path, "rb") as f:
+                content_xlsx = f.read()
+        else:
+            # 用 xlrd 读取 .xls，再用 openpyxl 写成 .xlsx（OnlyOffice 原生支持 .xlsx）
+            content_xlsx = convert_xls_to_xlsx(template_path)
+
         doc_key = f"booking_{order_id}_{int(time.time())}"
         return content_xlsx, doc_key, base64.b64encode(content_xlsx).decode()
 

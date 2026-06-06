@@ -13,9 +13,13 @@ oo_svc = OnlyOfficeService()
 
 
 @router.get("/booking")
-async def generate_booking(order_id: int = Query(...)):
+async def generate_booking(order_id: int = Query(...), template_type: str = Query("xls")):
+    """
+    生成订舱单，支持选择模板格式。
+    template_type: "xls" (默认，使用 .xls 转换) 或 "xlsx" (直接使用 .xlsx)
+    """
     svc = DocumentService()
-    content, doc_key, _ = svc.generate_booking(order_id)
+    content, doc_key, _ = svc.generate_booking(order_id, template_type)
     _save_doc_to_db(doc_key, "booking", content, order_id=order_id)
     jwt_token = oo_svc.generate_jwt_token(doc_key, "xlsx")
     config = oo_svc.build_editor_config(jwt_token, doc_key, "xlsx")

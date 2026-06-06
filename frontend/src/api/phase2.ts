@@ -1,8 +1,8 @@
 import axios from 'axios'
 
 export const phase2Api = {
-  generateBooking(orderId: number) {
-    return axios.get('/api/v1/documents/booking', { params: { order_id: orderId } })
+  generateBooking(orderId: number, templateType: 'xls' | 'xlsx' = 'xls') {
+    return axios.get('/api/v1/documents/booking', { params: { order_id: orderId, template_type: templateType } })
   },
   generateLoi(orderId: number, piNo: string) {
     return axios.get('/api/v1/documents/loi', { params: { order_id: orderId, pi_no: piNo } })

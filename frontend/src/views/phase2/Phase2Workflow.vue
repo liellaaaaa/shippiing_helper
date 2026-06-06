@@ -58,7 +58,7 @@
           type="primary"
           size="small"
           :disabled="!selectedOrderId"
-          @click="openDocument('booking')"
+          @click="showBookingDialog = true"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px">
             <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>
@@ -139,6 +139,29 @@
       </main>
     </div>
 
+    <!-- ── Booking Dialog ────────────────────────── -->
+    <el-dialog
+      v-model="showBookingDialog"
+      title="生成订舱单"
+      width="380px"
+      :append-to-body="true"
+      class="booking-dialog"
+    >
+      <div class="booking-select-row">
+        <label class="booking-label">选择模板格式</label>
+        <el-radio-group v-model="selectedBookingTemplate" size="default">
+          <el-radio value="xlsx">.xlsx 格式（推荐，格式完整）</el-radio>
+          <el-radio value="xls">.xls 格式（兼容旧版）</el-radio>
+        </el-radio-group>
+      </div>
+      <template #footer>
+        <el-button @click="showBookingDialog = false">取消</el-button>
+        <el-button type="primary" @click="confirmGenerateBooking">
+          生成文档
+        </el-button>
+      </template>
+    </el-dialog>
+
     <!-- ── MSDS Dialog ──────────────────────────── -->
     <el-dialog
       v-model="showMsdsDialog"
@@ -198,6 +221,8 @@ const currentConfig = ref<any>({})
 const showMsdsDialog = ref(false)
 const selectedProductForMsds = ref('')
 const showMyDocuments = ref(false)
+const showBookingDialog = ref(false)
+const selectedBookingTemplate = ref<'xls' | 'xlsx'>('xlsx')
 
 // Auto-fill from route query
 if (route.query.orderId) {
@@ -250,14 +275,25 @@ function onOpenMyDoc(doc: any) {
 }
 
 async function openDocument(type: 'booking' | 'loi') {
+  // booking now uses showBookingDialog + confirmGenerateBooking
+  if (type === 'booking') return
   try {
-    const res = type === 'booking'
-      ? await phase2Api.generateBooking(selectedOrderId.value!)
-      : await phase2Api.generateLoi(selectedOrderId.value!, selectedPiNo.value)
+    const res = await phase2Api.generateLoi(selectedOrderId.value!, selectedPiNo.value)
     currentDocKey.value = res.data.documentKey || res.data.docKey
     currentConfig.value = res.data
   } catch (e: any) {
     ElMessage.error('文档生成失败: ' + (e.message || ''))
+  }
+}
+
+async function confirmGenerateBooking() {
+  showBookingDialog.value = false
+  try {
+    const res = await phase2Api.generateBooking(selectedOrderId.value!, selectedBookingTemplate.value)
+    currentDocKey.value = res.data.documentKey || res.data.docKey
+    currentConfig.value = res.data
+  } catch (e: any) {
+    ElMessage.error('订舱单生成失败: ' + (e.message || ''))
   }
 }
 
@@ -393,4 +429,17 @@ onMounted(() => {
   min-width: 64px;
 }
 .msds-select { flex: 1; }
+
+/* ── Booking Dialog ────────────────────────── */
+.booking-select-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 8px 0;
+  flex-direction: column;
+}
+.booking-label {
+  font-size: 13px;
+  color: var(--el-text-color-regular, #606266);
+}
 </style>

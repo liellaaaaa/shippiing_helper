@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, Query, Depends
 from typing import Optional
+from app.models.pi_contract import PiContract, PiContractItem
 from app.services.merge_service import MergeService
 from app.schemas.merge import OrderListResponse, OrderComparisonResponse
 from app.api.deps import get_merge_service
@@ -50,3 +51,43 @@ async def get_order_comparison(
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="订单不存在")
     return result
+
+
+@router.get("/orders/{order_id}/pi-contracts")
+async def get_order_pi_contracts(
+    order_id: int,
+    merge_service: MergeService = Depends(get_merge_service),
+):
+    """
+    获取指定订单关联的所有 PI 合同列表（用于文档编辑时选择 PI）。
+
+    逻辑：从 order_items 的 internal_code 集合，查找所有匹配的 PiContractItem，
+    再去重关联的 PiContract，返回 [{pi_no}, ...] 列表。
+    """
+    from fastapi import HTTPException
+    from app.models.order import Order, OrderItem
+
+    db = merge_service.db
+    order = db.query(Order).filter_by(id=order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="订单不存在")
+
+    items = db.query(OrderItem).filter_by(order_id=order_id).all()
+    if not items:
+        return []
+
+    internal_codes = [item.internal_code for item in items]
+    linked_items = db.query(PiContractItem).filter(
+        PiContractItem.internal_code.in_(internal_codes)
+    ).all()
+
+    # 去重获取 pi_contract_ids
+    pi_contract_ids = set(item.pi_contract_id for item in linked_items)
+    if not pi_contract_ids:
+        return []
+
+    contracts = db.query(PiContract).filter(
+        PiContract.id.in_(pi_contract_ids)
+    ).all()
+
+    return [{"pi_no": c.pi_no, "consignee": c.consignee_name, "destination": c.destination} for c in contracts]

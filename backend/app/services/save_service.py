@@ -41,8 +41,8 @@ class SaveService:
         sales_person = order_d.sales_person
         order_date = order_d.order_date
         delivery_date = order_d.delivery_date
-        order_requirement = order_d.order_requirement
-        notes = order_d.notes
+        order_requirement = order_d.items[0].order_requirement if order_d.items else None
+        notes = order_d.items[0].notes if order_d.items else None
 
         # 包装计算结果（轨道B）- 订单级别汇总
         packaging_json = None

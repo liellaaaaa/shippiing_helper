@@ -559,7 +559,14 @@ onMounted(() => {
 .editor-card {
   border-radius: 12px;
   overflow: hidden;
-  min-height: calc(100vh - 140px);
+  height: calc(100vh - 140px);
+  display: flex;
+  flex-direction: column;
+}
+.editor-card :deep(.el-card__body) {
+  flex: 1;
+  height: 0;
+  padding: 0;
 }
 
 .editor-empty {

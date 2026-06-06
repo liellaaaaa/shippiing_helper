@@ -61,13 +61,38 @@ async def get_order_pi_contracts(
     """
     获取指定订单关联的所有 PI 合同列表（用于文档编辑时选择 PI）。
 
-    逻辑：从 order_items 的 internal_code 集合，查找所有匹配的 PiContractItem，
-    再去重关联的 PiContract，返回 [{pi_no}, ...] 列表。
+    order_id 可能是 Order.id 或 OrderPiRecord.id（来自 Dashboard）；
+    若传入的是 OrderPiRecord.id，则通过 order_no 查找所有 PI 合同。
     """
     from fastapi import HTTPException
     from app.models.order import Order, OrderItem
+    from app.models.order_pi_record import OrderPiRecord
 
     db = merge_service.db
+
+    # 优先：order_id 可能是 OrderPiRecord.id（来自 Dashboard）
+    record = db.query(OrderPiRecord).filter(OrderPiRecord.id == order_id).first()
+    if record:
+        # 用 order_no 找出所有 OrderPiRecord，再找对应的 internal_codes
+        all_records = db.query(OrderPiRecord).filter(
+            OrderPiRecord.order_no == record.order_no
+        ).all()
+        internal_codes = list(set(r.internal_code for r in all_records if r.internal_code))
+        if not internal_codes:
+            return []
+        # 查这些 internal_code 对应的 PiContractItem
+        from app.models.pi_contract import PiContractItem, PiContract
+        pi_items = db.query(PiContractItem).filter(
+            PiContractItem.internal_code.in_(internal_codes)
+        ).all()
+        pi_contract_ids = list(set(item.pi_contract_id for item in pi_items))
+        pi_contracts = db.query(PiContract).filter(PiContract.id.in_(pi_contract_ids)).all()
+        return [
+            {"pi_no": pc.pi_no, "consignee": pc.consignee_name, "destination": pc.destination}
+            for pc in pi_contracts
+        ]
+
+    # 回退：按原始 Order.id 查找
     order = db.query(Order).filter_by(id=order_id).first()
     if not order:
         raise HTTPException(status_code=404, detail="订单不存在")

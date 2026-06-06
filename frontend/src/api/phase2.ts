@@ -2,42 +2,42 @@ import axios from 'axios'
 
 export const phase2Api = {
   generateBooking(orderId: number) {
-    return axios.get('/documents/booking', { params: { order_id: orderId } })
+    return axios.get('/api/v1/documents/booking', { params: { order_id: orderId } })
   },
   generateLoi(orderId: number, piNo: string) {
-    return axios.get('/documents/loi', { params: { order_id: orderId, pi_no: piNo } })
+    return axios.get('/api/v1/documents/loi', { params: { order_id: orderId, pi_no: piNo } })
   },
   generateMsds(product: string) {
-    return axios.get('/documents/msds', { params: { product } })
+    return axios.get('/api/v1/documents/msds', { params: { product } })
   },
   getDocHistory(orderId: number) {
-    return axios.get(`/documents/history/${orderId}`)
+    return axios.get(`/api/v1/documents/history/${orderId}`)
   },
   listMsds(params: { page?: number; pageSize?: number; search?: string }) {
-    return axios.get('/msds', { params })
+    return axios.get('/api/v1/msds', { params })
   },
   getMsdsContent(id: number) {
-    return axios.get(`/msds/${id}/content`)
+    return axios.get(`/api/v1/msds/${id}/content`)
   },
   reindexMsds() {
-    return axios.post('/msds/reindex')
+    return axios.post('/api/v1/msds/reindex')
   },
   uploadTransportReport(file: File) {
     const formData = new FormData()
     formData.append('file', file)
-    return axios.post('/transport/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
+    return axios.post('/api/v1/transport/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
   },
   getExportCodes(internalCode: string) {
-    return axios.get('/export-codes', { params: { internal_code: internalCode } })
+    return axios.get('/api/v1/export-codes', { params: { internal_code: internalCode } })
   },
   getJwt(documentKey: string, fileType: string) {
-    return axios.post('/onlyoffice/jwt', null, { params: { documentKey, fileType } })
+    return axios.post('/api/v1/onlyoffice/jwt', null, { params: { documentKey, fileType } })
   },
   openBlankTemplate(type: 'booking' | 'loi' | 'msds') {
-    return axios.get(`/documents/template/${type}`)
+    return axios.get(`/api/v1/documents/template/${type}`)
   },
   listMyTemplates() {
-    return axios.get('/documents/my-templates')
+    return axios.get('/api/v1/documents/my-templates')
   },
 
   // ── 数据中心 ───────────────────────────────────────────────

@@ -238,7 +238,13 @@
               </div>
             </template>
             <div class="recent-docs">
-              <div class="recent-hint">点击左侧"我的模板"查看所有已保存的模板</div>
+              <div class="empty-icon">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#d0d5dd" stroke-width="1.5">
+                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                </svg>
+              </div>
+              <div class="recent-hint">暂无已保存的模板</div>
+              <el-button type="primary" plain size="small" @click="showMyDocuments = true" style="margin-top: 8px;">浏览模板库</el-button>
             </div>
           </el-card>
 
@@ -624,75 +630,96 @@ onMounted(() => {
 .editor-panel {
   display: flex;
   flex-direction: column;
+  min-height: calc(100vh - 140px);
 }
 
 /* Workspace (no document open) */
 .workspace {
   display: flex;
   flex-direction: column;
+  flex: 1;
+  gap: 12px;
 }
-.preview-card {
+.workspace .preview-card {
   border-radius: 8px;
+  border: 1px solid var(--el-border-color-light, #e4e7ed);
+  background: var(--el-fill-color, #fff);
 }
-:deep(.preview-card .el-card__header) {
-  padding: 10px 14px;
+:deep(.workspace .preview-card .el-card__header) {
+  padding: 12px 16px;
+  background: var(--el-fill-color-light, #f5f7fa);
+  border-bottom: 1px solid var(--el-border-color-light, #e4e7ed);
 }
-:deep(.preview-card .el-card__body) {
-  padding: 12px 14px;
+:deep(.workspace .preview-card .el-card__body) {
+  padding: 16px;
 }
 
 .workspace-actions {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
+  gap: 12px;
 }
 .ws-btn {
-  height: 60px;
-  font-size: 13px;
+  height: 72px;
+  font-size: 14px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  border-radius: 6px;
+  gap: 8px;
+  border-radius: 8px;
+  font-weight: 500;
 }
 
 .recent-hint {
-  font-size: 12px;
+  font-size: 13px;
   color: #909399;
   text-align: center;
-  padding: 12px 0;
+  padding: 8px 0 4px 0;
 }
-
-/* Template field reference */
-.ref-table {
+.empty-icon {
+  display: flex;
+  justify-content: center;
+  padding: 12px 0 4px 0;
+}
+.recent-docs {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  align-items: center;
 }
-.ref-row {
-  display: grid;
-  grid-template-columns: 140px 1fr;
+
+/* Template field reference (workspace version) */
+.workspace .ref-table {
+  display: flex;
+  flex-direction: column;
   gap: 8px;
-  font-size: 12px;
-  align-items: start;
 }
-.ref-row.ref-header {
+.workspace .ref-row {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 12px;
+  font-size: 13px;
+  align-items: center;
+}
+.workspace .ref-row.ref-header {
   font-weight: 600;
   color: #909399;
   border-bottom: 1px solid var(--el-border-color-light, #e4e7ed);
-  padding-bottom: 4px;
+  padding-bottom: 6px;
+  font-size: 12px;
 }
-.field-code {
+.workspace .field-code {
   font-family: 'JetBrains Mono', monospace;
   color: var(--el-color-primary, #409eff);
   background: var(--el-fill-color-light, #f5f7fa);
-  padding: 1px 6px;
-  border-radius: 3px;
-  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
 }
-.field-desc {
+.workspace .field-desc {
   color: #606266;
+  font-size: 13px;
 }
 
 /* Document workspace (editor open) */

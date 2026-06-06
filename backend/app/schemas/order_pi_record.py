@@ -60,6 +60,8 @@ class SaveRecordRequest(BaseModel):
     order_data: OrderData
     pi_data: Optional[PiData] = None
     packaging_result: Optional[PackagingResult] = None
+    # Per-product packaging items (from PackagingCalculator rows)
+    packaging_items: Optional[list[dict]] = None  # [{internal_code, drums, pallets, gross_weight_kg, volume_cbm, ...}]
 
 
 class SaveRecordResponse(BaseModel):

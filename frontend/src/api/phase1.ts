@@ -59,6 +59,7 @@ export interface SaveRecordRequest {
   order_data: OrderData
   pi_data?: PiData
   packaging_result?: PackagingResult
+  packaging_items?: any[]
 }
 
 export interface SaveRecordResponse {

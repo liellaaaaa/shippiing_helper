@@ -365,10 +365,14 @@ async function handleConfirmSave() {
       no_pallet: false,
     } : undefined
 
+    // 获取每产品各自的包装计算结果
+    const packaging_items = calcRef.value?.getRows() || []
+
     const resp = await saveOrderPiRecord({
       order_data: orderData,
       pi_data: piData,
       packaging_result,
+      packaging_items,
     })
 
     savedOrderId.value = resp.record_id

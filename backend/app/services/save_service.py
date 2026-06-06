@@ -29,10 +29,15 @@ class SaveService:
         - order_data: 外贸销售订单表（粘贴/上传），含多产品 items
         - pi_data: PI合同文件（上传解析）
         - packaging_result: 包装计算模块输出（订单级别汇总）
+        - packaging_items: 每个产品各自的包装计算结果（来自 PackagingCalculator rows）
         """
         order_d = request.order_data
         pi_d = request.pi_data
         pkg = request.packaging_result
+        packaging_items = request.packaging_items or []
+
+        # 构建 internal_code -> packaging_item 的映射
+        pkg_by_code: dict[str, dict] = {item.get('internal_code') or item.get('product_name'): item for item in packaging_items}
 
         # ── 公共字段（订单头） ──
         order_no = order_d.order_no
@@ -120,8 +125,28 @@ class SaveService:
                 record.pi_no = pi_d.pi_no
                 record.pi_date = pi_d.pi_date
 
-            # ── 包装计算结果（轨道B） ──
-            if pkg:
+            # ── 包装计算结果（轨道B）—— 优先使用 per-product 数据 ──
+            item_pkg = pkg_by_code.get(item.internal_code)
+            if item_pkg:
+                # 使用每个产品各自的包装计算结果
+                record.drum_count = item_pkg.get('drums')
+                record.pallet_count = item_pkg.get('pallets')
+                record.drums_per_pallet = item_pkg.get('drums_per_pallet')
+                record.net_weight_kg = item_pkg.get('net_weight_kg')
+                record.gross_weight_kg = item_pkg.get('gross_weight_kg')
+                record.volume_cbm = item_pkg.get('volume_cbm')
+                record.fits_20gp = item_pkg.get('fits_20gp')
+                record.pallet_spec = item_pkg.get('pallet_spec')
+                # 按名称查找 packaging_type_id
+                pkg_type_name = item_pkg.get('packaging_name')
+                if pkg_type_name:
+                    pkg_type = self.db.query(PackagingType).filter(
+                        PackagingType.name == pkg_type_name
+                    ).first()
+                    if pkg_type:
+                        record.packaging_type_id = pkg_type.id
+            elif pkg:
+                # 回退到订单级别汇总（兼容旧数据）
                 record.drum_count = pkg.drums
                 record.pallet_count = pkg.pallets
                 record.drums_per_pallet = pkg.drums_per_pallet
@@ -131,7 +156,6 @@ class SaveService:
                 record.fits_20gp = pkg.fits_20gp
                 record.packaging_result_json = packaging_json
                 record.pallet_spec = pkg.pallet_spec
-                # 查找 packaging_type_id（按名称匹配）
                 pkg_type = self.db.query(PackagingType).filter(
                     PackagingType.name == pkg.packaging_type
                 ).first()

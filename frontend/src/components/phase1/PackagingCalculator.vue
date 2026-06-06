@@ -237,6 +237,23 @@ function getSummary() {
   return summary.value
 }
 
+function getRows() {
+  // 返回每行的包装计算结果，供保存时使用
+  return rows.value.map(r => ({
+    product_name: r.product_name,
+    internal_code: r.product_name,  // 暂用 product_name 作为 internal_code 的匹配键
+    packaging_name: r.packaging_name,
+    pallet_spec: r.pallet_spec,
+    drums: r.drums,
+    pallets: r.pallets,
+    drums_per_pallet: r.drums_per_pallet,
+    net_weight_kg: 0,  // 从包装类型中获取
+    gross_weight_kg: r.total_weight_kg,
+    volume_cbm: r.total_cbm,
+    fits_20gp: r.fits_20gp ? '适合' : '超出',
+  }))
+}
+
 // Task 3D: Backward compatibility functions for parent component
 function setQuantity(kg: number) {
   if (rows.value.length > 0) {
@@ -254,7 +271,7 @@ function selectPackage(name: string) {
 }
 
 // Task 3D: Update defineExpose
-defineExpose({ addRow, clearRows, setQuantity, selectPackage, getSummary })
+defineExpose({ addRow, clearRows, setQuantity, selectPackage, getSummary, getRows })
 </script>
 
 <style scoped>

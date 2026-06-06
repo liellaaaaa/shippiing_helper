@@ -2,21 +2,34 @@ import axios from 'axios'
 
 const BASE_URL = '/api/v1/dashboard'
 
+export interface DashboardProduct {
+  id: number
+  internal_code: string
+  product_cn: string
+  product_en: string
+  spec_kg: number | null
+  quantity_kg: number | null
+  unit_price: number | null
+  total_amount: number | null
+  hs_code: string
+  customs_name: string
+  drum_count: number | null
+  pallet_count: number | null
+  gross_weight_kg: number | null
+  volume_cbm: number | null
+  fits_20gp: string
+}
+
 export interface DashboardOrder {
   order_id: number
   order_no: string
-  customer_code?: string
-  salesperson?: string
-  internal_code: string
-  product_cn?: string
-  order_quantity?: number
-  order_unit_price?: number
-  order_total?: number
-  pi_quantity?: number
-  pi_unit_price?: number
-  pi_total?: number
-  association_status: 'full' | 'partial' | 'none'
-  diff_status: string
+  customer_code: string
+  salesperson: string
+  pi_no: string
+  status: string
+  created_at: string | null
+  products: DashboardProduct[]
+  product_count: number
 }
 
 export interface DashboardResponse {
@@ -34,6 +47,10 @@ export const getDashboardOrders = async (params: {
 }): Promise<DashboardResponse> => {
   const response = await axios.get<DashboardResponse>(`${BASE_URL}/orders`, { params })
   return response.data
+}
+
+export const deleteDashboardOrder = async (recordId: number) => {
+  await axios.delete(`${BASE_URL}/records/${recordId}`)
 }
 
 export const exportDashboardExcel = (params?: {

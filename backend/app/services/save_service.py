@@ -195,3 +195,85 @@ class SaveService:
         record.status = "confirmed"
         self.db.commit()
         return True
+
+    def query_orders_grouped(
+        self,
+        search: Optional[str] = None,
+        page: int = 1,
+        page_size: int = 20,
+    ):
+        """
+        查询落库记录，按 order_no 分组。
+        返回订单列表（含产品数组），用于数据看板可展开行。
+        """
+        # 先查满足条件的 order_no 列表（去重）
+        order_query = self.db.query(OrderPiRecord.order_no).distinct()
+        if search:
+            pattern = f"%{search}%"
+            order_query = order_query.filter(
+                (OrderPiRecord.order_no.like(pattern)) |
+                (OrderPiRecord.customer_code.like(pattern)) |
+                (OrderPiRecord.pi_no.like(pattern))
+            )
+        total = order_query.count()
+        offset = (page - 1) * page_size
+        order_nos = [
+            r[0] for r in
+            order_query.order_by(OrderPiRecord.created_at.desc())
+            .offset(offset).limit(page_size).all()
+        ]
+
+        # 再查每个订单下的产品
+        orders = []
+        for ono in order_nos:
+            items = self.db.query(OrderPiRecord).filter(
+                OrderPiRecord.order_no == ono
+            ).order_by(OrderPiRecord.internal_code).all()
+            first = items[0]
+            orders.append({
+                "order_id": first.id,
+                "order_no": ono,
+                "customer_code": first.customer_code or "",
+                "salesperson": first.sales_person or "",
+                "pi_no": first.pi_no or "",
+                "status": first.status,
+                "created_at": first.created_at.isoformat() if first.created_at else None,
+                "products": [
+                    {
+                        "id": r.id,
+                        "internal_code": r.internal_code or "",
+                        "product_cn": r.product_cn or "",
+                        "product_en": r.product_en or "",
+                        "spec_kg": r.spec_kg,
+                        "quantity_kg": r.quantity_kg,
+                        "unit_price": r.unit_price,
+                        "total_amount": r.total_amount,
+                        "hs_code": r.hs_code or "",
+                        "customs_name": r.customs_name or "",
+                        "drum_count": r.drum_count,
+                        "pallet_count": r.pallet_count,
+                        "gross_weight_kg": r.gross_weight_kg,
+                        "volume_cbm": r.volume_cbm,
+                        "fits_20gp": r.fits_20gp or "",
+                    }
+                    for r in items
+                ],
+                "product_count": len(items),
+            })
+
+        return {
+            "orders": orders,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+        }
+
+    def delete_order_by_record_id(self, record_id: int) -> bool:
+        """删除订单（按任意产品ID），级联删除该订单号下所有产品记录。"""
+        record = self.db.query(OrderPiRecord).filter(OrderPiRecord.id == record_id).first()
+        if not record:
+            return False
+        order_no = record.order_no
+        self.db.query(OrderPiRecord).filter(OrderPiRecord.order_no == order_no).delete()
+        self.db.commit()
+        return True

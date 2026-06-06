@@ -23,49 +23,21 @@ async def get_dashboard_orders(
     search: Optional[str] = Query(None, description="模糊搜索：订单号 / 客户编码 / PI号"),
     status: Optional[str] = Query(None, description="状态筛选：pending / confirmed"),
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=200),
+    page_size: int = Query(20, ge=1, le=200),
     save_service: SaveService = Depends(get_save_service),
 ):
     """
-    获取数据看板合并数据（支持分页和筛选）。
+    获取数据看板合并数据（按订单分组，支持分页和筛选）。
 
-    直接查询 order_pi_records 表（落库合并数据），返回格式与旧接口兼容。
-    diff_status 统一为 "一致"（落库数据已是合并结果，无差异），
-    association_status 统一为 "full"（落库即已确认关联）。
+    直接查询 order_pi_records 表（落库合并数据），按 order_no 分组，
+    每个订单一行，展开后显示多个产品。
     """
-    result = save_service.query_records(
-        status=status,
+    result = save_service.query_orders_grouped(
         search=search,
         page=page,
         page_size=page_size,
     )
-
-    # 字段映射为旧 DashboardOrder 格式
-    rows = []
-    for r in result.records:
-        rows.append({
-            "order_id": r.id,
-            "order_no": r.order_no or "",
-            "customer_code": r.customer_code or "",
-            "salesperson": r.sales_person or "",
-            "internal_code": r.internal_code or "",
-            "product_cn": r.product_cn or "",
-            "order_quantity": r.quantity_kg,
-            "order_unit_price": None,
-            "order_total": None,
-            "pi_quantity": None,
-            "pi_unit_price": None,
-            "pi_total": None,
-            "association_status": "full",
-            "diff_status": "一致",
-        })
-
-    return {
-        "orders": rows,
-        "total": result.total,
-        "page": result.page,
-        "page_size": result.page_size,
-    }
+    return result
 
 
 @router.get("/export")
@@ -188,3 +160,17 @@ async def get_order_pi_record(
     if not record:
         raise HTTPException(status_code=404, detail="记录不存在")
     return record
+
+
+@router.delete("/records/{record_id}", summary="删除订单（含所有产品）")
+async def delete_order_record(
+    record_id: int,
+    save_service: SaveService = Depends(get_save_service),
+):
+    """
+    删除订单（按任意产品ID），级联删除该订单号下所有产品记录。
+    """
+    success = save_service.delete_order_by_record_id(record_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="记录不存在")
+    return {"message": "删除成功", "deleted": True}

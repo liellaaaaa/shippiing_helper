@@ -19,22 +19,6 @@
             <el-button icon="Search" @click="handleSearch" />
           </template>
         </el-input>
-
-        <el-select
-          v-model="selectedStatuses"
-          multiple
-          placeholder="关联状态筛选"
-          collapse-tags
-          collapse-tags-tooltip
-          class="status-filter"
-        >
-          <el-option
-            v-for="s in statusOptions"
-            :key="s.value"
-            :label="s.label"
-            :value="s.value"
-          />
-        </el-select>
       </div>
 
       <div class="toolbar-right">
@@ -55,113 +39,119 @@
       v-loading="loading"
       row-key="order_id"
       class="data-table"
+      :expand-row-keys="expandedRows"
+      @expand-change="onExpandChange"
     >
+      <el-table-column type="expand" width="50">
+        <template #default="{ row }">
+          <div class="product-expand">
+            <div class="expand-header">
+              <span class="expand-col">内部编码</span>
+              <span class="expand-col">产品名称</span>
+              <span class="expand-col">规格kg</span>
+              <span class="expand-col">数量kg</span>
+              <span class="expand-col">单价</span>
+              <span class="expand-col">金额</span>
+              <span class="expand-col">H.S.Code</span>
+              <span class="expand-col">报关品名</span>
+              <span class="expand-col">桶数</span>
+              <span class="expand-col">托数</span>
+              <span class="expand-col">毛重kg</span>
+              <span class="expand-col">体积CBM</span>
+              <span class="expand-col">20GP</span>
+            </div>
+            <div
+              v-for="p in row.products"
+              :key="p.id"
+              class="expand-row"
+            >
+              <span class="expand-col mono">{{ p.internal_code }}</span>
+              <span class="expand-col">{{ p.product_cn }}</span>
+              <span class="expand-col">{{ p.spec_kg ?? '-' }}</span>
+              <span class="expand-col">{{ p.quantity_kg ?? '-' }}</span>
+              <span class="expand-col">{{ p.unit_price != null ? p.unit_price.toFixed(2) : '-' }}</span>
+              <span class="expand-col">{{ p.total_amount != null ? p.total_amount.toFixed(2) : '-' }}</span>
+              <span class="expand-col mono">{{ p.hs_code || '-' }}</span>
+              <span class="expand-col">{{ p.customs_name || '-' }}</span>
+              <span class="expand-col">{{ p.drum_count ?? '-' }}</span>
+              <span class="expand-col">{{ p.pallet_count ?? '-' }}</span>
+              <span class="expand-col">{{ p.gross_weight_kg != null ? p.gross_weight_kg.toFixed(1) : '-' }}</span>
+              <span class="expand-col">{{ p.volume_cbm != null ? p.volume_cbm.toFixed(3) : '-' }}</span>
+              <span class="expand-col">
+                <el-tag v-if="p.fits_20gp" :type="p.fits_20gp === '适合' ? 'success' : 'danger'" size="small">
+                  {{ p.fits_20gp }}
+                </el-tag>
+                <span v-else>-</span>
+              </span>
+            </div>
+          </div>
+        </template>
+      </el-table-column>
+
       <el-table-column prop="order_no" label="订单号" width="140" fixed />
       <el-table-column prop="customer_code" label="客户编码" width="120" />
       <el-table-column prop="salesperson" label="业务员" width="100" />
-      <el-table-column prop="internal_code" label="内部编码" width="120" />
-      <el-table-column prop="product_cn" label="产品名称" width="160" />
-      <el-table-column prop="order_quantity" label="订单数量" width="100" align="right">
+      <el-table-column prop="pi_no" label="PI号" width="120" />
+      <el-table-column prop="product_count" label="产品数" width="80" align="center">
         <template #default="{ row }">
-          {{ row.order_quantity ?? '-' }}
+          <el-tag type="info" size="small">{{ row.product_count }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="pi_quantity" label="PI 数量" width="100" align="right">
+      <el-table-column label="操作" width="100" fixed="right">
         <template #default="{ row }">
-          {{ row.pi_quantity ?? '-' }}
-        </template>
-      </el-table-column>
-      <el-table-column prop="diff_status" label="差异状态" width="120">
-        <template #default="{ row }">
-          <el-tag :type="diffStatusType(row.diff_status)" size="small">
-            {{ row.diff_status }}
-          </el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column prop="association_status" label="关联状态" width="100">
-        <template #default="{ row }">
-          <el-tooltip :content="getStatusTip(row.association_status)" placement="top">
-            <el-tag :type="statusType(row.association_status)" size="small">
-              {{ statusLabel(row.association_status) }}
-            </el-tag>
-          </el-tooltip>
+          <el-button
+            type="danger"
+            link
+            size="small"
+            icon="Delete"
+            @click.stop="handleDelete(row)"
+          >
+            删除
+          </el-button>
         </template>
       </el-table-column>
     </el-table>
 
-    <!-- 分页 -->
+    <!-- 分页 + 每页条数 -->
     <div class="pagination-wrapper no-print">
       <el-pagination
         v-model:current-page="currentPage"
-        :page-size="pageSize"
+        v-model:page-size="pageSize"
+        :page-sizes="[10, 20, 50]"
         :total="total"
-        layout="total, prev, pager, next"
+        layout="total, sizes, prev, pager, next"
         @current-change="loadData"
+        @size-change="handleSizeChange"
       />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
-import { getDashboardOrders, exportDashboardExcel, type DashboardOrder } from '@/api/dashboard'
+import { ref, onMounted } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { getDashboardOrders, deleteDashboardOrder, type DashboardOrder } from '@/api/dashboard'
 
 const searchText = ref('')
-const selectedStatuses = ref<string[]>([])
 const orderList = ref<DashboardOrder[]>([])
 const loading = ref(false)
 const currentPage = ref(1)
-const pageSize = ref(50)
+const pageSize = ref(20)
 const total = ref(0)
-
-const statusOptions = [
-  { label: '已关联', value: 'full' },
-  { label: '部分关联', value: 'partial' },
-  { label: '未关联', value: 'none' },
-]
-
-const statusType = (status: string) => {
-  if (status === 'full') return 'success'
-  if (status === 'partial') return 'warning'
-  return 'danger'
-}
-
-const statusLabel = (status: string) => {
-  if (status === 'full') return '已关联'
-  if (status === 'partial') return '部分关联'
-  return '未关联'
-}
-
-const getStatusTip = (status: string) => {
-  if (status === 'none') return '此订单没有任何产品匹配 PI，需要补充 PI 数据'
-  if (status === 'partial') return '此订单部分产品未匹配 PI 或存在数据差异'
-  return '此订单所有产品均已匹配 PI，数据一致'
-}
-
-const diffStatusType = (status: string) => {
-  if (status === '一致') return 'success'
-  if (status === 'PI未覆盖') return 'warning'
-  return 'danger'
-}
-
-const buildStatusParam = () => {
-  if (selectedStatuses.value.length === 0) return undefined
-  return selectedStatuses.value.join(",")
-}
+const expandedRows = ref<number[]>([])
 
 const loadData = async () => {
   loading.value = true
   try {
     const response = await getDashboardOrders({
       search: searchText.value || undefined,
-      status: buildStatusParam(),
       page: currentPage.value,
       page_size: pageSize.value,
     })
     orderList.value = response.orders
     total.value = response.total
   } catch (error) {
-    console.error('Failed to load dashboard data:', error)
+    ElMessage.error('加载数据失败')
   } finally {
     loading.value = false
   }
@@ -169,19 +159,42 @@ const loadData = async () => {
 
 const handleSearch = () => {
   currentPage.value = 1
+  expandedRows.value = []
   loadData()
 }
 
-watch(selectedStatuses, () => {
+const handleSizeChange = () => {
   currentPage.value = 1
+  expandedRows.value = []
   loadData()
-})
+}
+
+const onExpandChange = (row: DashboardOrder, expanded: boolean[]) => {
+  expandedRows.value = expanded.length
+    ? [row.order_id]
+    : []
+}
+
+const handleDelete = (row: DashboardOrder) => {
+  ElMessageBox.confirm(
+    `确定删除订单「${row.order_no}」及其所有产品吗？此操作不可撤销。`,
+    '删除确认',
+    { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
+  ).then(async () => {
+    try {
+      await deleteDashboardOrder(row.order_id)
+      ElMessage.success('删除成功')
+      loadData()
+    } catch {
+      ElMessage.error('删除失败')
+    }
+  }).catch(() => {})
+}
 
 const handleExportExcel = () => {
   const params: any = {}
   if (searchText.value) params.search = searchText.value
-  if (buildStatusParam()) params.status = buildStatusParam()
-  exportDashboardExcel(params)
+  window.location.href = `/api/v1/dashboard/export${searchText.value ? '?search=' + encodeURIComponent(searchText.value) : ''}`
 }
 
 const handlePrintPreview = () => {
@@ -203,32 +216,48 @@ onMounted(() => {
 .toolbar-left { display: flex; gap: 12px; align-items: center; }
 .toolbar-right { display: flex; gap: 8px; }
 .search-input { width: 240px; }
-.status-filter { width: 180px; }
 
 .data-table { margin-bottom: 16px; }
+
+/* 可展开产品区域 */
+.product-expand {
+  padding: 8px 0;
+  background: #fafafa;
+}
+.expand-header {
+  display: grid;
+  grid-template-columns: 100px 1fr 70px 80px 70px 90px 80px 100px 60px 60px 80px 80px 70px;
+  gap: 0;
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #909399;
+  border-bottom: 1px solid #eee;
+  margin-bottom: 4px;
+}
+.expand-row {
+  display: grid;
+  grid-template-columns: 100px 1fr 70px 80px 70px 90px 80px 100px 60px 60px 80px 80px 70px;
+  gap: 0;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: #606266;
+  border-bottom: 1px solid #f0f0f0;
+}
+.expand-row:last-child { border-bottom: none; }
+.expand-col { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.expand-col.mono { font-family: 'JetBrains Mono', monospace; font-size: 11px; }
 
 .pagination-wrapper { display: flex; justify-content: flex-end; }
 
 /* 打印样式 */
 @media print {
-  .toolbar { display: none !important; }
-  .no-print { display: none !important; }
+  .toolbar, .no-print { display: none !important; }
   .page-header { margin-bottom: 12px; }
   .page-title { font-size: 20px; }
   .page-subtitle { display: none; }
-
-  .data-table {
-    width: 100%;
-    page-break-inside: avoid;
-  }
-
-  :deep(.el-table__header-wrapper) {
-    display: table-row-group;
-  }
-
-  @page {
-    size: landscape;
-    margin: 1cm;
-  }
+  .data-table { width: 100%; page-break-inside: avoid; }
+  :deep(.el-table__header-wrapper) { display: table-row-group; }
+  @page { size: landscape; margin: 1cm; }
 }
 </style>

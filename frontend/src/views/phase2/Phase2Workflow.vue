@@ -28,7 +28,7 @@
             <el-option
               v-for="o in orderList"
               :key="o.id"
-              :label="`${o.order_no} · ${o.customer_code}`"
+              :label="o.order_no + ' · ' + o.customer_code"
               :value="o.id"
             />
           </el-select>
@@ -107,11 +107,95 @@
       </div>
     </header>
 
-    <!-- ── Main ──────────────────────────────── -->
-    <div class="main">
-      <!-- Left: Reference Panel -->
-      <aside class="ref-panel">
-        <ReferencePanel :order-id="selectedOrderId" />
+    <!-- ── Main Layout: Left Info + Right Editor ── -->
+    <div class="main-layout">
+      <!-- Left: Info Panel -->
+      <aside class="info-panel">
+        <el-card class="info-card" shadow="never">
+          <template #header>
+            <div class="card-header">
+              <span class="card-title">订单信息</span>
+              <el-tag v-if="currentOrderInfo.order_no" type="success" size="small">已选</el-tag>
+            </div>
+          </template>
+          <div class="info-rows">
+            <div class="info-row">
+              <span class="info-label">发货人</span>
+              <span class="info-value">HONGHAO CHEMICAL CO., LTD.</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">收货人</span>
+              <el-input v-if="selectedOrderId" v-model="currentOrderInfo.consignee" size="small" placeholder="可编辑" />
+              <span v-else class="info-value muted">—</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">通知人</span>
+              <el-input v-if="selectedOrderId" v-model="currentOrderInfo.notify" size="small" placeholder="可编辑" />
+              <span v-else class="info-value muted">—</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">卸货港</span>
+              <el-input v-if="selectedOrderId" v-model="currentOrderInfo.port" size="small" placeholder="可编辑" />
+              <span v-else class="info-value muted">—</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">品名中文</span>
+              <el-input v-if="selectedOrderId" v-model="currentOrderInfo.product_cn" size="small" placeholder="可编辑" />
+              <span v-else class="info-value muted">—</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">品名英文</span>
+              <el-input v-if="selectedOrderId" v-model="currentOrderInfo.product_en" size="small" placeholder="可编辑" />
+              <span v-else class="info-value muted">—</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">H.S.Code</span>
+              <el-input v-if="selectedOrderId" v-model="currentOrderInfo.hs_code" size="small" placeholder="可编辑" />
+              <span v-else class="info-value muted">—</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">毛重</span>
+              <el-input v-if="selectedOrderId" v-model="currentOrderInfo.gross_weight" size="small" placeholder="可编辑">
+                <template #append>kg</template>
+              </el-input>
+              <span v-else class="info-value muted">— kg</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">体积(CBM)</span>
+              <el-input v-if="selectedOrderId" v-model="currentOrderInfo.volume" size="small" placeholder="可编辑">
+                <template #append>m³</template>
+              </el-input>
+              <span v-else class="info-value muted">— m³</span>
+            </div>
+          </div>
+        </el-card>
+
+        <!-- Template Fields Reference -->
+        <el-card class="info-card ref-card" shadow="never" style="margin-top: 12px;">
+          <template #header>
+            <div class="card-header">
+              <span class="card-title">模板字段参考</span>
+            </div>
+          </template>
+          <div class="ref-table">
+            <div class="ref-row ref-header">
+              <span>字段名</span>
+              <span>含义</span>
+            </div>
+            <div class="ref-row">
+              <code class="field-code">{{ 'MARK_SHIPPER' }}</code>
+              <span class="field-desc">发货人 — 发货人公司名称</span>
+            </div>
+            <div class="ref-row">
+              <code class="field-code">{{ 'MARK_PORT' }}</code>
+              <span class="field-desc">卸货港 — 目的港/卸货港</span>
+            </div>
+            <div class="ref-row">
+              <code class="field-code">{{ 'MARK_GOODS_TABLE' }}</code>
+              <span class="field-desc">货物明细表 — 品名/规格/毛重/体积表格起始位</span>
+            </div>
+          </div>
+        </el-card>
       </aside>
 
       <!-- Right: Document Editor -->
@@ -140,13 +224,7 @@
     </div>
 
     <!-- ── Booking Dialog ────────────────────────── -->
-    <el-dialog
-      v-model="showBookingDialog"
-      title="生成订舱单"
-      width="380px"
-      :append-to-body="true"
-      class="booking-dialog"
-    >
+    <el-dialog v-model="showBookingDialog" title="生成订舱单" width="380px" :append-to-body="true" class="booking-dialog">
       <div class="booking-select-row">
         <label class="booking-label">选择模板格式</label>
         <el-radio-group v-model="selectedBookingTemplate" size="default">
@@ -156,42 +234,21 @@
       </div>
       <template #footer>
         <el-button @click="showBookingDialog = false">取消</el-button>
-        <el-button type="primary" @click="confirmGenerateBooking">
-          生成文档
-        </el-button>
+        <el-button type="primary" @click="confirmGenerateBooking">生成文档</el-button>
       </template>
     </el-dialog>
 
     <!-- ── MSDS Dialog ──────────────────────────── -->
-    <el-dialog
-      v-model="showMsdsDialog"
-      title="生成 MSDS"
-      width="440px"
-      :append-to-body="true"
-      class="msds-dialog"
-    >
+    <el-dialog v-model="showMsdsDialog" title="生成 MSDS" width="440px" :append-to-body="true" class="msds-dialog">
       <div class="msds-select-row">
         <label class="msds-label">选择产品</label>
-        <el-select
-          v-model="selectedProductForMsds"
-          placeholder="从当前订单选择产品"
-          size="default"
-          class="msds-select"
-          clearable
-        >
-          <el-option
-            v-for="item in currentOrderItems"
-            :key="item.internal_code"
-            :label="item.product_cn"
-            :value="item.product_cn"
-          />
+        <el-select v-model="selectedProductForMsds" placeholder="从当前订单选择产品" size="default" class="msds-select" clearable>
+          <el-option v-for="item in currentOrderItems" :key="item.internal_code" :label="item.product_cn" :value="item.product_cn" />
         </el-select>
       </div>
       <template #footer>
         <el-button @click="showMsdsDialog = false">取消</el-button>
-        <el-button type="primary" @click="generateMsds" :disabled="!selectedProductForMsds">
-          生成文档
-        </el-button>
+        <el-button type="primary" @click="generateMsds" :disabled="!selectedProductForMsds">生成文档</el-button>
       </template>
     </el-dialog>
 
@@ -202,7 +259,6 @@
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import ReferencePanel from './components/ReferencePanel.vue'
 import DocumentEditor from './components/DocumentEditor.vue'
 import MyDocumentsDrawer from './components/MyDocumentsDrawer.vue'
 import { ArrowDown } from '@element-plus/icons-vue'
@@ -224,7 +280,20 @@ const showMyDocuments = ref(false)
 const showBookingDialog = ref(false)
 const selectedBookingTemplate = ref<'xls' | 'xlsx'>('xlsx')
 
-// Auto-fill from route query
+// Editable order info fields
+const currentOrderInfo = ref({
+  order_no: '',
+  customer_code: '',
+  consignee: '',
+  notify: '',
+  port: '',
+  product_cn: '',
+  product_en: '',
+  hs_code: '',
+  gross_weight: '',
+  volume: '',
+})
+
 if (route.query.orderId) {
   selectedOrderId.value = Number(route.query.orderId)
 }
@@ -241,41 +310,30 @@ async function onOrderChange(orderId: number) {
     const data = await getOrderComparison(orderId)
     currentOrderItems.value = data.items || []
     if (data.pi_no) selectedPiNo.value = data.pi_no
-    // Build PI list from all PI contracts linked to this order
     const pis = await getOrderPiContracts(orderId)
     piList.value = pis
-    // Auto-select first PI if available
     if (pis.length > 0 && !selectedPiNo.value) {
       selectedPiNo.value = pis[0].pi_no
+    }
+    // Populate editable fields
+    currentOrderInfo.value = {
+      order_no: data.order_no || '',
+      customer_code: data.customer_code || '',
+      consignee: pis[0]?.consignee || '',
+      notify: '',
+      port: pis[0]?.destination || '',
+      product_cn: data.items?.[0]?.product_cn || '',
+      product_en: '',
+      hs_code: data.items?.[0]?.order?.hs_code || '',
+      gross_weight: '',
+      volume: '',
     }
   } catch (e) {
     piList.value = []
   }
 }
 
-async function openBlankTemplate(type: 'booking' | 'loi' | 'msds') {
-  try {
-    const res = await phase2Api.openBlankTemplate(type)
-    currentDocKey.value = res.data.documentKey || res.data.docKey
-    currentConfig.value = res.data
-  } catch (e: any) {
-    ElMessage.error('模板打开失败: ' + (e.message || ''))
-  }
-}
-
-function onOpenMyDoc(doc: any) {
-  showMyDocuments.value = false
-  currentDocKey.value = doc.doc_key
-  currentConfig.value = {
-    token: doc.token,
-    documentServerUrl: currentConfig.value.documentServerUrl,
-    documentKey: doc.doc_key,
-    downloadUrl: `/api/v1/onlyoffice/download/${encodeURIComponent(doc.doc_key)}`,
-  }
-}
-
 async function openDocument(type: 'booking' | 'loi') {
-  // booking now uses showBookingDialog + confirmGenerateBooking
   if (type === 'booking') return
   try {
     const res = await phase2Api.generateLoi(selectedOrderId.value!, selectedPiNo.value)
@@ -309,6 +367,27 @@ async function generateMsds() {
   }
 }
 
+async function openBlankTemplate(type: 'booking' | 'loi' | 'msds') {
+  try {
+    const res = await phase2Api.openBlankTemplate(type)
+    currentDocKey.value = res.data.documentKey || res.data.docKey
+    currentConfig.value = res.data
+  } catch (e: any) {
+    ElMessage.error('模板打开失败: ' + (e.message || ''))
+  }
+}
+
+function onOpenMyDoc(doc: any) {
+  showMyDocuments.value = false
+  currentDocKey.value = doc.doc_key
+  currentConfig.value = {
+    token: doc.token,
+    documentServerUrl: currentConfig.value.documentServerUrl,
+    documentKey: doc.doc_key,
+    downloadUrl: `/api/v1/onlyoffice/download/${encodeURIComponent(doc.doc_key)}`,
+  }
+}
+
 onMounted(() => {
   loadOrderList()
   if (selectedOrderId.value) onOrderChange(selectedOrderId.value)
@@ -335,9 +414,7 @@ onMounted(() => {
   background: var(--el-fill-color-lighter, #f5f7fa);
   border-bottom: 1px solid var(--el-border-color-light, #e4e7ed);
   flex-shrink: 0;
-  box-shadow: 0 1px 0 var(--el-border-color-extralight);
 }
-
 .toolbar-left {
   display: flex;
   align-items: center;
@@ -347,14 +424,12 @@ onMounted(() => {
 }
 .toolbar-icon { color: var(--el-color-primary, #409eff); flex-shrink: 0; }
 .toolbar-title { font-size: 14px; font-weight: 600; letter-spacing: 0.02em; }
-
 .toolbar-center {
   display: flex;
   align-items: center;
   gap: 12px;
   flex: 1;
 }
-
 .toolbar-field {
   display: flex;
   align-items: center;
@@ -366,7 +441,6 @@ onMounted(() => {
   white-space: nowrap;
 }
 .toolbar-select { width: 200px; }
-
 .toolbar-actions {
   display: flex;
   align-items: center;
@@ -374,25 +448,117 @@ onMounted(() => {
   flex-shrink: 0;
 }
 
-/* ── Main ──────────────────────────────────── */
-.main {
+/* ── Main Layout ─────────────────────────── */
+.main-layout {
   display: grid;
-  grid-template-columns: 340px 1fr;
+  grid-template-columns: 420px 1fr;
   flex: 1;
-  overflow: hidden;
   min-height: 0;
-}
-
-.ref-panel {
-  overflow-y: auto;
-  border-right: 1px solid var(--el-border-color-light, #e4e7ed);
-  background: var(--el-fill-color, #fff);
-}
-
-.editor-panel {
   overflow: hidden;
-  position: relative;
-  background: var(--el-fill-color-lighter, #f5f7fa);
+}
+
+/* ── Info Panel (Left) ───────────────────── */
+.info-panel {
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  background: #fafafa;
+  border-right: 1px solid var(--el-border-color-light, #e4e7ed);
+  overflow-y: auto;
+}
+
+.info-card {
+  border-radius: 8px;
+  border: 1px solid var(--el-border-color-light, #e4e7ed);
+}
+:deep(.el-card__header) {
+  padding: 10px 14px;
+  background: var(--el-fill-color, #fff);
+  border-bottom: 1px solid var(--el-border-color-light, #e4e7ed);
+}
+:deep(.el-card__body) {
+  padding: 12px 14px;
+}
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--el-text-color-primary, #303133);
+  letter-spacing: 0.03em;
+}
+
+.info-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.info-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.info-label {
+  font-size: 12px;
+  color: var(--el-text-color-secondary, #909399);
+  min-width: 80px;
+  flex-shrink: 0;
+}
+.info-value {
+  font-size: 12px;
+  color: var(--el-text-color-primary, #303133);
+}
+.info-value.muted {
+  color: var(--el-text-color-placeholder, #c0c4cc);
+}
+:deep(.info-row .el-input) {
+  flex: 1;
+}
+:deep(.info-row .el-input__wrapper) {
+  font-size: 12px;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* ── Reference Card ────────────────────────── */
+.ref-table {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ref-row {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 8px;
+  font-size: 11px;
+  align-items: start;
+}
+.ref-row.ref-header {
+  font-weight: 600;
+  color: var(--el-text-color-secondary, #909399);
+  border-bottom: 1px solid var(--el-border-color-light, #e4e7ed);
+  padding-bottom: 4px;
+}
+.field-code {
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--el-color-primary, #409eff);
+  background: var(--el-fill-color-light, #f5f7fa);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 11px;
+}
+.field-desc {
+  color: var(--el-text-color-regular, #606266);
+}
+
+/* ── Editor Panel (Right) ───────────────────── */
+.editor-panel {
+  display: flex;
+  flex-direction: column;
+  background: var(--el-fill-color-page, #f0f2f5);
+  overflow: hidden;
 }
 
 .editor-empty {
@@ -415,31 +581,23 @@ onMounted(() => {
   color: var(--el-text-color-placeholder, #c0c4cc);
 }
 
-/* ── MSDS Dialog ────────────────────────────── */
+/* ── Dialogs ─────────────────────────── */
+.booking-select-row,
 .msds-select-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 4px 0;
-}
-.msds-label {
-  font-size: 13px;
-  color: var(--el-text-color-regular, #606266);
-  white-space: nowrap;
-  min-width: 64px;
-}
-.msds-select { flex: 1; }
-
-/* ── Booking Dialog ────────────────────────── */
-.booking-select-row {
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  padding: 8px 0;
+  padding: 4px 0;
   flex-direction: column;
 }
-.booking-label {
+.booking-label,
+.msds-label {
   font-size: 13px;
   color: var(--el-text-color-regular, #606266);
 }
+
+/* ── Scrollbar ──────────────────────────────── */
+.info-panel::-webkit-scrollbar { width: 4px; }
+.info-panel::-webkit-scrollbar-track { background: transparent; }
+.info-panel::-webkit-scrollbar-thumb { background: #dcdfe6; border-radius: 2px; }
 </style>

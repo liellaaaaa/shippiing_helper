@@ -394,7 +394,7 @@ function handleReset() {
 .page-title { font-size: 28px; font-weight: 600; margin: 0 0 8px 0; }
 .page-subtitle { font-size: 14px; color: #909399; margin: 0; }
 
-.workflow-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+.workflow-layout { display: grid; grid-template-columns: 320px 1fr; gap: 20px; align-items: start; }
 .input-panel { display: flex; flex-direction: column; }
 .preview-panel { display: flex; flex-direction: column; }
 

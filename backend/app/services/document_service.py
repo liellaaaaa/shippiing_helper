@@ -2,7 +2,7 @@
 import openpyxl
 import xlrd
 from typing import Tuple, Optional
-import os, time, base64
+import os, time, base64, uuid
 from io import BytesIO
 from docx import Document
 from docx.shared import Pt, RGBColor
@@ -312,6 +312,21 @@ class DocumentService:
         buf = BytesIO()
         doc.save(buf)
         return buf.getvalue()
+
+    def generate_customs(self, order_id: int | None = None) -> Tuple[bytes, str, str]:
+        """
+        生成报关资料工作簿（整本 xlsx，5个 sheet）。
+        第一期仅返回原始模板，不做数据填充（为后续自动填充留扩展口）。
+        """
+        template_path = TEMPLATES["customs"]
+        if not os.path.exists(template_path):
+            raise FileNotFoundError(f"Customs template not found: {template_path}")
+
+        with open(template_path, "rb") as f:
+            content = f.read()
+
+        doc_key = f"customs_{uuid.uuid4().hex}"
+        return content, doc_key, base64.b64encode(content).decode()
 
     def generate_template_instance(self, template_type: str) -> Tuple[bytes, str, str]:
         """加载空白模板（不填充 marker），返回 (content, doc_key, encoded_content)。"""

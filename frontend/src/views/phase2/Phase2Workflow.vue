@@ -82,6 +82,17 @@
           </svg>
           MSDS
         </el-button>
+        <el-button
+          type="primary"
+          size="small"
+          :disabled="!selectedOrderId"
+          @click="openCustoms"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px">
+            <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+          </svg>
+          报关
+        </el-button>
         <el-dropdown @command="(cmd: 'booking' | 'loi' | 'msds') => openBlankTemplate(cmd)" trigger="click">
           <el-button size="small">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px">
@@ -284,6 +295,7 @@ const selectedProductForMsds = ref('')
 const showMyDocuments = ref(false)
 const showBookingDialog = ref(false)
 const selectedBookingTemplate = ref<'xls' | 'xlsx'>('xlsx')
+const showCustomsDialog = ref(false)
 
 // Editable order info fields
 const currentOrderInfo = ref({
@@ -346,6 +358,16 @@ async function openDocument(type: 'booking' | 'loi') {
     currentConfig.value = res.data
   } catch (e: any) {
     ElMessage.error('文档生成失败: ' + (e.message || ''))
+  }
+}
+
+async function openCustoms() {
+  try {
+    const res = await phase2Api.generateCustoms(selectedOrderId.value)
+    currentDocKey.value = res.data.documentKey || res.data.docKey
+    currentConfig.value = res.data
+  } catch (e: any) {
+    ElMessage.error('报关资料生成失败: ' + (e.message || ''))
   }
 }
 

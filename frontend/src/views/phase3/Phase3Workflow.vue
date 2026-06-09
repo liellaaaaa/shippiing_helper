@@ -1,14 +1,14 @@
 <template>
-  <div class="phase2">
+  <div class="phase3">
 
     <!-- ── Toolbar ─────────────────────────────── -->
     <header class="toolbar">
       <div class="toolbar-left">
         <svg class="toolbar-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-          <polyline points="14 2 14 8 20 8"/>
+          <path d="M9 11l3 3L22 4"/>
+          <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
         </svg>
-        <span class="toolbar-title">文档编辑</span>
+        <span class="toolbar-title">报关资料编辑</span>
       </div>
 
       <div class="toolbar-center">
@@ -33,24 +33,6 @@
             />
           </el-select>
         </div>
-
-        <div class="toolbar-field" v-if="selectedOrderId">
-          <label class="toolbar-label">PI合同</label>
-          <el-select
-            v-model="selectedPiNo"
-            placeholder="选择PI"
-            size="small"
-            class="toolbar-select"
-            clearable
-          >
-            <el-option
-              v-for="p in piList"
-              :key="p.pi_no"
-              :label="p.pi_no"
-              :value="p.pi_no"
-            />
-          </el-select>
-        </div>
       </div>
 
       <div class="toolbar-actions">
@@ -58,46 +40,14 @@
           type="primary"
           size="small"
           :disabled="!selectedOrderId"
-          @click="showBookingDialog = true"
+          @click="openCustoms"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px">
-            <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>
+            <path d="M9 11l3 3L22 4"/>
+            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
           </svg>
-          订舱单
+          报关
         </el-button>
-        <el-button
-          type="primary"
-          size="small"
-          :disabled="!selectedOrderId || !selectedPiNo"
-          @click="openDocument('loi')"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px">
-            <path d="M14 2H6a2 2 0 0 1 2v20a2 2 0 0 1-2 2H18a2 2 0 0 1-2-2V8l4-4z"/><path d="M14 2v6h6M16 13l4-4 4 4"/>
-          </svg>
-          LOI保函
-        </el-button>
-        <el-button size="small" @click="showMsdsDialog = true">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px">
-            <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M8 13h8M8 17h8M8 9h2"/>
-          </svg>
-          MSDS
-        </el-button>
-        <el-dropdown @command="(cmd: 'booking' | 'loi' | 'msds') => openBlankTemplate(cmd)" trigger="click">
-          <el-button size="small">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px">
-              <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>
-            </svg>
-            空白模板
-            <el-icon class="el-icon--right"><arrow-down /></el-icon>
-          </el-button>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item command="booking">📄 订舱单 Booking</el-dropdown-item>
-              <el-dropdown-item command="loi">📝 LOI保函</el-dropdown-item>
-              <el-dropdown-item command="msds">⚠️ MSDS物质安全表</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
         <el-button size="small" @click="showMyDocuments = true">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px">
             <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
@@ -174,25 +124,33 @@
         <el-card class="info-card ref-card" shadow="never" style="margin-top: 12px;">
           <template #header>
             <div class="card-header">
-              <span class="card-title">模板字段参考</span>
+              <span class="card-title">报关模板说明</span>
             </div>
           </template>
           <div class="ref-table">
             <div class="ref-row ref-header">
-              <span>字段名</span>
-              <span>含义</span>
+              <span>Sheet</span>
+              <span>内容</span>
             </div>
             <div class="ref-row">
-              <code class="field-code">{{ 'MARK_SHIPPER' }}</code>
-              <span class="field-desc">发货人 — 发货人公司名称</span>
+              <span class="field-code">报关单</span>
+              <span class="field-desc">中华人民共和国海关出口货物报关单</span>
             </div>
             <div class="ref-row">
-              <code class="field-code">{{ 'MARK_PORT' }}</code>
-              <span class="field-desc">卸货港 — 目的港/卸货港</span>
+              <span class="field-code">发票</span>
+              <span class="field-desc">商业发票 Commercial Invoice</span>
             </div>
             <div class="ref-row">
-              <code class="field-code">{{ 'MARK_GOODS_TABLE' }}</code>
-              <span class="field-desc">货物明细表 — 品名/规格/毛重/体积表格起始位</span>
+              <span class="field-code">箱单</span>
+              <span class="field-desc">装箱单 Packing List</span>
+            </div>
+            <div class="ref-row">
+              <span class="field-code">合同</span>
+              <span class="field-desc">销售合同 Sales Contract</span>
+            </div>
+            <div class="ref-row">
+              <span class="field-code">委托书</span>
+              <span class="field-desc">报关委托书 Power of Attorney</span>
             </div>
           </div>
         </el-card>
@@ -219,40 +177,11 @@
               <line x1="16" y1="17" x2="8" y2="17"/>
               <polyline points="10 9 9 9 8 9"/>
             </svg>
-            <p>请从上方选择订单并生成文档</p>
+            <p>请从上方选择订单并点击「报关」生成报关资料</p>
           </div>
         </el-card>
       </main>
     </div>
-
-    <!-- ── Booking Dialog ────────────────────────── -->
-    <el-dialog v-model="showBookingDialog" title="生成订舱单" width="380px" :append-to-body="true" class="booking-dialog">
-      <div class="booking-select-row">
-        <label class="booking-label">选择模板格式</label>
-        <el-radio-group v-model="selectedBookingTemplate" size="default">
-          <el-radio value="xlsx">.xlsx 格式（推荐，格式完整）</el-radio>
-          <el-radio value="xls">.xls 格式（兼容旧版）</el-radio>
-        </el-radio-group>
-      </div>
-      <template #footer>
-        <el-button @click="showBookingDialog = false">取消</el-button>
-        <el-button type="primary" @click="confirmGenerateBooking">生成文档</el-button>
-      </template>
-    </el-dialog>
-
-    <!-- ── MSDS Dialog ──────────────────────────── -->
-    <el-dialog v-model="showMsdsDialog" title="生成 MSDS" width="440px" :append-to-body="true" class="msds-dialog">
-      <div class="msds-select-row">
-        <label class="msds-label">选择产品</label>
-        <el-select v-model="selectedProductForMsds" placeholder="从当前订单选择产品" size="default" class="msds-select" clearable>
-          <el-option v-for="item in currentOrderItems" :key="item.internal_code" :label="item.product_cn" :value="item.product_cn" />
-        </el-select>
-      </div>
-      <template #footer>
-        <el-button @click="showMsdsDialog = false">取消</el-button>
-        <el-button type="primary" @click="generateMsds" :disabled="!selectedProductForMsds">生成文档</el-button>
-      </template>
-    </el-dialog>
 
     <MyDocumentsDrawer v-model="showMyDocuments" @open-doc="onOpenMyDoc" />
 
@@ -263,27 +192,20 @@
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import DocumentEditor from './components/DocumentEditor.vue'
-import MyDocumentsDrawer from './components/MyDocumentsDrawer.vue'
-import { ArrowDown } from '@element-plus/icons-vue'
+import DocumentEditor from '@/views/phase2/components/DocumentEditor.vue'
+import MyDocumentsDrawer from '@/views/phase2/components/MyDocumentsDrawer.vue'
 import { phase2Api } from '@/api/phase2'
-import { getOrderList, getOrderComparison, getOrderPiContracts, type OrderListItem } from '@/api/merge'
+import { getOrderComparison, getOrderPiContracts } from '@/api/merge'
 import { getDashboardOrders, type DashboardOrder } from '@/api/dashboard'
 
 const route = useRoute()
 
 const selectedOrderId = ref<number | null>(null)
-const selectedPiNo = ref<string>('')
 const orderList = ref<DashboardOrder[]>([])
-const piList = ref<any[]>([])
 const currentOrderItems = ref<any[]>([])
 const currentDocKey = ref('')
 const currentConfig = ref<any>({})
-const showMsdsDialog = ref(false)
-const selectedProductForMsds = ref('')
 const showMyDocuments = ref(false)
-const showBookingDialog = ref(false)
-const selectedBookingTemplate = ref<'xls' | 'xlsx'>('xlsx')
 
 // Editable order info fields
 const currentOrderInfo = ref({
@@ -309,18 +231,11 @@ async function loadOrderList() {
 }
 
 async function onOrderChange(orderId: number) {
-  selectedPiNo.value = ''
   if (!orderId) return
   try {
     const data = await getOrderComparison(orderId)
     currentOrderItems.value = data.items || []
-    if (data.pi_no) selectedPiNo.value = data.pi_no
     const pis = await getOrderPiContracts(orderId)
-    piList.value = pis
-    if (pis.length > 0 && !selectedPiNo.value) {
-      selectedPiNo.value = pis[0].pi_no
-    }
-    // Populate editable fields
     currentOrderInfo.value = {
       order_no: data.order_no || '',
       customer_code: data.customer_code || '',
@@ -334,66 +249,31 @@ async function onOrderChange(orderId: number) {
       volume: '',
     }
   } catch (e) {
-    piList.value = []
+    // ignore
   }
 }
 
-async function openDocument(type: 'booking' | 'loi') {
-  if (type === 'booking') return
+async function openCustoms() {
+  if (!selectedOrderId.value) return
   try {
-    const res = await phase2Api.generateLoi(currentOrderInfo.value.order_no, selectedPiNo.value)
+    const res = await phase2Api.generateCustoms(selectedOrderId.value)
     currentDocKey.value = res.data.documentKey || res.data.docKey
     currentConfig.value = res.data
   } catch (e: any) {
-    ElMessage.error('文档生成失败: ' + (e.message || ''))
-  }
-}
-
-async function confirmGenerateBooking() {
-  showBookingDialog.value = false
-  try {
-    const res = await phase2Api.generateBooking(selectedOrderId.value!, selectedBookingTemplate.value)
-    currentDocKey.value = res.data.documentKey || res.data.docKey
-    currentConfig.value = res.data
-  } catch (e: any) {
-    ElMessage.error('订舱单生成失败: ' + (e.message || ''))
-  }
-}
-
-async function generateMsds() {
-  if (!selectedProductForMsds.value) return
-  showMsdsDialog.value = false
-  try {
-    const res = await phase2Api.generateMsds(selectedProductForMsds.value)
-    currentDocKey.value = res.data.documentKey || res.data.docKey
-    currentConfig.value = res.data
-  } catch (e: any) {
-    ElMessage.error('MSDS生成失败: ' + (e.message || ''))
-  }
-}
-
-async function openBlankTemplate(type: 'booking' | 'loi' | 'msds') {
-  try {
-    const res = await phase2Api.openBlankTemplate(type)
-    currentDocKey.value = res.data.documentKey || res.data.docKey
-    currentConfig.value = res.data
-  } catch (e: any) {
-    ElMessage.error('模板打开失败: ' + (e.message || ''))
+    ElMessage.error('报关资料生成失败: ' + (e.message || ''))
   }
 }
 
 async function onOpenMyDoc(doc: any) {
   showMyDocuments.value = false
   currentDocKey.value = doc.doc_key
-  // Fetch fresh config from backend so JWT key and documentKey are properly paired.
-  // Using the stored doc.token would have a mismatched key since we now use UUID-based keys.
   try {
-    const fileType = doc.docType || 'docx'
+    const fileType = doc.docType || 'xlsx'
     const res = await phase2Api.getJwt(doc.doc_key, fileType)
     currentConfig.value = {
       ...res.data,
-      url: doc.url,        // OnlyOffice Document Server URL (host.docker.internal)
-      downloadUrl: doc.downloadUrl,  // browser-accessible download URL
+      url: doc.url,
+      downloadUrl: doc.downloadUrl,
     }
   } catch (e: any) {
     ElMessage.error('文档加载失败: ' + (e.message || ''))
@@ -408,7 +288,7 @@ onMounted(() => {
 
 <style scoped>
 /* ── Root ─────────────────────────────────────── */
-.phase2 {
+.phase3 {
   padding: 24px;
   max-width: 1400px;
   margin: 0 auto;
@@ -534,7 +414,7 @@ onMounted(() => {
 }
 .ref-row {
   display: grid;
-  grid-template-columns: 140px 1fr;
+  grid-template-columns: 80px 1fr;
   gap: 8px;
   font-size: 11px;
   align-items: start;
@@ -589,21 +469,6 @@ onMounted(() => {
   font-size: 14px;
   color: #bfbfbf;
   margin: 0;
-}
-
-/* ── Dialogs ─────────────────────────── */
-.booking-select-row,
-.msds-select-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 4px 0;
-  flex-direction: column;
-}
-.booking-label,
-.msds-label {
-  font-size: 13px;
-  color: var(--el-text-color-regular, #606266);
 }
 
 /* ── Scrollbar ──────────────────────────────── */

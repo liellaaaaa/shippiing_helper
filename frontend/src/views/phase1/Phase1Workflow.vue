@@ -7,7 +7,7 @@
 
     <div class="workflow-layout">
       <!-- 左侧输入区 -->
-      <div class="input-panel">
+      <div class="input-panel" :style="{ width: leftWidth + 'px' }">
         <el-card class="input-card">
           <template #header>
             <div class="card-header">
@@ -40,6 +40,9 @@
           </div>
         </el-card>
       </div>
+
+      <!-- 分隔条 -->
+      <div class="resizer" @mousedown="startResize"></div>
 
       <!-- 右侧预览区 -->
       <div class="preview-panel">
@@ -189,6 +192,34 @@ const saving = ref(false)
 const savedOrderId = ref<number | null>(null)
 const packagingResult = ref<PackagingResult | null>(null)
 const calcRef = ref<InstanceType<typeof PackagingCalculator>>()
+
+// 可拖拽分割条
+const leftWidth = ref(400)
+const isResizing = ref(false)
+
+function startResize(e: MouseEvent) {
+  isResizing.value = true
+  const startX = e.clientX
+  const startWidth = leftWidth.value
+  const workflowEl = document.querySelector('.workflow-layout') as HTMLElement
+
+  function onMouseMove(ev: MouseEvent) {
+    if (!isResizing.value) return
+    const dx = ev.clientX - startX
+    const containerWidth = workflowEl?.offsetWidth || window.innerWidth
+    const newWidth = startWidth + dx
+    const minW = containerWidth * 0.15
+    const maxW = containerWidth * 0.75
+    leftWidth.value = Math.min(maxW, Math.max(minW, newWidth))
+  }
+  function onMouseUp() {
+    isResizing.value = false
+    document.removeEventListener('mousemove', onMouseMove)
+    document.removeEventListener('mouseup', onMouseUp)
+  }
+  document.addEventListener('mousemove', onMouseMove)
+  document.addEventListener('mouseup', onMouseUp)
+}
 
 // Order Form
 const orderForm = ref({
@@ -394,9 +425,19 @@ function handleReset() {
 .page-title { font-size: 28px; font-weight: 600; margin: 0 0 8px 0; }
 .page-subtitle { font-size: 14px; color: #909399; margin: 0; }
 
-.workflow-layout { display: grid; grid-template-columns: 320px 1fr; gap: 20px; align-items: start; }
-.input-panel { display: flex; flex-direction: column; }
-.preview-panel { display: flex; flex-direction: column; }
+.workflow-layout { display: flex; gap: 0; align-items: stretch; overflow: hidden; }
+.input-panel { width: 200px; flex-shrink: 0; display: flex; flex-direction: column; min-width: 0; }
+.preview-panel { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+
+.resizer {
+  width: 6px;
+  background: var(--el-border-color-extra-light);
+  cursor: col-resize;
+  flex-shrink: 0;
+  transition: background 0.15s;
+  margin: 0 8px;
+}
+.resizer:hover { background: var(--el-color-primary); }
 
 .input-card, .preview-card { border-radius: 12px; }
 .card-header { font-weight: 600; font-size: 15px; display: flex; justify-content: space-between; align-items: center; }

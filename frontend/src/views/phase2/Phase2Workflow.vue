@@ -110,7 +110,7 @@
     <!-- ── Main Layout: Left Info + Right Editor ── -->
     <div class="main-layout">
       <!-- Left: Info Panel -->
-      <aside class="info-panel">
+      <aside class="info-panel" :style="{ width: leftWidth + 'px' }">
         <el-card class="info-card" shadow="never">
           <template #header>
             <div class="card-header">
@@ -198,6 +198,9 @@
         </el-card>
       </aside>
 
+      <!-- 分隔条 -->
+      <div class="resizer" @mousedown="startResize"></div>
+
       <!-- Right: Document Editor -->
       <main class="editor-panel">
         <el-card class="editor-card" body-style="padding: 0;">
@@ -279,6 +282,29 @@ const piList = ref<any[]>([])
 const currentOrderItems = ref<any[]>([])
 const currentDocKey = ref('')
 const currentConfig = ref<any>({})
+const leftWidth = ref(400)
+const isResizing = ref(false)
+
+function startResize(e: MouseEvent) {
+  isResizing.value = true
+  const startX = e.clientX
+  const startWidth = leftWidth.value
+  const containerEl = document.querySelector('.main-layout') as HTMLElement
+
+  function onMouseMove(ev: MouseEvent) {
+    if (!isResizing.value) return
+    const dx = ev.clientX - startX
+    const containerWidth = containerEl?.offsetWidth || window.innerWidth
+    leftWidth.value = Math.min(containerWidth * 0.75, Math.max(containerWidth * 0.15, startWidth + dx))
+  }
+  function onMouseUp() {
+    isResizing.value = false
+    document.removeEventListener('mousemove', onMouseMove)
+    document.removeEventListener('mouseup', onMouseUp)
+  }
+  document.addEventListener('mousemove', onMouseMove)
+  document.addEventListener('mouseup', onMouseUp)
+}
 const showMsdsDialog = ref(false)
 const selectedProductForMsds = ref('')
 const showMyDocuments = ref(false)
@@ -460,18 +486,19 @@ onMounted(() => {
 }
 
 /* ── Main Layout ─────────────────────────── */
-.main-layout {
-  display: grid;
-  grid-template-columns: 320px 1fr;
-  gap: 20px;
-  align-items: start;
-}
+.main-layout { display: flex; gap: 0; align-items: stretch; overflow: hidden; }
+.info-panel { width: 200px; flex-shrink: 0; display: flex; flex-direction: column; min-width: 0; }
+.editor-panel { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
 
-/* ── Info Panel (Left) ───────────────────── */
-.info-panel {
-  display: flex;
-  flex-direction: column;
+.resizer {
+  width: 6px;
+  background: var(--el-border-color-extra-light);
+  cursor: col-resize;
+  flex-shrink: 0;
+  transition: background 0.15s;
+  margin: 0 8px;
 }
+.resizer:hover { background: var(--el-color-primary); }
 
 .info-card {
   border-radius: 12px;
@@ -558,11 +585,6 @@ onMounted(() => {
 }
 
 /* ── Editor Panel (Right) ───────────────────── */
-.editor-panel {
-  display: flex;
-  flex-direction: column;
-}
-
 .editor-card {
   border-radius: 12px;
   overflow: hidden;

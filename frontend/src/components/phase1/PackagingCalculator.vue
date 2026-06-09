@@ -279,7 +279,7 @@ defineExpose({ addRow, clearRows, setQuantity, selectPackage, getSummary, getRow
 <style scoped>
 /* Task 3E: Updated CSS */
 .packaging-calculator { padding: 4px 0; }
-.calc-table-wrapper { padding: 4px 0; }
+.calc-table-wrapper { padding: 4px 0; overflow-x: auto; }
 .calc-toolbar { margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
 .calc-table { margin-bottom: 12px; }
 .calc-summary { margin-top: 8px; }

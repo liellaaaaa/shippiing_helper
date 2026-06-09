@@ -10,6 +10,11 @@ export const phase2Api = {
   generateMsds(product: string) {
     return axios.get('/api/v1/documents/msds', { params: { product } })
   },
+  generateCustoms(orderId: number | null) {
+    return axios.get('/api/v1/documents/customs', {
+      params: { order_id: orderId }
+    })
+  },
   getDocHistory(orderId: number) {
     return axios.get(`/api/v1/documents/history/${orderId}`)
   },

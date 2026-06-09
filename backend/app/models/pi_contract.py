@@ -18,6 +18,9 @@ class PiContract(Base):
     consignee_name = Column(String(200))      # 收货人名称
     consignee_address = Column(String(500))   # 收货人地址
     destination = Column(String(200))         # 目的港
+    loading_port = Column(String(200))         # 装货地
+    price_term = Column(String(100))          # 价格条款 (FOB/C&F/CIF等)
+    invoice_to = Column(String(200))          # 发票抬头 (另一收货人)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

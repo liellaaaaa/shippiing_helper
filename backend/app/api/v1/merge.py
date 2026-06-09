@@ -73,15 +73,24 @@ async def get_order_pi_contracts(
     # 优先：order_id 可能是 OrderPiRecord.id（来自 Dashboard）
     record = db.query(OrderPiRecord).filter(OrderPiRecord.id == order_id).first()
     if record:
-        # 用 order_no 找出所有 OrderPiRecord，再找对应的 internal_codes
+        # 优先用 pi_no 直接查找 PiContract（绕过 internal_code 关联，适合 OCR 提取的 PI）
+        if record.pi_no:
+            contracts = db.query(PiContract).filter(
+                PiContract.pi_no == record.pi_no
+            ).all()
+            if contracts:
+                return [
+                    {"pi_no": pc.pi_no, "consignee": pc.consignee_name, "destination": pc.destination}
+                    for pc in contracts
+                ]
+        # 备选：用 order_no 找所有 OrderPiRecord，再用 internal_code 查
         all_records = db.query(OrderPiRecord).filter(
             OrderPiRecord.order_no == record.order_no
         ).all()
         internal_codes = list(set(r.internal_code for r in all_records if r.internal_code))
         if not internal_codes:
             return []
-        # 查这些 internal_code 对应的 PiContractItem
-        from app.models.pi_contract import PiContractItem, PiContract
+        from app.models.pi_contract import PiContractItem
         pi_items = db.query(PiContractItem).filter(
             PiContractItem.internal_code.in_(internal_codes)
         ).all()
@@ -97,6 +106,20 @@ async def get_order_pi_contracts(
     if not order:
         raise HTTPException(status_code=404, detail="订单不存在")
 
+    #尝试通过 OrderPiRecord 找到 pi_no，再用 pi_no 直接查 PiContract
+    first_record = db.query(OrderPiRecord).filter(
+        OrderPiRecord.order_no == order.order_no
+    ).first()
+    if first_record and first_record.pi_no:
+        contracts = db.query(PiContract).filter(
+            PiContract.pi_no == first_record.pi_no
+        ).all()
+        if contracts:
+            return [
+                {"pi_no": pc.pi_no, "consignee": pc.consignee_name, "destination": pc.destination}
+                for pc in contracts
+            ]
+
     items = db.query(OrderItem).filter_by(order_id=order_id).all()
     if not items:
         return []
@@ -106,7 +129,6 @@ async def get_order_pi_contracts(
         PiContractItem.internal_code.in_(internal_codes)
     ).all()
 
-    # 去重获取 pi_contract_ids
     pi_contract_ids = set(item.pi_contract_id for item in linked_items)
     if not pi_contract_ids:
         return []
@@ -115,4 +137,7 @@ async def get_order_pi_contracts(
         PiContract.id.in_(pi_contract_ids)
     ).all()
 
-    return [{"pi_no": c.pi_no, "consignee": c.consignee_name, "destination": c.destination} for c in contracts]
+    return [
+        {"pi_no": c.pi_no, "consignee": c.consignee_name, "destination": c.destination}
+        for c in contracts
+    ]

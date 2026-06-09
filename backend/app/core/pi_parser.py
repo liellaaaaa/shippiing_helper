@@ -357,6 +357,15 @@ def parse_proforma_invoice(rows: list[list[str]]) -> PiContractUploadResponse:
     # 提取 Destination
     destination = _extract_field_from_rows(rows, [r"Destination\s*:"])
 
+    # 提取 Port of loading (装货地)
+    loading_port = _extract_field_from_rows(rows, [r"Port\s+of\s+loading\s*:", r"Loading\s+Port\s*:"])
+
+    # 提取 Price Term (价格条款)
+    price_term = _extract_field_from_rows(rows, [r"Price\s+Term\s*:"])
+
+    # 提取 Invoice To (发票抬头)
+    invoice_to = _extract_field_from_rows(rows, [r"INVOICE\s+TO\s*[:.]?\s*NAME\s*:", r"INVOICE\s+TO\s*:"])
+
     # 提取收货人信息（Name: 后紧跟公司名）
     consignee_name = _extract_field_from_rows(rows, [r"Name\s*:"])
 
@@ -457,6 +466,9 @@ def parse_proforma_invoice(rows: list[list[str]]) -> PiContractUploadResponse:
         consignee_name=consignee_name,
         consignee_address=consignee_address,
         destination=destination,
+        loading_port=loading_port,
+        price_term=price_term,
+        invoice_to=invoice_to,
         items=items,
         confidence=confidence,
     )
@@ -601,6 +613,15 @@ def parse_proforma_invoice_from_text(text: str, filename: str = "") -> PiContrac
     # 5) date
     pi_date = scan(r"DATE\s*:")
 
+    # 6) Port of loading (装货地)
+    loading_port = scan(r"Port\s+of\s+loading\s*:") or scan(r"Loading\s+Port\s*:")
+
+    # 7) Price Term (价格条款)
+    price_term = scan(r"Price\s+Term\s*:")
+
+    # 8) Invoice To (发票抬头)
+    invoice_to = scan(r"INVOICE\s+TO\s*[:.]?\s*NAME\s*:") or scan(r"INVOICE\s+TO\s*:")
+
     # 产品明细行解析（支持品名单行+数字下一行的OCR分拆格式）
     items = []
     lines = text.split(chr(10))
@@ -683,6 +704,9 @@ def parse_proforma_invoice_from_text(text: str, filename: str = "") -> PiContrac
         consignee_name=consignee_name,
         consignee_address=consignee_address,
         destination=destination,
+        loading_port=loading_port,
+        price_term=price_term,
+        invoice_to=invoice_to,
         items=items,
         confidence=confidence,
     )

@@ -38,6 +38,9 @@ class PiService:
                 contract.consignee_name = request.consignee_name
                 contract.consignee_address = request.consignee_address
                 contract.destination = request.destination
+                contract.loading_port = request.loading_port
+                contract.price_term = request.price_term
+                contract.invoice_to = request.invoice_to
             else:
                 # Create new contract
                 contract = PiContract(
@@ -50,6 +53,9 @@ class PiService:
                     consignee_name=request.consignee_name,
                     consignee_address=request.consignee_address,
                     destination=request.destination,
+                    loading_port=request.loading_port,
+                    price_term=request.price_term,
+                    invoice_to=request.invoice_to,
                 )
                 self.db.add(contract)
                 self.db.flush()  # Get the ID

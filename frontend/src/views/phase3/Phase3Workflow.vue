@@ -342,7 +342,7 @@ onMounted(() => {
 /* ── Main Layout ─────────────────────────── */
 .main-layout {
   display: grid;
-  grid-template-columns: 420px 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: 20px;
   align-items: start;
 }

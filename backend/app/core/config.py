@@ -10,6 +10,7 @@ TEMPLATES = {
     "booking_xlsx": str(ROOT / "references" / "长晟出口海运BOOKING模板.xlsx"),
     "loi":     str(ROOT / "references" / "LOI-op-非危险品保函模板.docx"),
     "msds":    str(ROOT / "references" / "MSDS" / "MSDS标准模板.docx"),
+    "customs": str(ROOT / "references" / "出口报关资料 26.3.17.xlsx"),
 }
 
 MSDS_DIR = str(ROOT / "references" / "MSDS")

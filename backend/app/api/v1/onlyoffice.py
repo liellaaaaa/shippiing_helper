@@ -1,5 +1,4 @@
-import os, hashlib, base64
-from io import BytesIO
+import os, hashlib, base64, logging
 from fastapi import APIRouter, UploadFile, File, Query
 from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import desc
@@ -9,6 +8,8 @@ from app.models.shipment_doc import ShipmentDoc
 from app.services.onlyoffice_service import OnlyOfficeService
 
 router = APIRouter(prefix="/api/v1/onlyoffice", tags=["onlyoffice"])
+oo_svc = OnlyOfficeService()
+logger = logging.getLogger(__name__)
 
 
 def infer_doc_type(doc_key: str) -> str:
@@ -29,11 +30,14 @@ def extract_order_id_from_key(doc_key: str):
 async def create_jwt(documentKey: str = Query(...), fileType: str = Query(...)):
     doc_key = unquote(documentKey)
     svc = OnlyOfficeService()
-    token = svc.generate_jwt_token(doc_key, fileType)
-    config = svc.build_editor_config(token, doc_key, fileType)
+    token, config, safe_key = svc.create_config(doc_key, fileType)
     api_base = os.getenv("API_BASE_URL", "http://localhost:8000")
-    encoded_key = quote(doc_key, safe="")
-    return {**config, "downloadUrl": f"{api_base}/api/v1/onlyoffice/download/{encoded_key}"}
+    callback_base = os.getenv("ONLYOFFICE_CALLBACK_BASE_URL", "http://host.docker.internal:8000")
+    return {
+        **config,
+        "url": f"{callback_base}/api/v1/onlyoffice/download/{safe_key}",
+        "downloadUrl": f"{api_base}/api/v1/onlyoffice/download/{safe_key}",
+    }
 
 
 @router.post("/callback")
@@ -42,17 +46,16 @@ async def onlyoffice_callback(
     user: str = Query(default="admin"),
     file: UploadFile = File(default=None),
 ):
-    import logging
-    logger = logging.getLogger("uvicorn")
     doc_key = unquote(doc_key)
-    logger.warning(f"[onlyoffice-callback] doc_key={doc_key} user={user}")
+    # Resolve safe_key (UUID) back to original doc_key for DB lookup
+    resolved_key = oo_svc.resolve_safe_key(doc_key)
+    if resolved_key:
+        doc_key = resolved_key
 
     # OnlyOffice sends two types of callbacks:
     # 1. JSON status update (no file) — when document is saved/closed
     # 2. Multipart file upload (with file) — when Document Server sends the actual file
     if file is None:
-        # JSON status update — acknowledge without saving
-        logger.warning(f"[onlyoffice-callback] status update (no file), doc_key={doc_key}")
         return {"error": 0}
 
     content = await file.read()
@@ -101,6 +104,7 @@ async def download_doc(doc_key: str):
     doc_key = unquote(doc_key)
     db = SessionLocal()
     try:
+        # Try UUID directly first (documents are stored under UUID)
         doc = db.query(ShipmentDoc).filter(
             ShipmentDoc.doc_key == doc_key
         ).order_by(desc(ShipmentDoc.version)).first()

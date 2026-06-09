@@ -11,6 +11,7 @@ from app.core.config import TEMPLATES, MSDS_DIR
 from app.services.msds_service import MSDSService
 from app.database import SessionLocal
 from app.models.order import Order, OrderItem
+from app.models.order_pi_record import OrderPiRecord
 from app.models.pi_contract import PiContract, PiContractItem
 
 
@@ -115,35 +116,33 @@ class DocumentService:
         doc_key = f"booking_{order_id}_{int(time.time())}"
         return content_xlsx, doc_key, base64.b64encode(content_xlsx).decode()
 
-    def generate_loi(self, order_id: int, pi_no: str) -> Tuple[bytes, str, str]:
+    def generate_loi(self, order_no: str, pi_no: str) -> Tuple[bytes, str, str]:
         template_path = TEMPLATES["loi"]
         if not os.path.exists(template_path):
             raise FileNotFoundError(f"LOI template not found: {template_path}")
         db = SessionLocal()
         try:
-            order = db.query(Order).filter(Order.id == order_id).first()
-            if not order:
-                raise ValueError(f"Order not found: {order_id}")
+            # Query OrderPiRecord by order_no (Phase 1 merged data store)
+            records = db.query(OrderPiRecord).filter(OrderPiRecord.order_no == order_no).all()
+            if not records:
+                raise ValueError(f"Order not found: {order_no}")
 
             pi = db.query(PiContract).filter_by(pi_no=pi_no).first() if pi_no else None
-
-            # 获取该订单所有产品
-            all_items = db.query(OrderItem).filter(OrderItem.order_id == order_id).all()
 
             doc = Document(template_path)
 
             # 汇总多产品信息
-            total_gw = sum(it.gross_weight_kg or 0 for it in all_items)
-            total_vol = sum(it.volume_cbm or 0 for it in all_items)
-            product_names = " / ".join([it.product_cn or "" for it in all_items if it.product_cn])
+            total_gw = sum(it.gross_weight_kg or 0 for it in records)
+            total_vol = sum(it.volume_cbm or 0 for it in records)
+            product_names = " / ".join([it.product_cn or "" for it in records if it.product_cn])
             replacements = {
                 "{{shipper}}": "HONGHAO CHEMICAL CO., LTD.",
                 "{{consignee}}": (pi.consignee_name or "") if pi else "",
                 "{{consignee_address}}": (pi.consignee_address or "") if pi else "",
                 "{{port_of_discharge}}": (pi.destination or "") if pi else "",
                 "{{product_name_cn}}": product_names,
-                "{{product_name_en}}": (all_items[0].product_en or "") if all_items else "",
-                "{{hs_code}}": (all_items[0].hs_code or "") if all_items else "",
+                "{{product_name_en}}": (records[0].product_en or "") if records else "",
+                "{{hs_code}}": (records[0].hs_code or "") if records else "",
                 "{{gross_weight}}": str(round(total_gw, 1)),
                 "{{volume}}": str(round(total_vol, 3)),
                 "{{date}}": time.strftime("%Y 年 %m 月 %d 日"),
@@ -159,7 +158,8 @@ class DocumentService:
             content = buf.getvalue()
         finally:
             db.close()
-        doc_key = f"loi_{order_id}_{int(time.time())}"
+        first_record = records[0]
+        doc_key = f"loi_{first_record.id}_{int(time.time())}"
         return content, doc_key, base64.b64encode(content).decode()
 
     def generate_msds(self, product_name: str) -> Tuple[bytes, str, str]:

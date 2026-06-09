@@ -20,34 +20,31 @@ async def generate_booking(order_id: int = Query(...), template_type: str = Quer
     """
     svc = DocumentService()
     content, doc_key, _ = svc.generate_booking(order_id, template_type)
-    _save_doc_to_db(doc_key, "booking", content, order_id=order_id)
-    jwt_token = oo_svc.generate_jwt_token(doc_key, "xlsx")
-    config = oo_svc.build_editor_config(jwt_token, doc_key, "xlsx")
+    # Create config first to get UUID, then save to DB (OnlyOffice fetches immediately on config load)
+    token, config, safe_key = oo_svc.create_config(doc_key, "xlsx")
+    _save_doc_to_db(doc_key, "booking", content, order_id=order_id, storage_key=safe_key)
     api_base = os.getenv("API_BASE_URL", "http://localhost:8000")
     callback_base = os.getenv("ONLYOFFICE_CALLBACK_BASE_URL", "http://host.docker.internal:8000")
-    # OnlyOffice 在 Docker 内下载文档用 callback_base，浏览器下载用 api_base
-    encoded_key = quote(doc_key, safe="")
+    # Download URLs use safe_key (UUID) since that's what's stored in DB
     return {
         **config,
-        "url": f"{callback_base}/api/v1/onlyoffice/download/{encoded_key}",
-        "downloadUrl": f"{api_base}/api/v1/onlyoffice/download/{encoded_key}",
+        "url": f"{callback_base}/api/v1/onlyoffice/download/{safe_key}",
+        "downloadUrl": f"{api_base}/api/v1/onlyoffice/download/{safe_key}",
     }
 
 
 @router.get("/loi")
-async def generate_loi(order_id: int = Query(...), pi_no: str = Query(...)):
+async def generate_loi(order_no: str = Query(...), pi_no: str = Query(...)):
     svc = DocumentService()
-    content, doc_key, _ = svc.generate_loi(order_id, pi_no)
-    _save_doc_to_db(doc_key, "loi", content, order_id=order_id)
-    jwt_token = oo_svc.generate_jwt_token(doc_key, "docx")
-    config = oo_svc.build_editor_config(jwt_token, doc_key, "docx")
+    content, doc_key, _ = svc.generate_loi(order_no, pi_no)
+    token, config, safe_key = oo_svc.create_config(doc_key, "docx")
+    _save_doc_to_db(doc_key, "loi", content, storage_key=safe_key)
     api_base = os.getenv("API_BASE_URL", "http://localhost:8000")
     callback_base = os.getenv("ONLYOFFICE_CALLBACK_BASE_URL", "http://host.docker.internal:8000")
-    encoded_key = quote(doc_key, safe="")
     return {
         **config,
-        "url": f"{callback_base}/api/v1/onlyoffice/download/{encoded_key}",
-        "downloadUrl": f"{api_base}/api/v1/onlyoffice/download/{encoded_key}",
+        "url": f"{callback_base}/api/v1/onlyoffice/download/{safe_key}",
+        "downloadUrl": f"{api_base}/api/v1/onlyoffice/download/{safe_key}",
     }
 
 
@@ -55,17 +52,14 @@ async def generate_loi(order_id: int = Query(...), pi_no: str = Query(...)):
 async def generate_msds(product: str = Query(...)):
     svc = DocumentService()
     content, doc_key, _ = svc.generate_msds(product)
-    _save_doc_to_db(doc_key, "msds", content)
-    jwt_token = oo_svc.generate_jwt_token(doc_key, "docx")
-    config = oo_svc.build_editor_config(jwt_token, doc_key, "docx")
+    token, config, safe_key = oo_svc.create_config(doc_key, "docx")
+    _save_doc_to_db(doc_key, "msds", content, storage_key=safe_key)
     api_base = os.getenv("API_BASE_URL", "http://localhost:8000")
     callback_base = os.getenv("ONLYOFFICE_CALLBACK_BASE_URL", "http://host.docker.internal:8000")
-    # URL-encode doc_key for safe transport in URLs
-    encoded_key = quote(doc_key, safe="")
     return {
         **config,
-        "url": f"{callback_base}/api/v1/onlyoffice/download/{encoded_key}",
-        "downloadUrl": f"{api_base}/api/v1/onlyoffice/download/{encoded_key}",
+        "url": f"{callback_base}/api/v1/onlyoffice/download/{safe_key}",
+        "downloadUrl": f"{api_base}/api/v1/onlyoffice/download/{safe_key}",
     }
 
 
@@ -90,29 +84,33 @@ async def open_blank_template(template_type: str):
     svc = DocumentService()
     try:
         content, doc_key, _ = svc.generate_template_instance(template_type)
-        _save_doc_to_db(doc_key, template_type, content)
         file_ext = "xlsx" if template_type == "booking" else "docx"
-        jwt_token = oo_svc.generate_jwt_token(doc_key, file_ext)
-        config = oo_svc.build_editor_config(jwt_token, doc_key, file_ext)
+        token, config, safe_key = oo_svc.create_config(doc_key, file_ext)
+        _save_doc_to_db(doc_key, template_type, content, storage_key=safe_key)
         api_base = os.getenv("API_BASE_URL", "http://localhost:8000")
         callback_base = os.getenv("ONLYOFFICE_CALLBACK_BASE_URL", "http://host.docker.internal:8000")
-        encoded_key = quote(doc_key, safe="")
         return {
             **config,
-            "url": f"{callback_base}/api/v1/onlyoffice/download/{encoded_key}",
-            "downloadUrl": f"{api_base}/api/v1/onlyoffice/download/{encoded_key}",
+            "url": f"{callback_base}/api/v1/onlyoffice/download/{safe_key}",
+            "downloadUrl": f"{api_base}/api/v1/onlyoffice/download/{safe_key}",
         }
     except FileNotFoundError as e:
         return {"error": str(e)}
 
 
-def _save_doc_to_db(doc_key: str, doc_type: str, content: bytes, order_id: int = None):
-    """Save generated document to DB so OnlyOffice can download it."""
+def _save_doc_to_db(doc_key: str, doc_type: str, content: bytes, order_id: int = None, storage_key: str = None):
+    """
+    Save generated document to DB so OnlyOffice can download it.
+    storage_key: if provided, store under this key (UUID) for OnlyOffice routing;
+                 otherwise store under original doc_key.
+    """
     db = SessionLocal()
     try:
         content_hash = hashlib.md5(content).hexdigest()
+        # Use storage_key (UUID) as doc_key if provided, for OnlyOffice routing compatibility
+        store_key = storage_key if storage_key else doc_key
         doc = ShipmentDoc(
-            doc_key=doc_key,
+            doc_key=store_key,
             doc_type=doc_type,
             order_id=order_id,
             file_blob=base64.b64encode(content).decode(),
@@ -134,6 +132,8 @@ async def list_my_templates():
         docs = db.query(ShipmentDoc).filter(
             ShipmentDoc.order_id == None  # noqa: E711 — independent template instances
         ).order_by(desc(ShipmentDoc.created_at)).all()
+        api_base = os.getenv("API_BASE_URL", "http://localhost:8000")
+        callback_base = os.getenv("ONLYOFFICE_CALLBACK_BASE_URL", "http://host.docker.internal:8000")
         return [{
             "doc_key": d.doc_key,
             "doc_type": d.doc_type,
@@ -141,6 +141,10 @@ async def list_my_templates():
             "version": d.version,
             "created_by": d.created_by,
             "created_at": d.created_at.isoformat() if d.created_at else None,
+            "url": f"{callback_base}/api/v1/onlyoffice/download/{quote(d.doc_key, safe='')}",
+            "downloadUrl": f"{api_base}/api/v1/onlyoffice/download/{quote(d.doc_key, safe='')}",
+            "documentServerUrl": os.getenv("DOCUMENT_SERVER_URL", "http://localhost:8080"),
+            "docType": "xlsx" if d.doc_type == "booking" else "docx",
         } for d in docs]
     finally:
         db.close()

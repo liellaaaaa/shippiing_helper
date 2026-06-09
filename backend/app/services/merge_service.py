@@ -126,24 +126,19 @@ class MergeService:
     def get_order_comparison(self, order_id: int) -> Optional[OrderComparisonResponse]:
         """
         获取指定订单的合并比对数据。
-        order_id 实为 OrderPiRecord.id（来自 DashboardOrder.order_id），
-        通过它找到 order_no，再找出该订单下所有产品记录。
+        order_id 可以是 Order.id 或 OrderPiRecord.id（两者都是整数主键）。
+        先按 OrderPiRecord.id 查找；如果找不到，再按 Order.id 查找。
         """
-        # order_id 实际上是 OrderPiRecord.id，找出 order_no
+        # 优先按 OrderPiRecord.id 查找
         record = self.db.query(OrderPiRecord).filter(OrderPiRecord.id == order_id).first()
-        if not record:
-            return None
 
-        order_no = record.order_no
+        if record:
+            order_no = record.order_no
+            all_records = self.db.query(OrderPiRecord).filter(
+                OrderPiRecord.order_no == order_no
+            ).all()
 
-        # 找出该订单下所有 OrderPiRecord 条目
-        all_records = self.db.query(OrderPiRecord).filter(
-            OrderPiRecord.order_no == order_no
-        ).all()
-
-        if all_records:
             first = all_records[0]
-            # 从 pi_contracts 读取收货人/卸货港
             pi_contract = self.db.query(PiContract).filter_by(pi_no=first.pi_no).first()
             pi_data = PiItemData(
                 consignee=pi_contract.consignee_name if pi_contract else None,
@@ -178,7 +173,7 @@ class MergeService:
                 items=comparison_items,
             )
 
-        # 回退：查原始 Order + OrderItem
+        # 回退：直接按 Order.id 查找
         order = self.db.query(Order).filter_by(id=order_id).first()
         if not order:
             return None

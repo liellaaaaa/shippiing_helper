@@ -341,7 +341,7 @@ async function onOrderChange(orderId: number) {
 async function openDocument(type: 'booking' | 'loi') {
   if (type === 'booking') return
   try {
-    const res = await phase2Api.generateLoi(selectedOrderId.value!, selectedPiNo.value)
+    const res = await phase2Api.generateLoi(currentOrderInfo.value.order_no, selectedPiNo.value)
     currentDocKey.value = res.data.documentKey || res.data.docKey
     currentConfig.value = res.data
   } catch (e: any) {
@@ -382,14 +382,21 @@ async function openBlankTemplate(type: 'booking' | 'loi' | 'msds') {
   }
 }
 
-function onOpenMyDoc(doc: any) {
+async function onOpenMyDoc(doc: any) {
   showMyDocuments.value = false
   currentDocKey.value = doc.doc_key
-  currentConfig.value = {
-    token: doc.token,
-    documentServerUrl: currentConfig.value.documentServerUrl,
-    documentKey: doc.doc_key,
-    downloadUrl: `/api/v1/onlyoffice/download/${encodeURIComponent(doc.doc_key)}`,
+  // Fetch fresh config from backend so JWT key and documentKey are properly paired.
+  // Using the stored doc.token would have a mismatched key since we now use UUID-based keys.
+  try {
+    const fileType = doc.docType || 'docx'
+    const res = await phase2Api.getJwt(doc.doc_key, fileType)
+    currentConfig.value = {
+      ...res.data,
+      url: doc.url,        // OnlyOffice Document Server URL (host.docker.internal)
+      downloadUrl: doc.downloadUrl,  // browser-accessible download URL
+    }
+  } catch (e: any) {
+    ElMessage.error('文档加载失败: ' + (e.message || ''))
   }
 }
 

@@ -63,6 +63,25 @@ async def generate_msds(product: str = Query(...)):
     }
 
 
+@router.get("/customs")
+async def generate_customs(order_id: int | None = Query(None)):
+    """
+    生成出口报关资料工作簿（5个 sheet 的 xlsx）。
+    order_id 暂不使用，为后续自动数据填充留扩展口。
+    """
+    svc = DocumentService()
+    content, doc_key, _ = svc.generate_customs(order_id=order_id)
+    token, config, safe_key = oo_svc.create_config(doc_key, "xlsx")
+    _save_doc_to_db(doc_key, "customs", content, order_id=order_id, storage_key=safe_key)
+    api_base = os.getenv("API_BASE_URL", "http://localhost:8000")
+    callback_base = os.getenv("ONLYOFFICE_CALLBACK_BASE_URL", "http://host.docker.internal:8000")
+    return {
+        **config,
+        "url": f"{callback_base}/api/v1/onlyoffice/download/{safe_key}",
+        "downloadUrl": f"{api_base}/api/v1/onlyoffice/download/{safe_key}",
+    }
+
+
 @router.get("/history/{order_id}")
 async def get_doc_history(order_id: int):
     db = SessionLocal()
@@ -116,7 +135,7 @@ def _save_doc_to_db(doc_key: str, doc_type: str, content: bytes, order_id: int =
             file_blob=base64.b64encode(content).decode(),
             content_hash=content_hash,
             version=1,
-            file_name=f"{doc_key}.{'xlsx' if doc_type == 'booking' else 'docx'}",
+            file_name=f"{doc_key}.{'xlsx' if doc_type in ('booking', 'customs') else 'docx'}",
             created_by="system",
         )
         db.add(doc)

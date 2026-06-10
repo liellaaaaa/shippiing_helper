@@ -2,7 +2,29 @@
   <div class="phase1-workflow">
     <div class="page-header">
       <h1 class="page-title">外贸订单处理工作流</h1>
-      <p class="page-subtitle">粘贴订单 → 上传 PI → 预览合并数据 → 确认入库</p>
+      <div class="page-header-row">
+        <span class="page-subtitle">粘贴订单 → 上传 PI → 预览合并数据 → 确认入库</span>
+        <div class="header-actions">
+          <el-button size="small" @click="handleReset">重置</el-button>
+          <el-button
+            type="primary"
+            size="small"
+            :disabled="!canMerge"
+            :loading="saving"
+            @click="handleConfirmSave"
+          >
+            确认入库
+          </el-button>
+          <el-button
+            v-if="savedOrderId"
+            type="primary"
+            size="small"
+            @click="$router.push({ path: '/phase2', query: { orderId: savedOrderId } })"
+          >
+            进入文档编辑 →
+          </el-button>
+        </div>
+      </div>
     </div>
 
     <div class="workflow-layout">
@@ -46,93 +68,96 @@
 
       <!-- 右侧预览区 -->
       <div class="preview-panel">
-        <!-- 订单头信息 -->
-        <el-card class="preview-card" v-if="orderParsed">
+        <!-- 订单+产品+PI 合并为一个卡片 -->
+        <el-card class="preview-card">
           <template #header>
             <div class="card-header">
-              <span>订单信息</span>
-              <el-tag type="warning" size="small">待确认</el-tag>
-            </div>
-          </template>
-          <div class="order-header-info">
-            <div class="info-row">
-              <span class="info-label">订单号</span>
-              <el-input v-model="orderForm.order_no" size="small" class="info-input" />
-            </div>
-            <div class="info-row">
-              <span class="info-label">客户编码</span>
-              <el-input v-model="orderForm.customer_code" size="small" class="info-input" />
-            </div>
-          </div>
-        </el-card>
-
-        <!-- 产品列表 -->
-        <el-card class="preview-card" style="margin-top: 12px;" v-if="orderForm.items.length > 0">
-          <template #header>
-            <div class="card-header">
-              <span>产品明细（共 {{ orderForm.items.length }} 种）</span>
-              <el-tag type="success" size="small">{{ orderForm.items.length }} 产品</el-tag>
+              <span>订单预览</span>
+              <el-tag v-if="orderParsed && piParsed" type="success" size="small">已完整</el-tag>
+              <el-tag v-else-if="orderParsed || piParsed" type="warning" size="small">待完善</el-tag>
             </div>
           </template>
 
-          <el-table :data="orderForm.items" border stripe size="small" max-height="350">
-            <el-table-column prop="internal_code" label="内部编码" width="100" />
-            <el-table-column prop="product_cn" label="产品中文名" min-width="120" />
-            <el-table-column prop="customs_name" label="报关名称" min-width="100">
-              <template #default="{ row }">
-                <el-input v-model="row.customs_name" size="small" />
+          <!-- 订单信息（折叠显示） -->
+          <el-collapse v-model="collapseActiveNames">
+            <el-collapse-item name="order">
+              <template #title>
+                <span>订单信息</span>
+                <el-tag v-if="orderParsed" type="success" size="small" style="margin-left:8px">已解析</el-tag>
               </template>
-            </el-table-column>
-            <el-table-column prop="spec_kg" label="规格" width="80" />
-            <el-table-column prop="quantity_kg" label="数量" width="90">
-              <template #default="{ row }">
-                <el-input-number
-                  v-model="row.quantity_kg"
-                  size="small"
-                  :min="0"
-                  controls-position="right"
-                  class="qty-input"
-                />
-              </template>
-            </el-table-column>
-            <el-table-column prop="hs_code" label="H.S.Code" width="100">
-              <template #default="{ row }">
-                <el-input v-model="row.hs_code" size="small" />
-              </template>
-            </el-table-column>
-          </el-table>
-        </el-card>
+              <div class="order-header-info">
+                <div class="info-row">
+                  <span class="info-label">订单号</span>
+                  <el-input v-model="orderForm.order_no" size="small" class="info-input" placeholder="待录入" />
+                </div>
+                <div class="info-row">
+                  <span class="info-label">客户编码</span>
+                  <el-input v-model="orderForm.customer_code" size="small" class="info-input" placeholder="待录入" />
+                </div>
+              </div>
+            </el-collapse-item>
 
-        <!-- PI 合并数据 -->
-        <el-card class="preview-card" style="margin-top: 12px;" v-if="piParsed">
-          <template #header>
-            <div class="card-header">
-              <span>PI 合并数据</span>
-              <el-tag type="success" size="small">已上传</el-tag>
-            </div>
-          </template>
-          <div class="pi-merge-info">
-            <div class="info-row">
-              <span class="info-label">PI号</span>
-              <el-input v-model="piForm.pi_no" size="small" class="info-input" />
-            </div>
-            <div class="info-row">
-              <span class="info-label">PI日期</span>
-              <el-input v-model="piForm.pi_date" size="small" class="info-input" />
-            </div>
-            <div class="info-row">
-              <span class="info-label">客户编码</span>
-              <el-input v-model="piForm.customer_code" size="small" class="info-input" />
-            </div>
-            <div class="info-row">
-              <span class="info-label">H.S.Code</span>
-              <el-input v-model="piForm.hs_code" size="small" class="info-input" />
-            </div>
-            <div class="info-row">
-              <span class="info-label">报关品名</span>
-              <el-input v-model="piForm.customs_name" size="small" class="info-input" />
-            </div>
-          </div>
+            <!-- 产品明细 -->
+            <el-collapse-item name="items">
+              <template #title>
+                <span>产品明细（共 {{ orderForm.items.length }} 种）</span>
+              </template>
+              <el-table :data="orderForm.items" border stripe size="small" max-height="250">
+                <el-table-column prop="internal_code" label="内部编码" width="100" />
+                <el-table-column prop="product_cn" label="产品中文名" min-width="120" />
+                <el-table-column prop="customs_name" label="报关名称" min-width="100">
+                  <template #default="{ row }">
+                    <el-input v-model="row.customs_name" size="small" />
+                  </template>
+                </el-table-column>
+                <el-table-column prop="spec_kg" label="规格" width="80" />
+                <el-table-column prop="quantity_kg" label="数量" width="90">
+                  <template #default="{ row }">
+                    <el-input-number v-model="row.quantity_kg" size="small" :min="0" controls-position="right" class="qty-input" />
+                  </template>
+                </el-table-column>
+                <el-table-column prop="hs_code" label="H.S.Code" width="100">
+                  <template #default="{ row }">
+                    <el-input v-model="row.hs_code" size="small" />
+                  </template>
+                </el-table-column>
+              </el-table>
+            </el-collapse-item>
+
+            <!-- PI 合并数据 -->
+            <el-collapse-item name="pi">
+              <template #title>
+                <span>PI 合并数据</span>
+                <el-tag v-if="piParsed" type="success" size="small" style="margin-left:8px">已上传</el-tag>
+                <el-tag v-else type="info" size="small" style="margin-left:8px">待上传</el-tag>
+              </template>
+              <div class="pi-merge-info" v-if="piParsed">
+                <div class="info-row">
+                  <span class="info-label">PI号</span>
+                  <el-input v-model="piForm.pi_no" size="small" class="info-input" />
+                </div>
+                <div class="info-row">
+                  <span class="info-label">PI日期</span>
+                  <el-input v-model="piForm.pi_date" size="small" class="info-input" />
+                </div>
+                <div class="info-row">
+                  <span class="info-label">客户编码</span>
+                  <el-input v-model="piForm.customer_code" size="small" class="info-input" />
+                </div>
+                <div class="info-row">
+                  <span class="info-label">H.S.Code</span>
+                  <el-input v-model="piForm.hs_code" size="small" class="info-input" />
+                </div>
+                <div class="info-row">
+                  <span class="info-label">报关品名</span>
+                  <el-input v-model="piForm.customs_name" size="small" class="info-input" />
+                </div>
+              </div>
+              <div v-else class="empty-placeholder">
+                <span>请上传 PI 合同文件（.xls/.xlsx/.pdf）</span>
+              </div>
+            </el-collapse-item>
+          </el-collapse>
         </el-card>
 
         <el-card class="preview-card" style="margin-top: 12px;">
@@ -148,25 +173,6 @@
       </div>
     </div>
 
-    <div class="action-bar">
-      <el-button @click="handleReset">重置</el-button>
-      <el-button
-        type="primary"
-        size="large"
-        :disabled="!canMerge"
-        :loading="saving"
-        @click="handleConfirmSave"
-      >
-        确认入库
-      </el-button>
-      <el-button
-        v-if="savedOrderId"
-        type="primary"
-        @click="$router.push({ path: '/phase2', query: { orderId: savedOrderId } })"
-      >
-        进入文档编辑 →
-      </el-button>
-    </div>
   </div>
 </template>
 
@@ -191,6 +197,7 @@ const piFileName = ref('')
 const saving = ref(false)
 const savedOrderId = ref<number | null>(null)
 const packagingResult = ref<PackagingResult | null>(null)
+const collapseActiveNames = ref<string[]>(['order', 'items', 'pi'])
 const calcRef = ref<InstanceType<typeof PackagingCalculator>>()
 
 // 可拖拽分割条
@@ -423,7 +430,9 @@ function handleReset() {
 .phase1-workflow { padding: 24px; max-width: 1400px; margin: 0 auto; }
 .page-header { margin-bottom: 20px; }
 .page-title { font-size: 28px; font-weight: 600; margin: 0 0 8px 0; }
+.page-header-row { display: flex; align-items: center; justify-content: space-between; }
 .page-subtitle { font-size: 14px; color: #909399; margin: 0; }
+.header-actions { display: flex; gap: 8px; }
 
 .workflow-layout { display: flex; gap: 0; align-items: stretch; overflow: hidden; }
 .input-panel { width: 200px; flex-shrink: 0; display: flex; flex-direction: column; min-width: 0; }
@@ -462,6 +471,14 @@ function handleReset() {
 
 /* PI merge info */
 .pi-merge-info { display: flex; flex-direction: column; gap: 8px; }
+
+/* Empty state placeholder */
+.empty-placeholder {
+  text-align: center;
+  padding: 12px;
+  color: #c0c4cc;
+  font-size: 13px;
+}
 
 /* Product item rows */
 .product-item-card {

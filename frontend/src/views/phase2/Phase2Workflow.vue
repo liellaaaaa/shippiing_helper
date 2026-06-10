@@ -155,17 +155,32 @@
             </div>
             <div class="info-row">
               <span class="info-label">毛重</span>
-              <el-input v-if="selectedOrderId" v-model="currentOrderInfo.gross_weight" size="small" placeholder="可编辑">
+              <el-input v-if="selectedOrderId" v-model="currentOrderInfo.gross_weight_kg" size="small" placeholder="可编辑">
                 <template #append>kg</template>
               </el-input>
               <span v-else class="info-value muted">— kg</span>
             </div>
             <div class="info-row">
               <span class="info-label">体积(CBM)</span>
-              <el-input v-if="selectedOrderId" v-model="currentOrderInfo.volume" size="small" placeholder="可编辑">
+              <el-input v-if="selectedOrderId" v-model="currentOrderInfo.volume_cbm" size="small" placeholder="可编辑">
                 <template #append>m³</template>
               </el-input>
               <span v-else class="info-value muted">— m³</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">桶数</span>
+              <el-input v-if="selectedOrderId" v-model="currentOrderInfo.drum_count" size="small" placeholder="可编辑" />
+              <span v-else class="info-value muted">—</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">托盘数</span>
+              <el-input v-if="selectedOrderId" v-model="currentOrderInfo.pallet_count" size="small" placeholder="可编辑" />
+              <span v-else class="info-value muted">—</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">20GP判断</span>
+              <span v-if="selectedOrderId && currentOrderInfo.fits_20gp" class="info-value" :class="currentOrderInfo.fits_20gp === '适合' ? 'text-success' : 'text-danger'">{{ currentOrderInfo.fits_20gp }}</span>
+              <span v-else class="info-value muted">—</span>
             </div>
           </div>
         </el-card>
@@ -321,8 +336,11 @@ const currentOrderInfo = ref({
   product_cn: '',
   product_en: '',
   hs_code: '',
-  gross_weight: '',
-  volume: '',
+  gross_weight_kg: '',
+  volume_cbm: '',
+  drum_count: '',
+  pallet_count: '',
+  fits_20gp: '',
 })
 
 if (route.query.orderId) {
@@ -356,8 +374,11 @@ async function onOrderChange(orderId: number) {
       product_cn: data.items?.[0]?.product_cn || '',
       product_en: '',
       hs_code: data.items?.[0]?.order?.hs_code || '',
-      gross_weight: '',
-      volume: '',
+      gross_weight_kg: data.gross_weight_kg ? String(data.gross_weight_kg) : '',
+      volume_cbm: data.volume_cbm ? String(data.volume_cbm) : '',
+      drum_count: data.drum_count ? String(data.drum_count) : '',
+      pallet_count: data.pallet_count ? String(data.pallet_count) : '',
+      fits_20gp: data.fits_20gp || '',
     }
   } catch (e) {
     piList.value = []

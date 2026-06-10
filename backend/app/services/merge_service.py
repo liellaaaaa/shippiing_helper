@@ -170,6 +170,11 @@ class MergeService:
                 order_no=first.order_no,
                 customer_code=first.customer_code,
                 pi_no=first.pi_no,
+                drum_count=first.drum_count,
+                pallet_count=first.pallet_count,
+                gross_weight_kg=first.gross_weight_kg,
+                volume_cbm=first.volume_cbm,
+                fits_20gp=first.fits_20gp,
                 items=comparison_items,
             )
 

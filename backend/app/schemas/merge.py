@@ -78,6 +78,12 @@ class OrderComparisonResponse(BaseModel):
     order_no: str
     customer_code: Optional[str] = None
     pi_no: Optional[str] = None  # 该订单关联的 PI 号
+    # 包装计算数据
+    drum_count: Optional[int] = None
+    pallet_count: Optional[int] = None
+    gross_weight_kg: Optional[float] = None
+    volume_cbm: Optional[float] = None
+    fits_20gp: Optional[str] = None
     items: list[ComparisonItem]
 
 

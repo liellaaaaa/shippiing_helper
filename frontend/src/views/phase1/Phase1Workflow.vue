@@ -102,21 +102,21 @@
               <template #title>
                 <span>产品明细（共 {{ orderForm.items.length }} 种）</span>
               </template>
-              <el-table :data="orderForm.items" border stripe size="small" max-height="250">
-                <el-table-column prop="internal_code" label="内部编码" width="100" />
-                <el-table-column prop="product_cn" label="产品中文名" min-width="120" />
-                <el-table-column prop="customs_name" label="报关名称" min-width="100">
+              <el-table :data="orderForm.items" border stripe size="small" max-height="250" style="width:100%">
+                <el-table-column prop="internal_code" label="内部编码" width="110" />
+                <el-table-column prop="product_cn" label="产品中文名" min-width="120" show-overflow-tooltip />
+                <el-table-column prop="customs_name" label="报关名称" width="130">
                   <template #default="{ row }">
                     <el-input v-model="row.customs_name" size="small" />
                   </template>
                 </el-table-column>
-                <el-table-column prop="spec_kg" label="规格" width="80" />
-                <el-table-column prop="quantity_kg" label="数量" width="90">
+                <el-table-column prop="spec_kg" label="规格(kg)" width="90" align="center" />
+                <el-table-column prop="quantity_kg" label="数量" width="110">
                   <template #default="{ row }">
                     <el-input-number v-model="row.quantity_kg" size="small" :min="0" controls-position="right" class="qty-input" />
                   </template>
                 </el-table-column>
-                <el-table-column prop="hs_code" label="H.S.Code" width="100">
+                <el-table-column prop="hs_code" label="H.S.Code" width="120">
                   <template #default="{ row }">
                     <el-input v-model="row.hs_code" size="small" />
                   </template>

@@ -50,6 +50,11 @@ export interface OrderComparisonResponse {
   order_no: string
   customer_code?: string
   pi_no?: string
+  drum_count?: number
+  pallet_count?: number
+  gross_weight_kg?: number
+  volume_cbm?: number
+  fits_20gp?: string
   items: ComparisonItem[]
 }
 

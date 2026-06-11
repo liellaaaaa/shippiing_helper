@@ -88,5 +88,6 @@ class OnlyOfficeService:
             "documentServerUrl": DOCUMENT_SERVER_URL,
             "documentKey": safe_key,
             "docType": file_type,
+            "title": document_key,
         }
         return token, config, safe_key

@@ -22,6 +22,7 @@ const props = defineProps<{
   downloadUrl: string
   url?: string       // OnlyOffice 可访问的 URL（host.docker.internal:8000）
   docType?: string  // "cell" | "word" | "slide"
+  title?: string    // 文档标题，传给 OnlyOffice 显示
 }>()
 
 const editorRef = ref<HTMLElement | null>(null)
@@ -45,7 +46,7 @@ function buildConfig() {
     document: {
       fileType: ext,
       key: props.docKey,
-      title: `Document.${ext}`,
+      title: props.title || `Document.${ext}`,
       url: docUrl,
     },
     documentType: dt,

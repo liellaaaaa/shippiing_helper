@@ -213,6 +213,7 @@
             :download-url="currentConfig.downloadUrl"
             :url="currentConfig.url"
             :doc-type="currentConfig.docType"
+            :title="currentConfig.title"
           />
           <div v-else class="editor-empty">
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#bfbfbf" stroke-width="1.2">

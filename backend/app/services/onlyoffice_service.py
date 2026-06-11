@@ -32,7 +32,7 @@ class OnlyOfficeService:
         payload = {
             "document": {
                 "key": document_key,  # Use original key so callback works
-                "title": f"Document.{file_type}",
+                "title": document_key,
                 "fileType": file_type,
                 "callbackUrl": f"{_callback_base()}/api/v1/onlyoffice/callback?doc_key={encoded_key}",
             },
@@ -69,7 +69,7 @@ class OnlyOfficeService:
         payload = {
             "document": {
                 "key": safe_key,  # Use safe key for OnlyOffice routing
-                "title": f"Document.{file_type}",
+                "title": document_key,
                 "fileType": file_type,
                 "callbackUrl": f"{_callback_base()}/api/v1/onlyoffice/callback?doc_key={safe_key}",
             },

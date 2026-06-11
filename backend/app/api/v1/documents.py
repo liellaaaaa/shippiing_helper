@@ -63,6 +63,34 @@ async def generate_msds(product: str = Query(...)):
     }
 
 
+@router.get("/msds/{msds_id}")
+async def load_msds(msds_id: int):
+    """
+    加载指定的 MSDS 文件（从数据库索引中按 ID 查找原始文件，
+    .doc → .docx 转换后交给 OnlyOffice 编辑）。
+    """
+    db = SessionLocal()
+    try:
+        from app.models.msds_index import MSDSIndex
+        record = db.query(MSDSIndex).filter(MSDSIndex.id == msds_id).first()
+        if not record:
+            return {"error": "MSDS file not found"}
+        svc = DocumentService()
+        content, doc_key, _ = svc.load_msds_file(record)
+        token, config, safe_key = oo_svc.create_config(doc_key, "docx")
+        # Use safe_key (UUID) as doc_key so OnlyOffice can find it by documentKey
+        _save_doc_to_db(safe_key, "msds", content, storage_key=safe_key)
+        api_base = os.getenv("API_BASE_URL", "http://localhost:8000")
+        callback_base = os.getenv("ONLYOFFICE_CALLBACK_BASE_URL", "http://host.docker.internal:8000")
+        return {
+            **config,
+            "url": f"{callback_base}/api/v1/onlyoffice/download/{safe_key}",
+            "downloadUrl": f"{api_base}/api/v1/onlyoffice/download/{safe_key}",
+        }
+    finally:
+        db.close()
+
+
 @router.get("/customs")
 async def generate_customs(order_id: int | None = Query(None)):
     """

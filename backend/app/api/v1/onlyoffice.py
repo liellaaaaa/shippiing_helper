@@ -2,7 +2,7 @@ import os, hashlib, base64, logging
 from fastapi import APIRouter, UploadFile, File, Query
 from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import desc
-from urllib.parse import unquote
+from urllib.parse import quote, unquote
 from app.database import SessionLocal
 from app.models.shipment_doc import ShipmentDoc
 from app.services.onlyoffice_service import OnlyOfficeService
@@ -100,11 +100,10 @@ MEDIA_TYPES = {
 
 
 @router.get("/download/{doc_key}")
-async def download_doc(doc_key: str):
+def download_doc(doc_key: str):
     doc_key = unquote(doc_key)
     db = SessionLocal()
     try:
-        # Try UUID directly first (documents are stored under UUID)
         doc = db.query(ShipmentDoc).filter(
             ShipmentDoc.doc_key == doc_key
         ).order_by(desc(ShipmentDoc.version)).first()
@@ -113,12 +112,14 @@ async def download_doc(doc_key: str):
         content = base64.b64decode(doc.file_blob)
         suffix = doc.file_name.split(".")[-1].lower() if "." in doc.file_name else "bin"
         media_type = MEDIA_TYPES.get(suffix, "application/octet-stream")
-        from starlette.concurrency import iterate_in_threadpool
-        async def content_generator(data):
-            async for chunk in iterate_in_threadpool([data]):
-                yield chunk
-        return StreamingResponse(content_generator(content), media_type=media_type, headers={
-            "content-disposition": f'attachment; filename="{doc.file_name}"'
-        })
+        encoded_name = quote(doc.file_name, safe='')
+        return Response(
+            content=content,
+            media_type=media_type,
+            headers={
+                "content-disposition": f"attachment; filename*=UTF-8''{encoded_name}",
+                "content-length": str(len(content)),
+            }
+        )
     finally:
         db.close()

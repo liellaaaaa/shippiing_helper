@@ -24,6 +24,9 @@ export const phase2Api = {
   getMsdsContent(id: number) {
     return axios.get(`/api/v1/msds/${id}/content`)
   },
+  loadMsds(msdsId: number) {
+    return axios.get(`/api/v1/documents/msds/${msdsId}`)
+  },
   reindexMsds() {
     return axios.post('/api/v1/msds/reindex')
   },

@@ -15,6 +15,19 @@ from app.models.order_pi_record import OrderPiRecord
 from app.models.pi_contract import PiContract, PiContractItem
 
 
+import re
+
+# XML 1.0 compatible character set: U+0009, U+000A, U+000D, U+0020–U+10FFFF
+_XML_ILLEGALChars = re.compile(
+    r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x84\x86-\x9f\ud800-\udfff￾￿]"
+)
+
+
+def _sanitize_for_xml(text: str) -> str:
+    """Remove XML-illegal control characters from text."""
+    return _XML_ILLEGALChars.sub("", text)
+
+
 def convert_doc_to_docx(doc_path: str) -> bytes:
     """
     将 .doc 文件（binary，非 OLE）转换为 .docx 格式。
@@ -24,9 +37,9 @@ def convert_doc_to_docx(doc_path: str) -> bytes:
     text = _extract_doc_text(doc_path)
     doc = Document()
     for line in text.split("\n"):
-        line = line.rstrip()
+        line = _sanitize_for_xml(line.rstrip())
         if not line:
-            p = doc.add_paragraph("")
+            doc.add_paragraph("")
         else:
             doc.add_paragraph(line)
     buf = BytesIO()
@@ -35,26 +48,40 @@ def convert_doc_to_docx(doc_path: str) -> bytes:
 
 
 def _extract_doc_text(doc_path: str) -> str:
-    """从 .doc 文件提取纯文本（antiword 优先，chardet 回退）。"""
+    """
+    从 .doc 文件提取纯文本（antiword 优先，chardet 回退）。
+    尝试多种编码以确保中文正确提取。
+    """
     import subprocess, chardet
-    # 优先尝试 antiword
-    try:
-        result = subprocess.run(
-            ["antiword", doc_path],
-            capture_output=True,
-            timeout=30,
-        )
-        if result.returncode == 0 and result.stdout:
-            return result.stdout.decode("utf-8", errors="ignore")
-    except (subprocess.SubprocessError, FileNotFoundError):
-        pass
-    # 回退：chardet 检测编码
+
+    # 优先尝试 antiword（可能返回 utf-8 或 latin-1 编码）
+    for encoding in ("utf-8", "latin-1", "cp1252", "gb2312", "gbk"):
+        try:
+            result = subprocess.run(
+                ["antiword", "-f", doc_path] if encoding != "utf-8" else ["antiword", doc_path],
+                capture_output=True,
+                timeout=30,
+            )
+            if result.returncode == 0 and result.stdout:
+                try:
+                    text = result.stdout.decode(encoding, errors="strict")
+                except UnicodeDecodeError:
+                    text = result.stdout.decode(encoding, errors="replace")
+                # 检查是否提取到了有效内容（包含非ASCII字符或足够多的ASCII）
+                if text and len(text.strip()) > 10:
+                    return text
+        except (subprocess.SubprocessError, FileNotFoundError):
+            break
+        except Exception:
+            continue
+
+    # 回退：读取二进制文件，用 chardet 检测编码
     try:
         with open(doc_path, "rb") as f:
             raw = f.read()
         detected = chardet.detect(raw)
         encoding = detected.get("encoding", "latin-1") or "latin-1"
-        return raw.decode(encoding, errors="ignore")
+        return raw.decode(encoding, errors="replace")
     except Exception:
         return ""
 
@@ -377,4 +404,34 @@ class DocumentService:
 
         timestamp = int(time.time())
         doc_key = f"{key_prefix}_template_{timestamp}"
+        return content, doc_key, base64.b64encode(content).decode()
+
+    def load_msds_file(self, msds_index_record) -> Tuple[bytes, str, str]:
+        """
+        根据 MSDSIndex 记录加载原始文件，检测文件真实格式后转换。
+        msds_index_record: MSDSIndex ORM 对象
+        返回 (content_bytes, doc_key, base64_content)
+        """
+        file_path = msds_index_record.file_path
+
+        # 用魔数检测真实格式，不用扩展名
+        with open(file_path, "rb") as f:
+            magic = f.read(8)
+
+        # OLE2 Compound Document (.doc/.xls 等旧 Office 格式)
+        if magic[:4] == b"\xd0\xcf\x11\xe0":
+            content = convert_doc_to_docx(file_path)
+        # PDF
+        elif magic[:4] == b"%PDF":
+            with open(file_path, "rb") as f:
+                content = f.read()
+        # ZIP-based docx/xlsx (默认)
+        else:
+            with open(file_path, "rb") as f:
+                content = f.read()
+
+        # 构建 doc_key（使用原始文件名，去掉空格括号等）
+        import re
+        safe_name = re.sub(r"[\(\)\s/\\]+", "_", os.path.splitext(os.path.basename(file_path))[0]).strip("_")
+        doc_key = f"msds_{msds_index_record.id}_{safe_name}_{int(time.time())}"
         return content, doc_key, base64.b64encode(content).decode()

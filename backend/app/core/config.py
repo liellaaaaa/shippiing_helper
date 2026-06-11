@@ -14,6 +14,8 @@ TEMPLATES = {
 }
 
 MSDS_DIR = str(ROOT / "references" / "MSDS")
+# MSDS standard template — prefer the pre-built .docx if it exists, otherwise auto-generated
+_MSDS_TEMPLATE_DEFAULT = str(ROOT / "references" / "MSDS" / "MSDS标准模板.docx")
 TRANSPORT_REPORTS_DIR = str(ROOT / "references" / "海运鉴定报告")
 EXPORT_CODES_FILE = str(ROOT / "references" / "2024.12.5 最新出口商品编码及报关成分.xlsx")
 

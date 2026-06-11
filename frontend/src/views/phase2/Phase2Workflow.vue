@@ -76,7 +76,7 @@
           </svg>
           LOI保函
         </el-button>
-        <el-button size="small" @click="showMsdsDialog = true">
+        <el-button size="small" @click="showMsdsDialog = true; loadMsdsList()">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px">
             <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M8 13h8M8 17h8M8 9h2"/>
           </svg>
@@ -185,30 +185,15 @@
           </div>
         </el-card>
 
-        <!-- Template Fields Reference -->
-        <el-card class="info-card ref-card" shadow="never" style="margin-top: 12px;">
+        <!-- Field Reference Card: MSDS + Transport Report -->
+        <el-card class="info-card ref-card" shadow="never" style="margin-top: 12px; flex: 1; display: flex; flex-direction: column; overflow: hidden;">
           <template #header>
             <div class="card-header">
-              <span class="card-title">模板字段参考</span>
+              <span class="card-title">字段参考</span>
             </div>
           </template>
-          <div class="ref-table">
-            <div class="ref-row ref-header">
-              <span>字段名</span>
-              <span>含义</span>
-            </div>
-            <div class="ref-row">
-              <code class="field-code">{{ 'MARK_SHIPPER' }}</code>
-              <span class="field-desc">发货人 — 发货人公司名称</span>
-            </div>
-            <div class="ref-row">
-              <code class="field-code">{{ 'MARK_PORT' }}</code>
-              <span class="field-desc">卸货港 — 目的港/卸货港</span>
-            </div>
-            <div class="ref-row">
-              <code class="field-code">{{ 'MARK_GOODS_TABLE' }}</code>
-              <span class="field-desc">货物明细表 — 品名/规格/毛重/体积表格起始位</span>
-            </div>
+          <div style="flex: 1; overflow: hidden; display: flex; flex-direction: column;">
+            <FieldReferenceCard style="flex: 1; overflow: hidden;" />
           </div>
         </el-card>
       </aside>
@@ -259,16 +244,41 @@
     </el-dialog>
 
     <!-- ── MSDS Dialog ──────────────────────────── -->
-    <el-dialog v-model="showMsdsDialog" title="生成 MSDS" width="440px" :append-to-body="true" class="msds-dialog">
-      <div class="msds-select-row">
-        <label class="msds-label">选择产品</label>
-        <el-select v-model="selectedProductForMsds" placeholder="从当前订单选择产品" size="default" class="msds-select" clearable>
-          <el-option v-for="item in currentOrderItems" :key="item.internal_code" :label="item.product_cn" :value="item.product_cn" />
-        </el-select>
+    <el-dialog v-model="showMsdsDialog" title="选择 MSDS 文件" width="500px" :append-to-body="true" class="msds-dialog">
+      <!-- 搜索栏 -->
+      <div class="msds-search-row">
+        <el-input v-model="msdsSearchQuery" placeholder="搜索 MSDS 文件名..." size="default" clearable @keyup.enter="loadMsdsList">
+          <template #append>
+            <el-button @click="loadMsdsList">搜索</el-button>
+          </template>
+        </el-input>
+      </div>
+      <!-- 文件列表 -->
+      <div class="msds-file-list" v-loading="msdsLoading">
+        <div v-if="!msdsLoading && msdsFileList.length === 0" class="msds-empty">
+          <span v-if="msdsSearchDone">无匹配文件</span>
+          <span v-else>加载中...</span>
+        </div>
+        <div
+          v-for="f in msdsFileList"
+          :key="f.id"
+          class="msds-file-item"
+          :class="{ selected: selectedMsdsId === f.id }"
+          @click="selectedMsdsId = f.id"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;color:#409eff">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+          </svg>
+          <div class="msds-file-info">
+            <span class="msds-file-name">{{ f.filename }}</span>
+            <span class="msds-file-product">{{ f.product_name_cn || '—' }}</span>
+          </div>
+          <span class="msds-file-badge" :class="f.filename.split('.').pop()">{{ f.filename.split('.').pop()?.toUpperCase() }}</span>
+        </div>
       </div>
       <template #footer>
         <el-button @click="showMsdsDialog = false">取消</el-button>
-        <el-button type="primary" @click="generateMsds" :disabled="!selectedProductForMsds">生成文档</el-button>
+        <el-button type="primary" @click="openMsdsFile" :disabled="!selectedMsdsId || msdsOpening">打开文档</el-button>
       </template>
     </el-dialog>
 
@@ -283,6 +293,7 @@ import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import DocumentEditor from './components/DocumentEditor.vue'
 import MyDocumentsDrawer from './components/MyDocumentsDrawer.vue'
+import FieldReferenceCard from './components/FieldReferenceCard.vue'
 import { ArrowDown } from '@element-plus/icons-vue'
 import { phase2Api } from '@/api/phase2'
 import { getOrderList, getOrderComparison, getOrderPiContracts, type OrderListItem } from '@/api/merge'
@@ -321,7 +332,12 @@ function startResize(e: MouseEvent) {
   document.addEventListener('mouseup', onMouseUp)
 }
 const showMsdsDialog = ref(false)
-const selectedProductForMsds = ref('')
+const msdsSearchQuery = ref('')
+const msdsFileList = ref<any[]>([])
+const msdsLoading = ref(false)
+const msdsSearchDone = ref(false)
+const selectedMsdsId = ref<number | null>(null)
+const msdsOpening = ref(false)
 const showMyDocuments = ref(false)
 const showBookingDialog = ref(false)
 const selectedBookingTemplate = ref<'xls' | 'xlsx'>('xlsx')
@@ -407,15 +423,37 @@ async function confirmGenerateBooking() {
   }
 }
 
-async function generateMsds() {
-  if (!selectedProductForMsds.value) return
+async function loadMsdsList() {
+  msdsLoading.value = true
+  msdsSearchDone.value = false
+  msdsFileList.value = []
+  try {
+    const res = await phase2Api.listMsds({ search: msdsSearchQuery.value, pageSize: 100 })
+    msdsFileList.value = res.data.items || []
+  } catch {
+    msdsFileList.value = []
+  } finally {
+    msdsLoading.value = false
+    msdsSearchDone.value = true
+  }
+}
+
+async function openMsdsFile() {
+  if (!selectedMsdsId.value) return
+  msdsOpening.value = true
   showMsdsDialog.value = false
   try {
-    const res = await phase2Api.generateMsds(selectedProductForMsds.value)
+    const res = await phase2Api.loadMsds(selectedMsdsId.value)
+    if (res.data.error) {
+      ElMessage.error('加载失败: ' + res.data.error)
+      return
+    }
     currentDocKey.value = res.data.documentKey || res.data.docKey
     currentConfig.value = res.data
   } catch (e: any) {
-    ElMessage.error('MSDS生成失败: ' + (e.message || ''))
+    ElMessage.error('MSDS加载失败: ' + (e.message || ''))
+  } finally {
+    msdsOpening.value = false
   }
 }
 
@@ -531,6 +569,13 @@ onMounted(() => {
 :deep(.el-card__body) {
   padding: 12px 14px;
 }
+.ref-card :deep(.el-card__body) {
+  padding: 0;
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
 .card-header {
   font-weight: 600;
   font-size: 15px;
@@ -574,36 +619,6 @@ onMounted(() => {
   font-family: 'JetBrains Mono', monospace;
 }
 
-/* ── Reference Card ────────────────────────── */
-.ref-table {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.ref-row {
-  display: grid;
-  grid-template-columns: 140px 1fr;
-  gap: 8px;
-  font-size: 11px;
-  align-items: start;
-}
-.ref-row.ref-header {
-  font-weight: 600;
-  color: var(--el-text-color-secondary, #909399);
-  border-bottom: 1px solid var(--el-border-color-light, #e4e7ed);
-  padding-bottom: 4px;
-}
-.field-code {
-  font-family: 'JetBrains Mono', monospace;
-  color: var(--el-color-primary, #409eff);
-  background: var(--el-fill-color-light, #f5f7fa);
-  padding: 1px 4px;
-  border-radius: 3px;
-  font-size: 11px;
-}
-.field-desc {
-  color: var(--el-text-color-regular, #606266);
-}
 
 /* ── Editor Panel (Right) ───────────────────── */
 .editor-card {
@@ -648,6 +663,67 @@ onMounted(() => {
   font-size: 13px;
   color: var(--el-text-color-regular, #606266);
 }
+.msds-search-row {
+  margin-bottom: 12px;
+}
+.msds-file-list {
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--el-border-color-light, #e4e7ed);
+  border-radius: 6px;
+}
+.msds-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 80px;
+  color: var(--el-text-color-placeholder, #c0c4cc);
+  font-size: 13px;
+}
+.msds-file-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--el-border-color-extra-light, #f2f6fc);
+  transition: background 0.12s;
+}
+.msds-file-item:last-child { border-bottom: none; }
+.msds-file-item:hover { background: var(--el-fill-color-light, #f5f7fa); }
+.msds-file-item.selected { background: var(--el-color-primary-light-9, #ecf5ff); }
+.msds-file-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.msds-file-name {
+  font-size: 13px;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--el-text-color-primary, #303133);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.msds-file-product {
+  font-size: 11px;
+  color: var(--el-text-color-secondary, #909399);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.msds-file-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.msds-file-badge.docx { background: #409eff22; color: #409eff; }
+.msds-file-badge.doc { background: #e6a23c22; color: #e6a23c; }
+.msds-file-badge.pdf { background: #f56c6c22; color: #f56c6c; }
 
 /* ── Scrollbar ──────────────────────────────── */
 .info-panel::-webkit-scrollbar { width: 4px; }

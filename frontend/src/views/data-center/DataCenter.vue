@@ -33,7 +33,7 @@
               @keyup.enter="searchMsds"
             >
               <template #append>
-                <el-button :loading="msdsLoading" @click="searchMsds">搜索</el-button>
+                <el-button @click="searchMsds">搜索</el-button>
               </template>
             </el-input>
           </div>
@@ -48,7 +48,7 @@
               @keyup.enter="searchTransport"
             >
               <template #append>
-                <el-button :loading="trLoading" @click="searchTransport">搜索</el-button>
+                <el-button @click="searchTransport">搜索</el-button>
               </template>
             </el-input>
           </div>
@@ -60,7 +60,6 @@
               :data="filteredMsdsTree"
               :props="{ children: 'children', label: 'label', isLeaf: 'isLeaf' }"
               node-key="key"
-              :filter-node-method="filterNode"
               default-expand-all
               @node-click="onTreeNodeClick"
               class="file-tree"
@@ -77,7 +76,6 @@
               :data="filteredTransportTree"
               :props="{ children: 'children', label: 'label', isLeaf: 'isLeaf' }"
               node-key="key"
-              :filter-node-method="filterNode"
               default-expand-all
               @node-click="onTreeNodeClick"
               class="file-tree"
@@ -189,7 +187,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { CircleClose, Document, Folder, UploadFilled, Check } from '@element-plus/icons-vue'
+import { Document, Folder, UploadFilled, Check } from '@element-plus/icons-vue'
 import { phase2Api } from '@/api/phase2'
 
 const activeTab = ref<'msds' | 'transport'>('msds')
@@ -206,8 +204,6 @@ interface TreeNode {
 
 const msdsTree = ref<TreeNode[]>([])
 const transportTree = ref<TreeNode[]>([])
-const selectedFile = ref<TreeNode | null>(null)
-const treeRef = ref()
 
 async function loadTree() {
   try {
@@ -242,9 +238,6 @@ function onFileClick(data: TreeNode) {
   previewFilename.value = data.label
 }
 
-function filterNode(query: string, data: TreeNode): boolean {
-  return data.label.toLowerCase().includes(query.toLowerCase())
-}
 
 function filterTree(nodes: TreeNode[], query: string): TreeNode[] {
   return nodes.filter(n => {
@@ -273,9 +266,7 @@ onMounted(() => {
   loadTree()
 })
 
-watch(activeTab, () => {
-  loadTree()
-})
+watch(activeTab, loadTree)
 
 // ── MSDS ───────────────────────────────────────────────
 interface MsdsResult {
@@ -291,9 +282,6 @@ interface MsdsResult {
 }
 
 const msdsQuery = ref('')
-const msdsLoading = ref(false)
-const msdsSearched = ref(false)
-const msdsResults = ref<MsdsResult[]>([])
 const msdsSelectedId = ref<number | null>(null)
 const msdsSummary = ref<Partial<MsdsResult>>({})
 const msdsUploadDialogVisible = ref(false)
@@ -307,14 +295,8 @@ const previewFilename = computed(() => {
   return trSelectedFilename.value || null
 })
 
-async function searchMsds() {
-  if (!msdsQuery.value.trim()) return
-  msdsLoading.value = true
-  msdsSearched.value = true
-  try {
-    await loadTree()
-  } catch { ElMessage.error('MSDS 搜索失败') }
-  finally { msdsLoading.value = false }
+function searchMsds() {
+  // Filtering is handled by computed property filteredMsdsTree
 }
 
 function selectMsds(r: MsdsResult) {
@@ -361,7 +343,6 @@ async function confirmMsdsUpload() {
     msdsUploadDialogVisible.value = false
     msdsFileToUpload.value = null
     msdsUploadFileName.value = ''
-    await searchMsds()
   } catch { ElMessage.error('上传失败') }
   finally { msdsUploading.value = false }
 }
@@ -376,20 +357,11 @@ interface TransportResult {
 }
 
 const trQuery = ref('')
-const trLoading = ref(false)
-const trSearched = ref(false)
-const trResults = ref<TransportResult[]>([])
 const trSelectedFilename = ref<string | null>(null)
 const trFields = ref({ report_no: '', sample_description: '' })
 
-async function searchTransport() {
-  if (!trQuery.value.trim()) return
-  trLoading.value = true
-  trSearched.value = true
-  try {
-    await loadTree()
-  } catch { ElMessage.error('运输鉴定报告搜索失败') }
-  finally { trLoading.value = false }
+function searchTransport() {
+  // Filtering is handled by computed property filteredTransportTree
 }
 
 function selectTransport(r: TransportResult) {

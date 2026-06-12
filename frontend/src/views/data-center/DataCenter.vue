@@ -53,46 +53,42 @@
             </el-input>
           </div>
 
-          <!-- MSDS 结果列表 -->
-          <div v-if="activeTab === 'msds' && msdsResults.length" class="results-list">
-            <div
-              v-for="r in msdsResults"
-              :key="r.id"
-              class="result-item"
-              :class="{ 'result-item--selected': msdsSelectedId === r.id }"
-              @click="selectMsds(r)"
+          <!-- File Tree -->
+          <div class="file-tree-wrapper">
+            <el-tree
+              v-if="activeTab === 'msds'"
+              :data="filteredMsdsTree"
+              :props="{ children: 'children', label: 'label', isLeaf: 'isLeaf' }"
+              node-key="key"
+              :filter-node-method="filterNode"
+              default-expand-all
+              @node-click="onTreeNodeClick"
+              class="file-tree"
             >
-              <div class="result-main">
-                <span class="result-filename">{{ r.filename }}</span>
-                <el-tag :type="r.file_format === 'pdf' ? 'danger' : 'primary'" size="small">
-                  {{ r.file_format.toUpperCase() }}
-                </el-tag>
-              </div>
-              <div v-if="r.product_name_cn" class="result-product">{{ r.product_name_cn }}</div>
-            </div>
-          </div>
-          <div v-else-if="activeTab === 'msds' && msdsSearched && !msdsLoading" class="empty-hint">
-            <el-icon><circle-close /></el-icon> 无匹配结果
-          </div>
-
-          <!-- 运输鉴定结果列表 -->
-          <div v-if="activeTab === 'transport' && trResults.length" class="results-list">
-            <div
-              v-for="r in trResults"
-              :key="r.id"
-              class="result-item"
-              :class="{ 'result-item--selected': trSelectedFilename === r.filename }"
-              @click="selectTransport(r)"
+              <template #default="{ node, data }">
+                <span class="tree-node">
+                  <span class="node-icon">{{ getFileIcon(data) }}</span>
+                  <span class="node-label">{{ node.label }}</span>
+                </span>
+              </template>
+            </el-tree>
+            <el-tree
+              v-else
+              :data="filteredTransportTree"
+              :props="{ children: 'children', label: 'label', isLeaf: 'isLeaf' }"
+              node-key="key"
+              :filter-node-method="filterNode"
+              default-expand-all
+              @node-click="onTreeNodeClick"
+              class="file-tree"
             >
-              <div class="result-main">
-                <span class="result-filename">{{ r.filename }}</span>
-                <el-tag type="danger" size="small">PDF</el-tag>
-              </div>
-              <div v-if="r.report_no" class="result-product">{{ r.report_no }}</div>
-            </div>
-          </div>
-          <div v-else-if="activeTab === 'transport' && trSearched && !trLoading" class="empty-hint">
-            <el-icon><circle-close /></el-icon> 无匹配结果
+              <template #default="{ node, data }">
+                <span class="tree-node">
+                  <span class="node-icon">{{ getFileIcon(data) }}</span>
+                  <span class="node-label">{{ node.label }}</span>
+                </span>
+              </template>
+            </el-tree>
           </div>
 
           <!-- MSDS 选中摘要 -->
@@ -191,12 +187,95 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { CircleClose, Document, Folder, UploadFilled, Check } from '@element-plus/icons-vue'
 import { phase2Api } from '@/api/phase2'
 
 const activeTab = ref<'msds' | 'transport'>('msds')
+
+// ── Tree ─────────────────────────────────────────────────
+interface TreeNode {
+  label: string
+  key: string
+  isLeaf: boolean
+  file_type: string
+  file_path?: string
+  children?: TreeNode[]
+}
+
+const msdsTree = ref<TreeNode[]>([])
+const transportTree = ref<TreeNode[]>([])
+const selectedFile = ref<TreeNode | null>(null)
+const treeRef = ref()
+
+async function loadTree() {
+  try {
+    const res = await phase2Api.getDataCenterTree()
+    const tree = res.data.tree as TreeNode[]
+    const msdsNode = tree.find(n => n.label === 'MSDS')
+    const transportNode = tree.find(n => n.label === '海运鉴定报告')
+    msdsTree.value = msdsNode?.children || []
+    transportTree.value = transportNode?.children || []
+  } catch (e) {
+    ElMessage.error('加载目录树失败')
+  }
+}
+
+function getFileIcon(data: TreeNode): string {
+  const icons: Record<string, string> = {
+    folder: '📁',
+    pdf: '📄',
+    doc: '📝',
+    docx: '📝',
+    xls: '📊',
+    xlsx: '📊',
+    json: '⚙️',
+    other: '📎',
+  }
+  return icons[data.file_type] || '📎'
+}
+
+function onFileClick(data: TreeNode) {
+  if (!data.isLeaf) return
+  selectedFile.value = data
+  previewFilename.value = data.label
+}
+
+function filterNode(query: string, data: TreeNode): boolean {
+  return data.label.toLowerCase().includes(query.toLowerCase())
+}
+
+function filterTree(nodes: TreeNode[], query: string): TreeNode[] {
+  return nodes.filter(n => {
+    if (n.isLeaf) return n.label.toLowerCase().includes(query)
+    if (n.children) {
+      const filtered = filterTree(n.children, query)
+      return filtered.length > 0
+    }
+    return false
+  })
+}
+
+const filteredMsdsTree = computed(() => {
+  if (!msdsQuery.value.trim()) return msdsTree.value
+  const query = msdsQuery.value.toLowerCase()
+  return filterTree(msdsTree.value, query)
+})
+
+const filteredTransportTree = computed(() => {
+  if (!trQuery.value.trim()) return transportTree.value
+  const query = trQuery.value.toLowerCase()
+  return filterTree(transportTree.value, query)
+})
+
+onMounted(() => {
+  loadTree()
+})
+
+watch(activeTab, () => {
+  loadTree()
+})
 
 // ── MSDS ───────────────────────────────────────────────
 interface MsdsResult {
@@ -233,8 +312,7 @@ async function searchMsds() {
   msdsLoading.value = true
   msdsSearched.value = true
   try {
-    const res = await phase2Api.searchDataCenter(msdsQuery.value)
-    msdsResults.value = res.data.items || []
+    await loadTree()
   } catch { ElMessage.error('MSDS 搜索失败') }
   finally { msdsLoading.value = false }
 }
@@ -242,6 +320,19 @@ async function searchMsds() {
 function selectMsds(r: MsdsResult) {
   msdsSelectedId.value = r.id
   msdsSummary.value = r
+}
+
+function onTreeNodeClick(data: TreeNode) {
+  if (!data.isLeaf) return
+  selectedFile.value = data
+  if (activeTab.value === 'msds') {
+    msdsSelectedId.value = parseInt(data.key)
+    msdsSummary.value = { ...msdsSummary.value, filename: data.label, file_format: data.file_type }
+  } else {
+    trSelectedFilename.value = data.label
+    trFields.value = { report_no: data.label, sample_description: '' }
+  }
+  previewFilename.value = data.label
 }
 
 function downloadMsds() {
@@ -296,8 +387,7 @@ async function searchTransport() {
   trLoading.value = true
   trSearched.value = true
   try {
-    const res = await phase2Api.searchTransportReports(trQuery.value)
-    trResults.value = res.data.items || []
+    await loadTree()
   } catch { ElMessage.error('运输鉴定报告搜索失败') }
   finally { trLoading.value = false }
 }
@@ -372,6 +462,31 @@ function downloadTransport() {
 .result-product { font-size: 11px; color: var(--el-text-color-secondary); }
 
 .empty-hint { display: flex; align-items: center; gap: 6px; justify-content: center; padding: 24px; color: var(--el-text-color-placeholder); font-size: 13px; }
+
+/* ── Tree ─────────────────────────────────── */
+.file-tree-wrapper {
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 8px;
+  overflow: hidden;
+  max-height: 400px;
+  overflow-y: auto;
+}
+.file-tree {
+  background: transparent;
+}
+.tree-node {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+.node-icon { font-size: 14px; }
+.node-label {
+  font-family: 'JetBrains Mono', monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* ── 摘要 ───────────────────────────────── */
 .summary-section { margin-top: 16px; }

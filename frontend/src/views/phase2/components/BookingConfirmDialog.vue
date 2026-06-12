@@ -1,0 +1,165 @@
+<template>
+  <el-dialog
+    v-model="visible"
+    title="生成订舱单"
+    width="640px"
+    :append-to-body="true"
+    class="booking-confirm-dialog"
+    @closed="onClosed"
+  >
+    <el-form label-width="120px" label-position="left">
+      <!-- 收发货 -->
+      <div class="form-section-title">收发货</div>
+      <el-form-item label="发货人">
+        <el-input v-model="form.shipper" type="textarea" :rows="2" placeholder="公司名称+地址+TEL" />
+      </el-form-item>
+      <el-form-item label="收货人">
+        <el-input v-model="form.consignee" type="textarea" :rows="2" placeholder="公司名称+地址+TEL" />
+      </el-form-item>
+      <el-form-item label="通知人">
+        <el-input v-model="form.notify" type="textarea" :rows="2" placeholder="默认 SAME AS CONSIGNEE" />
+      </el-form-item>
+
+      <!-- 港口 -->
+      <div class="form-section-title">港口</div>
+      <el-form-item label="收货地">
+        <el-input v-model="form.place_of_receipt" placeholder="如 GUANGZHOU,CHINA" />
+      </el-form-item>
+      <el-form-item label="装货港">
+        <el-input v-model="form.pol" placeholder="如 GUANGZHOU,CHINA" />
+      </el-form-item>
+      <el-form-item label="卸货港">
+        <el-input v-model="form.pod" placeholder="如 LAT KRABANG,THAILAND" />
+      </el-form-item>
+      <el-form-item label="交货地">
+        <el-input v-model="form.place_of_delivery" placeholder="如 LAT KRABANG,THAILAND" />
+      </el-form-item>
+      <el-form-item label="截关日期">
+        <el-input v-model="form.cut_off_date" placeholder="货代提供" />
+      </el-form-item>
+
+      <!-- 货物 -->
+      <div class="form-section-title">货物</div>
+      <el-form-item label="件数/柜型">
+        <el-input v-model="form.no_kind_pkg" placeholder="如 4 PALLETS" />
+      </el-form-item>
+      <el-form-item label="货名">
+        <el-input v-model="form.desc" placeholder="产品中文名" />
+      </el-form-item>
+      <el-form-item label="毛重">
+        <el-input v-model="form.gross_weight" placeholder="如 2600">
+          <template #append>KGS</template>
+        </el-input>
+      </el-form-item>
+      <el-form-item label="尺码">
+        <el-input v-model="form.measurement" placeholder="如 4.64">
+          <template #append>CBM</template>
+        </el-input>
+      </el-form-item>
+      <el-form-item label="唛头">
+        <el-input v-model="form.marks" placeholder="可留空" />
+      </el-form-item>
+    </el-form>
+
+    <template #footer>
+      <el-button @click="visible = false">取消</el-button>
+      <el-button type="primary" :loading="loading" @click="onConfirm">确认生成</el-button>
+    </template>
+  </el-dialog>
+</template>
+
+<script setup lang="ts">
+import { ref, watch } from 'vue'
+
+export interface BookingForm {
+  shipper: string
+  consignee: string
+  notify: string
+  cut_off_date: string
+  place_of_receipt: string
+  pol: string
+  pod: string
+  place_of_delivery: string
+  marks: string
+  no_kind_pkg: string
+  desc: string
+  gross_weight: string
+  measurement: string
+}
+
+const defaultForm = (): BookingForm => ({
+  shipper: '',
+  consignee: '',
+  notify: 'SAME AS CONSIGNEE',
+  cut_off_date: '',
+  place_of_receipt: 'GUANGZHOU,CHINA',
+  pol: 'GUANGZHOU,CHINA',
+  pod: '',
+  place_of_delivery: '',
+  marks: '',
+  no_kind_pkg: '',
+  desc: '',
+  gross_weight: '',
+  measurement: '',
+})
+
+const props = defineProps<{
+  modelValue: boolean
+  initialValues?: Partial<BookingForm> & { port?: string }
+}>()
+
+const emit = defineEmits<{
+  'update:modelValue': [value: boolean]
+  'confirm': [fields: BookingForm]
+}>()
+
+const form = ref<BookingForm>(defaultForm())
+const loading = ref(false)
+const visible = ref(props.modelValue)
+
+watch(() => props.modelValue, (v) => {
+  visible.value = v
+  if (v) {
+    const defaults = defaultForm()
+    const initial = props.initialValues || {}
+    form.value = {
+      ...defaults,
+      ...initial,
+      // 特殊默认值
+      notify: initial.notify || 'SAME AS CONSIGNEE',
+      place_of_receipt: initial.place_of_receipt || 'GUANGZHOU,CHINA',
+      pol: initial.pol || 'GUANGZHOU,CHINA',
+    }
+    // 卸货港默认值同装货港（如果initialValues有port）
+    if (!initial.pod && initial.port) {
+      form.value.pod = initial.port
+      form.value.place_of_delivery = initial.port
+    }
+  }
+})
+
+watch(visible, (v) => emit('update:modelValue', v))
+
+function onConfirm() {
+  loading.value = true
+  emit('confirm', { ...form.value })
+  loading.value = false
+  visible.value = false
+}
+
+function onClosed() {
+  form.value = defaultForm()
+  loading.value = false
+}
+</script>
+
+<style scoped>
+.form-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #409eff;
+  margin: 12px 0 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #dcdfe6;
+}
+</style>

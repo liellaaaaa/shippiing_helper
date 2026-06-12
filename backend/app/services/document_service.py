@@ -136,17 +136,26 @@ class DocumentService:
 
         ws = wb.active
 
-        # 扫描所有单元格，替换 {{FIELD_NAME}} 标记
+        # 扫描所有单元格，替换 {{FIELD_NAME}} 标记，同时复制相邻单元格的字体
+        from copy import copy
         for row in ws.iter_rows():
             for cell in row:
                 if cell.value and isinstance(cell.value, str):
                     marker_match = re.match(r"^\{\{(\w+)\}\}$", cell.value.strip())
                     if marker_match:
                         field_key = marker_match.group(1)
+                        # 找到同行的前一个单元格（标签格），复制其字体
+                        ref_font = None
+                        if cell.column > 1:
+                            ref_cell = ws.cell(row=cell.row, column=cell.column - 1)
+                            if ref_cell.font and ref_cell.font.name:
+                                ref_font = copy(ref_cell.font)
                         if field_key in fields:
                             cell.value = fields[field_key]
                         else:
                             cell.value = ""  # 未提供的字段清空标记
+                        if ref_font:
+                            cell.font = copy(ref_font)
 
         out = BytesIO()
         wb.save(out)

@@ -157,3 +157,36 @@ async def get_data_center_tree():
     svc = DataCenterService()
     tree = svc.get_directory_tree(REFERENCES_DIR)
     return {"tree": tree, "total": count_leaves(tree)}
+
+
+# ------------------------------------------------------------
+# GET /file?path=... — 通过文件路径直接读取文件
+# ------------------------------------------------------------
+@router.get("/file")
+async def serve_file_by_path(path: str = Query(...)):
+    """根据 file_path 直接读取 references/ 下的文件用于预览/下载"""
+    # 安全检查：确保路径在 REFERENCES_DIR 内
+    real_path = os.path.normpath(path)
+    if not real_path.startswith(os.path.normpath(REFERENCES_DIR)):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    if not os.path.exists(real_path):
+        raise HTTPException(status_code=404, detail="File not found on disk")
+
+    ext = os.path.splitext(real_path)[1].lower()
+    media_types = {
+        ".pdf": "application/pdf",
+        ".doc": "application/msword",
+        ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ".xls": "application/vnd.ms-excel",
+        ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ".json": "application/json",
+    }
+    media_type = media_types.get(ext, "application/octet-stream")
+
+    # PDF 用 inline 显示（预览），其他用 attachment（下载）
+    disposition = "inline" if ext == ".pdf" else "attachment"
+    filename = os.path.basename(real_path)
+    headers = {"Content-Disposition": f"{disposition}; filename*=utf-8''{filename}"}
+
+    return FileResponse(real_path, media_type=media_type, headers=headers)

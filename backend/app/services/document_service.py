@@ -121,26 +121,56 @@ class DocumentService:
     def __init__(self):
         self.msds_service = MSDSService()
 
-    def generate_booking(self, order_id: int, template_type: str = "xls") -> Tuple[bytes, str, str]:
+    def fill_booking_template(self, fields: dict, template_type: str = "xlsx") -> bytes:
         """
-        生成订舱单：支持选择模板格式。
-        template_type: "xls" (默认，转换 .xls) 或 "xlsx" (直接使用 .xlsx)
-        marker 由用户在 OnlyOffice 中手动填写。
+        打开已标记的 Booking 模板，扫描 {{FIELD_NAME}} 单元格，替换为实际值，返回填充后的 xlsx 字节。
+        fields: dict，键为 FIELD_NAME（不带花括号），值为字符串
         """
-        template_key = f"booking_{template_type}" if template_type == "xlsx" else "booking"
-        template_path = TEMPLATES.get(template_key, TEMPLATES["booking"])
-        if not os.path.exists(template_path):
-            raise FileNotFoundError(f"Booking template not found: {template_path}")
-
-        if template_type == "xlsx" and template_path.endswith(".xlsx"):
-            # 直接读取 .xlsx，不转换
-            with open(template_path, "rb") as f:
-                content_xlsx = f.read()
+        if template_type == "xlsx":
+            template_path = TEMPLATES.get("booking_marked", TEMPLATES.get("booking"))
+            wb = openpyxl.load_workbook(template_path)
         else:
-            # 用 xlrd 读取 .xls，再用 openpyxl 写成 .xlsx（OnlyOffice 原生支持 .xlsx）
+            template_path = TEMPLATES.get("booking")
             content_xlsx = convert_xls_to_xlsx(template_path)
+            wb = openpyxl.load_workbook(BytesIO(content_xlsx))
 
-        doc_key = f"booking_{order_id}_{int(time.time())}"
+        ws = wb.active
+
+        # 扫描所有单元格，替换 {{FIELD_NAME}} 标记
+        for row in ws.iter_rows():
+            for cell in row:
+                if cell.value and isinstance(cell.value, str):
+                    marker_match = re.match(r"^\{\{(\w+)\}\}$", cell.value.strip())
+                    if marker_match:
+                        field_key = marker_match.group(1)
+                        if field_key in fields:
+                            cell.value = fields[field_key]
+                        else:
+                            cell.value = ""  # 未提供的字段清空标记
+
+        out = BytesIO()
+        wb.save(out)
+        out.seek(0)
+        return out.read()
+
+    def generate_booking(self, fields: dict | None = None, template_type: str = "xlsx") -> Tuple[bytes, str, str]:
+        """
+        生成订舱单：支持自动填充字段。
+        fields: 可选，键为字段名（无花括号），值未提供则返回空白模板。
+        """
+        if fields:
+            content_xlsx = self.fill_booking_template(fields, template_type)
+        else:
+            # 兼容无参调用（空白模板）
+            template_key = f"booking_{template_type}" if template_type == "xlsx" else "booking"
+            template_path = TEMPLATES.get(template_key, TEMPLATES["booking"])
+            if template_type == "xlsx" and os.path.exists(template_path):
+                with open(template_path, "rb") as f:
+                    content_xlsx = f.read()
+            else:
+                content_xlsx = convert_xls_to_xlsx(template_path)
+
+        doc_key = f"booking_{int(time.time())}"
         return content_xlsx, doc_key, base64.b64encode(content_xlsx).decode()
 
     def generate_loi(self, order_no: str, pi_no: str) -> Tuple[bytes, str, str]:

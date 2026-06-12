@@ -13,6 +13,7 @@ TEMPLATES = {
     "customs": str(ROOT / "references" / "出口报关资料 26.3.17.xlsx"),
 }
 
+REFERENCES_DIR = str(ROOT / "references")
 MSDS_DIR = str(ROOT / "references" / "MSDS")
 # MSDS standard template — prefer the pre-built .docx if it exists, otherwise auto-generated
 _MSDS_TEMPLATE_DEFAULT = str(ROOT / "references" / "MSDS" / "MSDS标准模板.docx")

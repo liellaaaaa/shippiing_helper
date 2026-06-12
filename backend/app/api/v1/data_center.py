@@ -11,7 +11,7 @@ from app.models.msds_index import MSDSIndex
 from app.models.msds_correction import MSDSCorrection
 from app.services.data_center_service import DataCenterService
 from app.services.msds_service import MSDSService
-from app.core.config import MSDS_DIR
+from app.core.config import MSDS_DIR, REFERENCES_DIR
 
 router = APIRouter(prefix="/api/v1/data-center", tags=["data-center"])
 
@@ -137,3 +137,13 @@ async def get_msds_summary(file_id: int):
         return result
     finally:
         db.close()
+
+
+# ------------------------------------------------------------
+# GET /tree — 返回完整 references/ 目录树
+# ------------------------------------------------------------
+@router.get("/tree")
+async def get_data_center_tree():
+    svc = DataCenterService()
+    tree = svc.get_directory_tree(REFERENCES_DIR)
+    return {"tree": tree, "total": sum(1 for node in tree if node.get("isLeaf"))}

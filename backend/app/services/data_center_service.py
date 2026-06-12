@@ -226,3 +226,51 @@ class DataCenterService:
             }
         finally:
             db_session.close()
+
+    # ------------------------------------------------------------
+    # 6. get_directory_tree — 返回目录树结构
+    # ------------------------------------------------------------
+    def get_directory_tree(self, root_dir: str) -> list[dict]:
+        """
+        Recursively scan root_dir and return a nested tree structure.
+        Each node: { label, key, isLeaf, file_type, file_path, children: [] }
+        file_type: 'folder' | 'pdf' | 'doc' | 'docx' | 'xls' | 'xlsx' | 'json' | 'other'
+        Only folders with at least one file are included.
+        """
+        def scan_dir(dir_path: str) -> list[dict]:
+            nodes = []
+            try:
+                for entry in sorted(os.scandir(dir_path), key=lambda e: e.name):
+                    if entry.is_dir():
+                        children = scan_dir(entry.path)
+                        if children:
+                            nodes.append({
+                                "label": entry.name,
+                                "key": entry.path,
+                                "isLeaf": False,
+                                "file_type": "folder",
+                                "children": children,
+                            })
+                    elif entry.is_file():
+                        ext = os.path.splitext(entry.name)[1].lower()
+                        file_type_map = {
+                            ".pdf": "pdf",
+                            ".doc": "doc",
+                            ".docx": "docx",
+                            ".xls": "xls",
+                            ".xlsx": "xlsx",
+                            ".json": "json",
+                        }
+                        file_type = file_type_map.get(ext, "other")
+                        nodes.append({
+                            "label": entry.name,
+                            "key": entry.path,
+                            "isLeaf": True,
+                            "file_type": file_type,
+                            "file_path": entry.path,
+                        })
+            except PermissionError:
+                pass
+            return nodes
+
+        return scan_dir(root_dir)

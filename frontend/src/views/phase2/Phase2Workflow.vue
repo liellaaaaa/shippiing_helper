@@ -229,20 +229,12 @@
       </main>
     </div>
 
-    <!-- ── Booking Dialog ────────────────────────── -->
-    <el-dialog v-model="showBookingDialog" title="生成订舱单" width="380px" :append-to-body="true" class="booking-dialog">
-      <div class="booking-select-row">
-        <label class="booking-label">选择模板格式</label>
-        <el-radio-group v-model="selectedBookingTemplate" size="default">
-          <el-radio value="xlsx">.xlsx 格式（推荐，格式完整）</el-radio>
-          <el-radio value="xls">.xls 格式（兼容旧版）</el-radio>
-        </el-radio-group>
-      </div>
-      <template #footer>
-        <el-button @click="showBookingDialog = false">取消</el-button>
-        <el-button type="primary" @click="confirmGenerateBooking">生成文档</el-button>
-      </template>
-    </el-dialog>
+    <!-- ── Booking Dialog (核对对话框) ──────────── -->
+    <BookingConfirmDialog
+      v-model="showBookingDialog"
+      :initial-values="bookingInitialValues"
+      @confirm="onBookingConfirm"
+    />
 
     <!-- ── MSDS Dialog ──────────────────────────── -->
     <el-dialog v-model="showMsdsDialog" title="选择 MSDS 文件" width="500px" :append-to-body="true" class="msds-dialog">
@@ -289,10 +281,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import DocumentEditor from './components/DocumentEditor.vue'
+import BookingConfirmDialog from './components/BookingConfirmDialog.vue'
 import MyDocumentsDrawer from './components/MyDocumentsDrawer.vue'
 import FieldReferenceCard from './components/FieldReferenceCard.vue'
 import { ArrowDown } from '@element-plus/icons-vue'
@@ -422,6 +415,27 @@ async function openDocument(type: 'booking' | 'loi') {
     currentConfig.value = res.data
   } catch (e: any) {
     ElMessage.error('文档生成失败: ' + (e.message || ''))
+  }
+}
+
+const bookingInitialValues = computed(() => ({
+  consignee: currentOrderInfo.value.consignee,
+  port: currentOrderInfo.value.port,
+  desc: currentOrderInfo.value.product_cn,
+  gross_weight: currentOrderInfo.value.gross_weight_kg,
+  measurement: currentOrderInfo.value.volume_cbm,
+}))
+
+async function onBookingConfirm(fields: import('./components/BookingConfirmDialog.vue').BookingForm) {
+  try {
+    const res = await phase2Api.generateBooking({
+      ...fields,
+      template_type: 'xlsx',
+    })
+    currentDocKey.value = res.data.documentKey || res.data.docKey
+    currentConfig.value = res.data
+  } catch (e: any) {
+    ElMessage.error('订舱单生成失败: ' + (e.message || ''))
   }
 }
 

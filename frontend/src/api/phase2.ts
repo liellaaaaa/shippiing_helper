@@ -69,6 +69,9 @@ export const phase2Api = {
   reindexDataCenter() {
     return axios.post('/api/v1/data-center/reindex')
   },
+  getDataCenterTree() {
+    return axios.get('/api/v1/data-center/tree')
+  },
 
   // ── 运输鉴定报告 ─────────────────────────────────────────────
   searchTransportReports(query: string) {

@@ -3,6 +3,7 @@
 搜索采用"文件名 > 品名 > 全文"三级优先级。
 修正上传采用时间戳版本策略，永不覆盖原文件。
 """
+import logging
 import os
 import re
 from datetime import datetime
@@ -271,7 +272,8 @@ class DataCenterService:
                             "file_path": entry.path,
                         })
             except PermissionError:
-                pass
+                logging.warning(f"Permission denied, skipping directory: {dir_path}")
+                return []
             return nodes
 
         return scan_dir(root_dir)

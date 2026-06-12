@@ -142,8 +142,18 @@ async def get_msds_summary(file_id: int):
 # ------------------------------------------------------------
 # GET /tree — 返回完整 references/ 目录树
 # ------------------------------------------------------------
+def count_leaves(nodes):
+    total = 0
+    for node in nodes:
+        if node.get("isLeaf"):
+            total += 1
+        elif node.get("children"):
+            total += count_leaves(node["children"])
+    return total
+
+
 @router.get("/tree")
 async def get_data_center_tree():
     svc = DataCenterService()
     tree = svc.get_directory_tree(REFERENCES_DIR)
-    return {"tree": tree, "total": sum(1 for node in tree if node.get("isLeaf"))}
+    return {"tree": tree, "total": count_leaves(tree)}

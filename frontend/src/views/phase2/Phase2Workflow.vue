@@ -299,6 +299,7 @@ import { ArrowDown } from '@element-plus/icons-vue'
 import { phase2Api } from '@/api/phase2'
 import { getOrderList, getOrderComparison, getOrderPiContracts, type OrderListItem } from '@/api/merge'
 import { getDashboardOrders, type DashboardOrder } from '@/api/dashboard'
+import { nameMappingApi } from '@/api/name_mapping'
 
 const route = useRoute()
 
@@ -369,7 +370,7 @@ async function loadOrderList() {
   orderList.value = data.orders || []
 }
 
-async function onOrderChange(orderId: number) {
+async function onOrderChange(orderId: number): Promise<void> {
   selectedPiNo.value = ''
   if (!orderId) return
   try {
@@ -382,14 +383,25 @@ async function onOrderChange(orderId: number) {
       selectedPiNo.value = pis[0].pi_no
     }
     // Populate editable fields
+    const productCn = data.items?.[0]?.product_cn || ''
+    // 自动查询英文名
+    let productEn = ''
+    if (productCn) {
+      try {
+        const res = await nameMappingApi.lookupByCn(productCn)
+        productEn = res.data.en || ''
+      } catch {
+        productEn = ''
+      }
+    }
     currentOrderInfo.value = {
       order_no: data.order_no || '',
       customer_code: data.customer_code || '',
       consignee: pis[0]?.consignee || '',
       notify: '',
       port: pis[0]?.destination || '',
-      product_cn: data.items?.[0]?.product_cn || '',
-      product_en: '',
+      product_cn: productCn,
+      product_en: productEn,
       hs_code: data.items?.[0]?.order?.hs_code || '',
       gross_weight_kg: data.gross_weight_kg ? String(data.gross_weight_kg) : '',
       volume_cbm: data.volume_cbm ? String(data.volume_cbm) : '',

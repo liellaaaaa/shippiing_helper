@@ -12,10 +12,12 @@ from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1 import documents, msds, transport, export_codes, onlyoffice
 from app.api.v1.data_center import router as data_center_router
 from app.api.v1.transport_reports import router as transport_reports_router
+from app.api.v1.name_mapping import router as name_mapping_router
 from app.core.config import MSDS_DIR, TRANSPORT_REPORTS_DIR
 from app.database import SessionLocal
 from app.services.data_center_service import DataCenterService
 from app.services.transport_service import TransportService
+from app.services.name_mapping_service import load_name_mapping
 
 app = FastAPI(
     title="ShippingHelper API",
@@ -46,6 +48,7 @@ app.include_router(export_codes.router)
 app.include_router(onlyoffice.router)
 app.include_router(data_center_router)
 app.include_router(transport_reports_router)
+app.include_router(name_mapping_router)
 
 
 @app.get("/health")
@@ -55,7 +58,10 @@ def health():
 
 @app.on_event("startup")
 async def startup():
-    """启动时全量扫描 MSDS 和运输鉴定报告目录，建立内存索引。"""
+    """启动时加载品名对照表，全量扫描 MSDS 和运输鉴定报告目录，建立内存索引。"""
+    # 加载品名中英文对照表
+    load_name_mapping()
+    print("[startup] Product name mapping loaded")
     db = SessionLocal()
     try:
         dc_svc = DataCenterService()

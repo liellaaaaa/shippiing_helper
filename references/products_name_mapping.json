@@ -1,0 +1,31 @@
+{
+  "version": "2026.06",
+  "description": "PI产品品名中英文对照表",
+  "mappings": [
+    {"en": "OIL REMOVING AGENT", "cn": "除油剂"},
+    {"en": "SOAPING AGENT", "cn": "皂洗剂"},
+    {"en": "LEVELLING AGENT", "cn": "匀染剂"},
+    {"en": "WETTING AGENT", "cn": "渗透剂"},
+    {"en": "REDUCING &CLEANING AGENT", "cn": "还原清洗剂"},
+    {"en": "SCOURING AGENT", "cn": "精练剂"},
+    {"en": "SEQUESTERING AGENT", "cn": "螯合分散剂"},
+    {"en": "ANTI CREASING AGENT", "cn": "防皱剂"},
+    {"en": "WATERPROOFING AGENT", "cn": "防水剂"},
+    {"en": "REPAIRING AGENT", "cn": "修补剂"},
+    {"en": "ENZYME", "cn": "酶制剂"},
+    {"en": "FIRE RETARDANT", "cn": "阻燃剂"},
+    {"en": "ANTISTATIC AGENT", "cn": "抗静电剂"},
+    {"en": "MOISTURE AGENT", "cn": "吸湿排汗整理剂"},
+    {"en": "NONIONIC ORGANIC SURFACTANTS", "cn": "非离子有机表面活性剂"},
+    {"en": "TEXTILE AUXILIARY WET RUBBING FASTNESS IMPROVING AGENT", "cn": "纺织助剂湿摩擦牢度提升剂"},
+    {"en": "FIXING AGENT", "cn": "固色剂"},
+    {"en": "SILICONE SOFTENER", "cn": "阳离子柔软剂"},
+    {"en": "SILICONE SOFTENER", "cn": "有机硅柔软剂"},
+    {"en": "TEXTILE AUXILIARY-ANTI BACK STAINING AGENT", "cn": "纺织助剂防染剂"},
+    {"en": "TEXTILE AUXILIARY DEFOAMING AGENT", "cn": "纺织助剂消泡剂"},
+    {"en": "ANTI BACK STAINING AGENT", "cn": "纺织助剂防染粉"},
+    {"en": "FINISHING AGENT", "cn": "纺织助剂整理剂"},
+    {"en": "TEXTILE SOFTENER", "cn": "纺织柔软剂"},
+    {"en": "YELLOWING RESISTANT AGENT", "cn": "抗黄变剂"}
+  ]
+}

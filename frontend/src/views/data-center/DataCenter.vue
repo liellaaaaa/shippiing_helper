@@ -204,6 +204,7 @@ interface TreeNode {
 
 const msdsTree = ref<TreeNode[]>([])
 const transportTree = ref<TreeNode[]>([])
+const selectedFile = ref<TreeNode | null>(null)
 
 async function loadTree() {
   try {
@@ -290,10 +291,7 @@ const msdsUploadFileName = ref('')
 const msdsUploading = ref(false)
 const msdsFileToUpload = ref<File | null>(null)
 
-const previewFilename = computed(() => {
-  if (activeTab.value === 'msds') return msdsSummary.value.filename || null
-  return trSelectedFilename.value || null
-})
+const previewFilename = ref<string | null>(null)
 
 function searchMsds() {
   // Filtering is handled by computed property filteredMsdsTree

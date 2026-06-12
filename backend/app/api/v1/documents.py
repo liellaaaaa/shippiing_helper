@@ -1,6 +1,7 @@
 import hashlib, base64
 import os
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Body
+from pydantic import BaseModel
 from sqlalchemy import desc
 from urllib.parse import quote
 from app.database import SessionLocal
@@ -12,20 +13,50 @@ router = APIRouter(prefix="/api/v1/documents", tags=["documents"])
 oo_svc = OnlyOfficeService()
 
 
-@router.get("/booking")
-async def generate_booking(order_id: int = Query(...), template_type: str = Query("xls")):
+class BookingFields(BaseModel):
+    shipper: str = ""
+    consignee: str = ""
+    notify: str = ""
+    cut_off_date: str = ""
+    place_of_receipt: str = ""
+    pol: str = ""
+    pod: str = ""
+    place_of_delivery: str = ""
+    marks: str = ""
+    no_kind_pkg: str = ""
+    desc: str = ""
+    gross_weight: str = ""
+    measurement: str = ""
+    template_type: str = "xlsx"
+
+
+@router.post("/booking")
+async def generate_booking(fields: BookingFields = Body(...)):
     """
-    生成订舱单，支持选择模板格式。
-    template_type: "xls" (默认，使用 .xls 转换) 或 "xlsx" (直接使用 .xlsx)
+    生成订舱单，字段通过 JSON body 传入，自动填充到模板。
     """
     svc = DocumentService()
-    content, doc_key, _ = svc.generate_booking(order_id, template_type)
-    # Create config first to get UUID, then save to DB (OnlyOffice fetches immediately on config load)
+    # 将字段名转为 fill_booking_template 期望的格式（键无花括号）
+    fields_dict = {
+        "SHIPPER": fields.shipper,
+        "CONSIGNEE": fields.consignee,
+        "NOTIFY": fields.notify,
+        "CUT_OFF_DATE": fields.cut_off_date,
+        "PLACE_OF_RECEIPT": fields.place_of_receipt,
+        "POL": fields.pol,
+        "POD": fields.pod,
+        "PLACE_OF_DELIVERY": fields.place_of_delivery,
+        "MARKS": fields.marks,
+        "NO_KIND_PKG": fields.no_kind_pkg,
+        "DESC": fields.desc,
+        "GROSS_WEIGHT": fields.gross_weight,
+        "MEASUREMENT": fields.measurement,
+    }
+    content, doc_key, _ = svc.generate_booking(fields_dict, fields.template_type)
     token, config, safe_key = oo_svc.create_config(doc_key, "xlsx")
-    _save_doc_to_db(doc_key, "booking", content, order_id=order_id, storage_key=safe_key)
+    _save_doc_to_db(doc_key, "booking", content, storage_key=safe_key)
     api_base = os.getenv("API_BASE_URL", "http://localhost:8000")
     callback_base = os.getenv("ONLYOFFICE_CALLBACK_BASE_URL", "http://host.docker.internal:8000")
-    # Download URLs use safe_key (UUID) since that's what's stored in DB
     return {
         **config,
         "url": f"{callback_base}/api/v1/onlyoffice/download/{safe_key}",

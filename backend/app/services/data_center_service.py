@@ -249,6 +249,7 @@ class DataCenterService:
                                 "key": entry.path,
                                 "isLeaf": False,
                                 "file_type": "folder",
+                                "file_path": entry.path,
                                 "children": children,
                             })
                     elif entry.is_file():

@@ -439,17 +439,6 @@ async function onBookingConfirm(fields: import('./components/BookingConfirmDialo
   }
 }
 
-async function confirmGenerateBooking() {
-  showBookingDialog.value = false
-  try {
-    const res = await phase2Api.generateBooking(selectedOrderId.value!, selectedBookingTemplate.value)
-    currentDocKey.value = res.data.documentKey || res.data.docKey
-    currentConfig.value = res.data
-  } catch (e: any) {
-    ElMessage.error('订舱单生成失败: ' + (e.message || ''))
-  }
-}
-
 async function loadMsdsList() {
   msdsLoading.value = true
   msdsSearchDone.value = false

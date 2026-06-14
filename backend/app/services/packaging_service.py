@@ -238,8 +238,8 @@ def calculate(
             raise ValueError(f"{packaging_name} 无法使用 {pallet_name} 打卡板")
 
         full_pallets = drums // drums_per_pallet
-        remainder_val = drums % drums_per_pallet
-        # pallets 存整板数，remainder 单独处理
+        remainder_val = drums - full_pallets * drums_per_pallet
+        # pallets 存整板数，remainder = drums - pallets*per_pallet（可正可负）
         pallets = full_pallets
         pallet_type = pallet_name
 
@@ -341,7 +341,7 @@ def calculate_single_product(
     if drums_per_pallet == 0:
         # 编织袋类产品不需要卡板
         full_pallets = 0
-        remainder = 0
+        remainder = quantity_kg  # 全是待处理（不打卡板）
         pallets = 0
         drum_tare = drums * pkg.tare_kg
         pallet_tare = 0
@@ -349,8 +349,8 @@ def calculate_single_product(
         pallet_cbm = 0
     else:
         full_pallets = drums // drums_per_pallet
-        remainder = drums % drums_per_pallet
-        pallets = full_pallets  # 整板数
+        remainder = drums - full_pallets * drums_per_pallet  # 可正可负
+        pallets = full_pallets
         pallet = find_pallet(pallet_spec)
         drum_tare = drums * pkg.tare_kg
         pallet_tare = pallets * pallet.weight_kg if pallet else 0

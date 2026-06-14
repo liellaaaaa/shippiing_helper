@@ -95,7 +95,7 @@ def calculate_packaging(req: CalculateRequest):
                 fits_20gp=best.fits_20gp,
                 fits_40gp=best.fits_40gp,
                 recommended=best.recommended,
-                remainder=best.drums % best.drums_per_pallet if best.drums_per_pallet else 0,
+                remainder=best.drums - best.full_pallets * best.drums_per_pallet if best.drums_per_pallet else 0,
                 full_pallets=best.full_pallets,
             )
         else:
@@ -134,7 +134,7 @@ def calculate_all_packaging_schemes(req: CalculateRequest):
                 "fits_20gp": s.fits_20gp,
                 "fits_40gp": s.fits_40gp,
                 "recommended": s.recommended,
-                "remainder": s.drums % s.drums_per_pallet if s.drums_per_pallet else 0,
+                "remainder": s.drums - s.full_pallets * s.drums_per_pallet if s.drums_per_pallet else 0,
                 "full_pallets": s.full_pallets,
             }
             for s in schemes

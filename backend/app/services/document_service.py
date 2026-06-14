@@ -121,48 +121,87 @@ class DocumentService:
     def __init__(self):
         self.msds_service = MSDSService()
 
-    def fill_booking_template(self, fields: dict, template_type: str = "xlsx") -> bytes:
+    def fill_booking_template(self, fields: dict) -> bytes:
         """
-        打开已标记的 Booking 模板，扫描 {{FIELD_NAME}} 单元格，替换为实际值，返回填充后的 xlsx 字节。
+        直接操作 xlsx zip 内部 XML，精准替换 {{FIELD_NAME}} 单元格值，
+        不经过 openpyxl 加载/保存，完整保留所有 shapes 和格式。
         fields: dict，键为 FIELD_NAME（不带花括号），值为字符串
         """
-        # 始终使用 xlsx 已标记模板，不再兼容 .xls
+        import zipfile, re, shutil, os
+        from io import BytesIO
+        from lxml import etree
+
         template_path = TEMPLATES.get("booking_marked", TEMPLATES.get("booking"))
-        wb = openpyxl.load_workbook(template_path)
+        NS = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'
 
+        # 1. 先用 openpyxl 只读模式找出 {{FIELD}} 单元格坐标（不保存）
+        wb = openpyxl.load_workbook(template_path, data_only=True)
         ws = wb.active
-
-        # 扫描所有单元格，替换 {{FIELD_NAME}} 标记，同时复制相邻单元格的字体
-        from copy import copy
+        sheet_name = ws.title
+        marker_map = {}  # cell_ref -> field_key
         for row in ws.iter_rows():
             for cell in row:
                 if cell.value and isinstance(cell.value, str):
-                    marker_match = re.match(r"^\{\{(\w+)\}\}$", cell.value.strip())
-                    if marker_match:
-                        field_key = marker_match.group(1)
-                        # 找到同行的前一个单元格（标签格），复制其字体
-                        ref_font = None
-                        if cell.column > 1:
-                            ref_cell = ws.cell(row=cell.row, column=cell.column - 1)
-                            if ref_cell.font and ref_cell.font.name:
-                                ref_font = copy(ref_cell.font)
-                        if field_key in fields:
-                            value = fields[field_key]
-                            # 固定单位后缀
-                            if field_key == "NO_KIND_PKG" and value:
-                                value = f"{value} PALLETS"
-                            elif field_key == "GROSS_WEIGHT" and value:
-                                value = f"{value} KGS"
-                            elif field_key == "MEASUREMENT" and value:
-                                value = f"{value} CBM"
-                            cell.value = value
-                        else:
-                            cell.value = ""  # 未提供的字段清空标记
-                        if ref_font:
-                            cell.font = copy(ref_font)
+                    m = re.match(r"^\{\{(\w+)\}\}$", str(cell.value).strip())
+                    if m:
+                        marker_map[cell.coordinate] = m.group(1)
+        wb.close()
 
-        out = BytesIO()
-        wb.save(out)
+        # 2. 直接修改 xlsx zip 内的 sheet XML
+        tmp_path = template_path + ".tmp"
+        shutil.copy(template_path, tmp_path)
+
+        with zipfile.ZipFile(tmp_path, 'r') as zin:
+            # 找到工作表文件路径
+            wb_xml = etree.fromstring(zin.read('xl/workbook.xml'))
+            sheets_el = wb_xml.find(f'{{{NS}}}sheets')
+            r_id = None
+            for s in sheets_el:
+                if s.get('name') == sheet_name:
+                    r_id = s.get('{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id')
+                    break
+
+            rels_xml = etree.fromstring(zin.read('xl/_rels/workbook.xml.rels'))
+            sheet_file = None
+            for rel in rels_xml:
+                if rel.get('Id') == r_id:
+                    sheet_file = 'xl/' + rel.get('Target')
+                    break
+
+            sheet_tree = etree.fromstring(zin.read(sheet_file))
+
+            # 3. 遍历单元格，替换 {{FIELD}} 的值
+            for c_el in sheet_tree.iter(f'{{{NS}}}c'):
+                r = c_el.get('r')
+                if r in marker_map:
+                    field_key = marker_map[r]
+                    value = fields.get(field_key, "")
+                    # 固定单位后缀
+                    if field_key == "NO_KIND_PKG" and value:
+                        value = f"{value} PALLETS"
+                    elif field_key == "GROSS_WEIGHT" and value:
+                        value = f"{value} KGS"
+                    elif field_key == "MEASUREMENT" and value:
+                        value = f"{value} CBM"
+                    # 写回 <v> 元素
+                    v_el = c_el.find(f'{{{NS}}}v')
+                    if v_el is None:
+                        v_el = etree.SubElement(c_el, f'{{{NS}}}v')
+                    v_el.text = str(value)
+                    # 清除 t="str" 等类型标记（改为普通字符串）
+                    c_el.attrib.pop('t', None)
+
+            # 4. 重新打包 zip
+            out = BytesIO()
+            with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED) as zout:
+                for item in zin.namelist():
+                    if item == sheet_file:
+                        zout.writestr(item, etree.tostring(
+                            sheet_tree, xml_declaration=True, encoding='UTF-8', standalone=True))
+                    else:
+                        zout.writestr(item, zin.read(item))
+
+        os.remove(tmp_path)
         out.seek(0)
         return out.read()
 
@@ -172,7 +211,7 @@ class DocumentService:
         fields: 可选，键为字段名（无花括号），值未提供则返回空白模板。
         """
         if fields:
-            content_xlsx = self.fill_booking_template(fields, "xlsx")
+            content_xlsx = self.fill_booking_template(fields)
         else:
             # 无参调用也使用 xlsx 已标记模板（空白版本）
             template_path = TEMPLATES.get("booking_marked", TEMPLATES.get("booking"))

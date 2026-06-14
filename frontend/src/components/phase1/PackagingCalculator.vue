@@ -126,6 +126,10 @@
               <el-radio-button value="actual_stacked">按实际堆叠</el-radio-button>
               <el-radio-button value="loose">散货混装</el-radio-button>
             </el-radio-group>
+            <span class="mode-label" style="margin-left: 12px;">余数板规格：</span>
+            <el-select v-model="remainder_pallet_spec" size="small" style="width: 130px;">
+              <el-option v-for="p in palletTypes" :key="p.name" :label="p.name" :value="p.name" />
+            </el-select>
           </div>
           <div class="remainder-contribution">
             散货贡献：+{{ remainderExtraCbm.toFixed(3) }} CBM | +{{ remainderExtraWeight.toFixed(1) }} kg
@@ -169,6 +173,7 @@ const rows = ref<PackingRow[]>([])
 const summary = ref({ total_drums: 0, total_pallets: 0, total_cbm: 0, total_weight_kg: 0, fits_20gp: false, fits_40gp: false })
 const remainder_mode = ref<'full_pallet' | 'actual_stacked' | 'loose'>('actual_stacked')
 const showRemainderSection = ref(true)
+const remainder_pallet_spec = ref('1.0*1.0m')
 
 const remainderRows = computed(() => rows.value.filter(r => r.remainder > 0 && r.is_auto))
 const hasAutoRemainderRows = computed(() => rows.value.some(r => r.remainder > 0 && r.is_auto))
@@ -252,7 +257,8 @@ function calcRemainderContribution(): { extraCbm: number; extraWeight: number } 
     // 仅对自动模式且有余数的行计算
     if (r.remainder <= 0 || !r.is_auto) continue
     const pkg = packageTypes.value.find(p => p.name === r.packaging_name)
-    const pallet = palletTypes.value.find(p => p.name === r.pallet_spec)
+    // 按整板计算时用余数板规格；其他模式用行自身的卡板规格
+    const pallet = palletTypes.value.find(p => p.name === (remainder_mode.value === 'full_pallet' ? remainder_pallet_spec.value : r.pallet_spec))
     if (!pkg) continue
 
     if (remainder_mode.value === 'full_pallet') {
@@ -340,11 +346,12 @@ function getPalletsFeedback(row: PackingRow): { type: 'surplus' | 'shortfall' | 
 }
 
 function applyRemainderMode() {
-  // 按整板计算：把每个自动模式有余数的行的板数 +1，余数清零
+  // 按整板计算：把每个自动模式有余数的行 +1板（用余数板规格），余数清零
   for (const r of rows.value) {
     if (r.remainder > 0 && r.is_auto) {
       r.pallets = (r.pallets || 0) + 1
       r.remainder = 0
+      r.pallet_spec = remainder_pallet_spec.value  // 余数板规格
       r.is_auto = false  // 转为手动模式
     }
   }

@@ -151,7 +151,15 @@ class DocumentService:
                             if ref_cell.font and ref_cell.font.name:
                                 ref_font = copy(ref_cell.font)
                         if field_key in fields:
-                            cell.value = fields[field_key]
+                            value = fields[field_key]
+                            # 固定单位后缀
+                            if field_key == "NO_KIND_PKG" and value:
+                                value = f"{value} PALLETS"
+                            elif field_key == "GROSS_WEIGHT" and value:
+                                value = f"{value} KGS"
+                            elif field_key == "MEASUREMENT" and value:
+                                value = f"{value} CBM"
+                            cell.value = value
                         else:
                             cell.value = ""  # 未提供的字段清空标记
                         if ref_font:

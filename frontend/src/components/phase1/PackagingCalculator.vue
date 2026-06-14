@@ -53,7 +53,7 @@
           <template #default="{ row }"><span>{{ row.drums || '-' }}</span></template>
         </el-table-column>
         <el-table-column label="托盘数" width="70" align="center">
-          <template #default="{ row }"><span>{{ row.pallets || '-' }}</span></template>
+          <template #default="{ row }"><span>{{ row.full_pallets || '-' }}</span></template>
         </el-table-column>
         <el-table-column label="总体积" width="90" align="center">
           <template #default="{ row }"><span>{{ row.total_cbm ? row.total_cbm.toFixed(3) : '-' }}</span></template>
@@ -76,15 +76,11 @@
       <!-- 汇总行 -->
       <div v-if="rows.length > 0" class="calc-summary">
         <el-divider content-position="left">包装汇总</el-divider>
-        <el-descriptions :column="6" border size="small">
+        <el-descriptions :column="5" border size="small">
           <el-descriptions-item label="总桶数"><strong>{{ summary.total_drums }}</strong></el-descriptions-item>
           <el-descriptions-item label="总托盘数"><strong>{{ summary.total_pallets }}</strong></el-descriptions-item>
           <el-descriptions-item label="总体积(CBM)"><strong>{{ summary.total_cbm.toFixed(3) }}</strong></el-descriptions-item>
           <el-descriptions-item label="总毛重(kg)"><strong>{{ summary.total_weight_kg.toFixed(1) }}</strong></el-descriptions-item>
-          <el-descriptions-item label="待拼板桶">
-            <el-tag v-if="summary.pending_drums > 0" type="warning" size="small">{{ summary.pending_drums }} 个</el-tag>
-            <span v-else>-</span>
-          </el-descriptions-item>
           <el-descriptions-item label="货柜判断">
             <el-tag :type="summary.fits_20gp ? 'success' : summary.fits_40gp ? 'warning' : 'danger'" size="small">
               {{ summary.fits_20gp ? '20GP ✅' : summary.fits_40gp ? '40GP ✅' : '超出' }}
@@ -92,21 +88,37 @@
           </el-descriptions-item>
         </el-descriptions>
       </div>
-    </div>
 
-    <!-- 余数分配对话框 -->
-    <RemainderAllocationDialog
-      v-model="showRemainderDialog"
-      :rows="remainderRows"
-      @confirm="onRemainderConfirm"
-    />
+      <!-- 散货区 -->
+      <el-collapse v-if="remainderRows.length > 0" v-model="showRemainderSection" class="remainder-section">
+        <el-collapse-item title="非整板货物统计（需确认装载方式）" name="remainder">
+          <div class="remainder-list">
+            <span v-for="r in remainderRows" :key="r.id" class="remainder-item">
+              {{ r.product_name }}-余数: {{ r.remainder }}桶
+            </span>
+            <span class="remainder-total">合计: {{ totalRemainderDrums }}桶</span>
+          </div>
+          <div class="remainder-mode">
+            <span class="mode-label">散货装载计算模式：</span>
+            <el-radio-group v-model="remainder_mode" size="small">
+              <el-radio-button value="full_pallet">按整板计算</el-radio-button>
+              <el-radio-button value="actual_stacked">按实际堆叠</el-radio-button>
+              <el-radio-button value="loose">散货混装</el-radio-button>
+            </el-radio-group>
+          </div>
+          <div class="remainder-contribution">
+            散货贡献：+{{ remainderExtraCbm.toFixed(3) }} CBM | +{{ remainderExtraWeight.toFixed(1) }} kg
+          </div>
+          <el-button size="small" type="primary" @click="recalcSummary">重新计算汇总</el-button>
+        </el-collapse-item>
+      </el-collapse>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import packagingApi, { type PackageType, type PalletType } from '@/api/packaging'
-import RemainderAllocationDialog, { type RemainderRow } from './RemainderAllocationDialog.vue'
 
 // Task 3A: PackingRow interface
 interface PackingRow {
@@ -117,11 +129,11 @@ interface PackingRow {
   pallet_spec: string
   quantity_kg: number
   drums: number
-  pallets: number
+  pallets: number  // 整板数（full_pallets）
   drums_per_pallet: number
   drums_per_pallet_auto: number  // 自动填的标准值，供比较用
-  remainder: number  // 余数桶数
-  remainder_allocated: 'own_pallet' | 'pending' | null  // null = 未处理
+  full_pallets: number  // 整板数
+  remainder: number    // 余数桶数
   total_cbm: number
   total_weight_kg: number
   fits_20gp: boolean
@@ -133,9 +145,14 @@ const packageTypes = ref<PackageType[]>([])
 const palletTypes = ref<PalletType[]>([])
 const productOptions = ref<string[]>([])
 const rows = ref<PackingRow[]>([])
-const summary = ref({ total_drums: 0, total_pallets: 0, total_cbm: 0, total_weight_kg: 0, fits_20gp: false, fits_40gp: false, pending_drums: 0 })
-const showRemainderDialog = ref(false)
-const remainderRows = ref<RemainderRow[]>([])
+const summary = ref({ total_drums: 0, total_pallets: 0, total_cbm: 0, total_weight_kg: 0, fits_20gp: false, fits_40gp: false })
+const remainder_mode = ref<'full_pallet' | 'actual_stacked' | 'loose'>('actual_stacked')
+const showRemainderSection = ref(true)
+
+const remainderRows = computed(() => rows.value.filter(r => r.remainder > 0))
+const totalRemainderDrums = computed(() => remainderRows.value.reduce((s, r) => s + r.remainder, 0))
+const remainderExtraCbm = computed(() => calcRemainderContribution().extraCbm)
+const remainderExtraWeight = computed(() => calcRemainderContribution().extraWeight)
 
 onMounted(async () => {
   try {
@@ -163,8 +180,8 @@ function addRow(internalCode = '', productName = '', quantityKg = 0) {
     pallets: 0,
     drums_per_pallet: 0,
     drums_per_pallet_auto: 0,
+    full_pallets: 0,
     remainder: 0,
-    remainder_allocated: null,
     total_cbm: 0,
     total_weight_kg: 0,
     fits_20gp: false,
@@ -182,39 +199,27 @@ function removeRow(index: number) {
   recalcSummary()
 }
 
-function checkAndShowRemainderDialog() {
-  const pending = rows.value.filter(r => r.remainder > 0 && r.remainder_allocated === null)
-  if (pending.length > 0) {
-    remainderRows.value = pending.map(r => ({
-      id: r.id,
-      product_name: r.product_name,
-      drums: r.drums,
-      drums_per_pallet: r.drums_per_pallet,
-      remainder: r.remainder,
-      remainder_allocated: r.remainder_allocated,
-    }))
-    showRemainderDialog.value = true
-  }
-}
+function calcRemainderContribution(): { extraCbm: number; extraWeight: number } {
+  let extraCbm = 0
+  let extraWeight = 0
+  for (const r of rows.value) {
+    if (r.remainder <= 0) continue
+    const pkg = packageTypes.value.find(p => p.name === r.packaging_name)
+    const pallet = palletTypes.value.find(p => p.name === r.pallet_spec)
+    if (!pkg) continue
 
-function onRemainderConfirm(allocatedRows: RemainderRow[]) {
-  // 将对话框的决策应用回 rows
-  for (const allocated of allocatedRows) {
-    const row = rows.value.find(r => r.id === allocated.id)
-    if (!row) continue
-    row.remainder_allocated = allocated.remainder_allocated
-
-    if (allocated.remainder_allocated === 'own_pallet') {
-      // 额外添加一个卡板，余数桶已包含在 drums 里，只需补上该卡板自身的体积和重量
-      const pallet = palletTypes.value.find(p => p.name === row.pallet_spec)
-      if (pallet) {
-        row.total_cbm = (row.total_cbm || 0) + pallet.cbm
-        row.total_weight_kg = (row.total_weight_kg || 0) + pallet.weight_kg
-      }
-      row.pallets = (row.pallets || 0) + 1
+    if (remainder_mode.value === 'full_pallet') {
+      extraCbm += (pallet?.cbm ?? 0)
+      extraWeight += r.remainder * pkg.tare_kg + (pallet?.weight_kg ?? 0)
+    } else if (remainder_mode.value === 'actual_stacked') {
+      extraCbm += r.remainder * pkg.cbm
+      extraWeight += r.remainder * pkg.tare_kg
+    } else {
+      extraCbm += r.remainder * pkg.cbm
+      extraWeight += r.remainder * pkg.net_kg
     }
   }
-  recalcSummary()
+  return { extraCbm, extraWeight }
 }
 
 async function onRowCapacityChange(row: PackingRow) {
@@ -225,21 +230,19 @@ async function onRowCapacityChange(row: PackingRow) {
 
   const drums = Math.ceil(row.quantity_kg / pkg.net_kg)
   row.drums = drums
+  row.full_pallets = Math.floor(drums / row.drums_per_pallet)
   row.remainder = drums % row.drums_per_pallet
-  row.remainder_allocated = null  // 重置分配决策
-  const pallets = Math.ceil(drums / row.drums_per_pallet)
-  row.pallets = pallets
+  row.pallets = row.full_pallets
   row.total_cbm = drums * pkg.cbm
-  row.total_weight_kg = drums * pkg.gross_kg + pallets * 20
+  row.total_weight_kg = drums * pkg.gross_kg + row.full_pallets * 20
   row.fits_20gp = row.total_cbm <= 28 && row.total_weight_kg <= 21000
   row.fits_40gp = row.total_cbm <= 67 && row.total_weight_kg <= 27000
-  checkAndShowRemainderDialog()
   recalcSummary()
 }
 
 async function onRowPackageChange(row: PackingRow, packagingName: string) {
   if (!packagingName || row.quantity_kg <= 0) {
-    row.drums = 0; row.pallets = 0; row.drums_per_pallet = 0; row.remainder = 0; row.remainder_allocated = null
+    row.drums = 0; row.pallets = 0; row.drums_per_pallet = 0; row.full_pallets = 0; row.remainder = 0
     row.total_cbm = 0; row.total_weight_kg = 0; row.fits_20gp = false; row.fits_40gp = false
     recalcSummary()
     return
@@ -254,10 +257,10 @@ async function onRowPackageChange(row: PackingRow, packagingName: string) {
     const match = schemes.find((s: any) => s.pallet_type === row.pallet_spec) || schemes[0]
     if (match) {
       row.drums = match.drums
-      row.pallets = match.pallets
+      row.full_pallets = match.full_pallets ?? Math.floor(match.drums / match.drums_per_pallet)
+      row.remainder = match.remainder ?? (match.drums % match.drums_per_pallet)
+      row.pallets = row.full_pallets
       row.drums_per_pallet = match.drums_per_pallet
-      row.remainder = match.remainder ?? 0
-      row.remainder_allocated = null  // 重置分配决策
       row.total_cbm = match.total_cbm
       row.total_weight_kg = match.total_weight_kg
       row.fits_20gp = match.fits_20gp
@@ -269,7 +272,6 @@ async function onRowPackageChange(row: PackingRow, packagingName: string) {
       row.drums_per_pallet_auto = is1x1 ? (pkg.pallet_qty_1x1 ?? 0) : (pkg.pallet_qty_1_1x1_1 ?? 0)
       row.drums_per_pallet = row.drums_per_pallet_auto
     }
-    checkAndShowRemainderDialog()
     recalcSummary()
   } catch (e) {
     console.error('行计算失败', e)
@@ -277,25 +279,28 @@ async function onRowPackageChange(row: PackingRow, packagingName: string) {
 }
 
 function recalcSummary() {
-  const s = { total_drums: 0, total_pallets: 0, total_cbm: 0, total_weight_kg: 0, fits_20gp: true, fits_40gp: true, pending_drums: 0 }
+  const { extraCbm, extraWeight } = calcRemainderContribution()
+  const s = { total_drums: 0, total_pallets: 0, total_cbm: 0, total_weight_kg: 0, fits_20gp: true, fits_40gp: true }
   for (const r of rows.value) {
     s.total_drums += r.drums || 0
-    s.total_pallets += r.pallets || 0
+    s.total_pallets += r.full_pallets || 0
     s.total_cbm += r.total_cbm || 0
     s.total_weight_kg += r.total_weight_kg || 0
     if (!r.fits_20gp) s.fits_20gp = false
     if (!r.fits_40gp) s.fits_40gp = false
-    // pending 的余数桶不计入当前板数，单独显示
-    if (r.remainder_allocated === 'pending') {
-      s.pending_drums += r.remainder || 0
-    }
   }
+  // 按整板计算时，每个有余数的行额外加1个卡板
+  s.total_pallets += remainder_mode.value === 'full_pallet'
+    ? rows.value.filter(r => r.remainder > 0).length
+    : 0
+  s.total_cbm += extraCbm
+  s.total_weight_kg += extraWeight
   summary.value = s
 }
 
 function clearRows() {
   rows.value = []
-  summary.value = { total_drums: 0, total_pallets: 0, total_cbm: 0, total_weight_kg: 0, fits_20gp: false, fits_40gp: false, pending_drums: 0 }
+  summary.value = { total_drums: 0, total_pallets: 0, total_cbm: 0, total_weight_kg: 0, fits_20gp: false, fits_40gp: false }
 }
 
 function getSummary() {
@@ -350,4 +355,11 @@ defineExpose({ addRow, clearRows, setQuantity, selectPackage, getSummary, getRow
 .pkg-opt { font-weight: 500; }
 .pkg-dims { font-size: 12px; color: #909399; margin-left: 8px; }
 .drums-per-pallet-input { width: 80px; }
+.remainder-section { margin-top: 8px; }
+.remainder-list { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
+.remainder-item { font-size: 13px; color: #e6a23c; }
+.remainder-total { font-size: 13px; font-weight: 600; color: #f56c6c; }
+.remainder-mode { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.mode-label { font-size: 13px; color: #606266; }
+.remainder-contribution { font-size: 13px; color: #409eff; margin-bottom: 8px; }
 </style>

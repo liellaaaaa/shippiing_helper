@@ -32,6 +32,7 @@ export interface PackingScheme {
   fits_40gp: boolean
   recommended: string
   remainder: number  // 余数桶数
+  full_pallets: number  // 整板数
 }
 
 export interface CalculateRequest {

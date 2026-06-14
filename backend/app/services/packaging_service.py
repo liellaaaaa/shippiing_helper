@@ -52,6 +52,7 @@ class PackingResult:
     fits_20gp: bool
     fits_40gp: bool
     recommended: str
+    full_pallets: int = 0  # 整板数 = drums // drums_per_pallet
 
 
 # === 订单级别汇总计算新增 ===
@@ -76,9 +77,10 @@ class ProductPackagingResult:
 
     drums: int                  # 桶数/袋数
     drums_per_pallet: int       # 每板桶数
-    pallets: int                # 所需卡板数（不含余数单独打板）
+    pallets: int                # 整板数 = drums // drums_per_pallet
     pallet_spec: str            # 使用的卡板规格
-    remainder: int             # 余数桶数（drums % drums_per_pallet）
+    full_pallets: int          # 整板数（与 pallets 相同，兼容用）
+    remainder: int             # 余数桶数 = drums % drums_per_pallet
 
     net_weight_kg: float         # 产品净重
     drum_tare_kg: float         # 桶身皮重
@@ -235,7 +237,10 @@ def calculate(
         if drums_per_pallet == 0:
             raise ValueError(f"{packaging_name} 无法使用 {pallet_name} 打卡板")
 
-        pallets = math.ceil(drums / drums_per_pallet)
+        full_pallets = drums // drums_per_pallet
+        remainder_val = drums % drums_per_pallet
+        # pallets 存整板数，remainder 单独处理
+        pallets = full_pallets
         pallet_type = pallet_name
 
         total_cbm = drums * pkg.cbm + pallets * pallet.cbm
@@ -266,6 +271,7 @@ def calculate(
         fits_20gp=fits_20gp,
         fits_40gp=fits_40gp,
         recommended=recommended,
+        full_pallets=full_pallets,
     )
 
 
@@ -334,15 +340,17 @@ def calculate_single_product(
 
     if drums_per_pallet == 0:
         # 编织袋类产品不需要卡板
-        pallets = 0
+        full_pallets = 0
         remainder = 0
+        pallets = 0
         drum_tare = drums * pkg.tare_kg
         pallet_tare = 0
         drum_cbm = drums * pkg.cbm
         pallet_cbm = 0
     else:
-        pallets = math.ceil(drums / drums_per_pallet)
+        full_pallets = drums // drums_per_pallet
         remainder = drums % drums_per_pallet
+        pallets = full_pallets  # 整板数
         pallet = find_pallet(pallet_spec)
         drum_tare = drums * pkg.tare_kg
         pallet_tare = pallets * pallet.weight_kg if pallet else 0
@@ -360,6 +368,7 @@ def calculate_single_product(
         drums_per_pallet=drums_per_pallet,
         pallets=pallets,
         pallet_spec=pallet_spec,
+        full_pallets=full_pallets,
         remainder=remainder,
         net_weight_kg=quantity_kg,
         drum_tare_kg=round(drum_tare, 1),
@@ -472,3 +481,39 @@ def calculate_order_packaging(products: list[OrderProductInput]) -> OrderPackagi
         load_rate_20gp=load_rate_20gp,
         load_rate_40hq=load_rate_40hq,
     )
+
+
+def calculate_remainder_contribution(
+    remainder_drums: int,
+    packaging_name: str,
+    pallet_spec: str,
+    mode: str,  # "full_pallet" | "actual_stacked" | "loose"
+) -> tuple:
+    """
+    计算余数桶对总体积/总重量的贡献。
+
+    mode:
+      - full_pallet:      余数凑整板，算一整卡板体积+重量
+      - actual_stacked:    只加余数桶自身（体积+皮重），不加卡板自身
+      - loose:             只加余数桶净体积，不加任何皮重
+    """
+    if remainder_drums <= 0:
+        return 0.0, 0.0
+
+    pkg = find_package(packaging_name)
+    if not pkg:
+        return 0.0, 0.0
+
+    pallet = find_pallet(pallet_spec) if pallet_spec else None
+
+    if mode == "full_pallet":
+        extra_volume = pallet.cbm if pallet else 0.0
+        extra_weight = (remainder_drums * pkg.tare_kg) + (pallet.weight_kg if pallet else 0.0)
+    elif mode == "actual_stacked":
+        extra_volume = remainder_drums * pkg.cbm
+        extra_weight = remainder_drums * pkg.tare_kg
+    else:  # loose
+        extra_volume = remainder_drums * pkg.cbm
+        extra_weight = remainder_drums * pkg.net_kg
+
+    return round(extra_volume, 4), round(extra_weight, 1)

@@ -179,8 +179,6 @@ class DocumentService:
                     # 固定单位后缀
                     if field_key == "NO_KIND_PKG" and value:
                         value = f"{value} PALLETS"
-                    elif field_key == "GROSS_WEIGHT" and value:
-                        value = f"{value} KGS"
                     elif field_key == "MEASUREMENT" and value:
                         value = f"{value} CBM"
                     # 写回 <v> 元素，并改为内联字符串类型（t="str"）

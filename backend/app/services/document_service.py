@@ -126,13 +126,9 @@ class DocumentService:
         打开已标记的 Booking 模板，扫描 {{FIELD_NAME}} 单元格，替换为实际值，返回填充后的 xlsx 字节。
         fields: dict，键为 FIELD_NAME（不带花括号），值为字符串
         """
-        if template_type == "xlsx":
-            template_path = TEMPLATES.get("booking_marked", TEMPLATES.get("booking"))
-            wb = openpyxl.load_workbook(template_path)
-        else:
-            template_path = TEMPLATES.get("booking")
-            content_xlsx = convert_xls_to_xlsx(template_path)
-            wb = openpyxl.load_workbook(BytesIO(content_xlsx))
+        # 始终使用 xlsx 已标记模板，不再兼容 .xls
+        template_path = TEMPLATES.get("booking_marked", TEMPLATES.get("booking"))
+        wb = openpyxl.load_workbook(template_path)
 
         ws = wb.active
 
@@ -172,20 +168,16 @@ class DocumentService:
 
     def generate_booking(self, fields: dict | None = None, template_type: str = "xlsx") -> Tuple[bytes, str, str]:
         """
-        生成订舱单：支持自动填充字段。
+        生成订舱单：始终使用 xlsx 已标记模板。
         fields: 可选，键为字段名（无花括号），值未提供则返回空白模板。
         """
         if fields:
-            content_xlsx = self.fill_booking_template(fields, template_type)
+            content_xlsx = self.fill_booking_template(fields, "xlsx")
         else:
-            # 兼容无参调用（空白模板）
-            template_key = f"booking_{template_type}" if template_type == "xlsx" else "booking"
-            template_path = TEMPLATES.get(template_key, TEMPLATES["booking"])
-            if template_type == "xlsx" and os.path.exists(template_path):
-                with open(template_path, "rb") as f:
-                    content_xlsx = f.read()
-            else:
-                content_xlsx = convert_xls_to_xlsx(template_path)
+            # 无参调用也使用 xlsx 已标记模板（空白版本）
+            template_path = TEMPLATES.get("booking_marked", TEMPLATES.get("booking"))
+            with open(template_path, "rb") as f:
+                content_xlsx = f.read()
 
         doc_key = f"booking_{int(time.time())}"
         return content_xlsx, doc_key, base64.b64encode(content_xlsx).decode()

@@ -183,13 +183,14 @@ class DocumentService:
                         value = f"{value} KGS"
                     elif field_key == "MEASUREMENT" and value:
                         value = f"{value} CBM"
-                    # 写回 <v> 元素
+                    # 写回 <v> 元素，并改为内联字符串类型（t="str"）
+                    # 原始单元格可能是 t="s"（共享字符串索引），直接改值会导致查表错误
                     v_el = c_el.find(f'{{{NS}}}v')
                     if v_el is None:
                         v_el = etree.SubElement(c_el, f'{{{NS}}}v')
                     v_el.text = str(value)
-                    # 清除 t="str" 等类型标记（改为普通字符串）
-                    c_el.attrib.pop('t', None)
+                    # 改为内联字符串，避免共享字符串表索引错误
+                    c_el.set('t', 'str')
 
             # 4. 重新打包 zip
             out = BytesIO()

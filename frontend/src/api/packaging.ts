@@ -31,6 +31,7 @@ export interface PackingScheme {
   fits_20gp: boolean
   fits_40gp: boolean
   recommended: string
+  remainder: number  // 余数桶数
 }
 
 export interface CalculateRequest {

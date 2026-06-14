@@ -36,6 +36,7 @@ class PackingScheme(BaseModel):
     fits_20gp: bool
     fits_40gp: bool
     recommended: str
+    remainder: int = 0  # 余数桶数
 
 
 @router.get("/types", summary="获取所有包装种类")
@@ -93,6 +94,7 @@ def calculate_packaging(req: CalculateRequest):
                 fits_20gp=best.fits_20gp,
                 fits_40gp=best.fits_40gp,
                 recommended=best.recommended,
+                remainder=best.drums % best.drums_per_pallet if best.drums_per_pallet else 0,
             )
         else:
             r = calculate(req.packaging_name, req.order_qty_kg, use_pallet=False)
@@ -106,6 +108,7 @@ def calculate_packaging(req: CalculateRequest):
                 fits_20gp=r.fits_20gp,
                 fits_40gp=r.fits_40gp,
                 recommended=r.recommended,
+                remainder=0,
             )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -128,6 +131,7 @@ def calculate_all_packaging_schemes(req: CalculateRequest):
                 "fits_20gp": s.fits_20gp,
                 "fits_40gp": s.fits_40gp,
                 "recommended": s.recommended,
+                "remainder": s.drums % s.drums_per_pallet if s.drums_per_pallet else 0,
             }
             for s in schemes
         ]

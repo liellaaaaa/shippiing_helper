@@ -76,8 +76,9 @@ class ProductPackagingResult:
 
     drums: int                  # 桶数/袋数
     drums_per_pallet: int       # 每板桶数
-    pallets: int                # 所需卡板数
+    pallets: int                # 所需卡板数（不含余数单独打板）
     pallet_spec: str            # 使用的卡板规格
+    remainder: int             # 余数桶数（drums % drums_per_pallet）
 
     net_weight_kg: float         # 产品净重
     drum_tare_kg: float         # 桶身皮重
@@ -334,12 +335,14 @@ def calculate_single_product(
     if drums_per_pallet == 0:
         # 编织袋类产品不需要卡板
         pallets = 0
+        remainder = 0
         drum_tare = drums * pkg.tare_kg
         pallet_tare = 0
         drum_cbm = drums * pkg.cbm
         pallet_cbm = 0
     else:
         pallets = math.ceil(drums / drums_per_pallet)
+        remainder = drums % drums_per_pallet
         pallet = find_pallet(pallet_spec)
         drum_tare = drums * pkg.tare_kg
         pallet_tare = pallets * pallet.weight_kg if pallet else 0
@@ -357,6 +360,7 @@ def calculate_single_product(
         drums_per_pallet=drums_per_pallet,
         pallets=pallets,
         pallet_spec=pallet_spec,
+        remainder=remainder,
         net_weight_kg=quantity_kg,
         drum_tare_kg=round(drum_tare, 1),
         pallet_tare_kg=round(pallet_tare, 1),

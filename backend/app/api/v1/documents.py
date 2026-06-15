@@ -27,6 +27,7 @@ class BookingFields(BaseModel):
     desc: str = ""
     gross_weight: str = ""
     measurement: str = ""
+    customs_names: list[str] = []
     template_type: str = "xlsx"
 
 
@@ -52,6 +53,12 @@ async def generate_booking(fields: BookingFields = Body(...)):
         "GROSS_WEIGHT": fields.gross_weight,
         "MEASUREMENT": fields.measurement,
     }
+    # 新增：DESC1-DESC6 多产品报关名称
+    for i, name in enumerate(fields.customs_names, 1):
+        fields_dict[f"DESC{i}"] = name
+    # DESC 字段兼容单产品模式：如果 customs_names 为空但 desc 有值，fallback 到 DESC1
+    if not fields.customs_names and fields.desc:
+        fields_dict["DESC1"] = fields.desc
     content, doc_key, _ = svc.generate_booking(fields_dict, fields.template_type)
     token, config, safe_key = oo_svc.create_config(doc_key, "xlsx")
     _save_doc_to_db(doc_key, "booking", content, storage_key=safe_key)

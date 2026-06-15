@@ -6,11 +6,12 @@ INPUT_FILE = "references/2024.12.5 最新出口商品编码及报关成分.xlsx"
 OUTPUT_FILE = "references/customs_codes.json"
 
 # 列索引（基于表头行，0-based）
+# 表头：序号(0) | 产品内编(1) | PI名建议(2) | 产品线(3) | 产品外观(4) | 旧商品编码(5) | 新商品编码(6) | 报关名称(7) | 退税税率(8) | 监管条件(9) | 检验检疫(10) | 成分(11)
 COLS = {
     "internal_code": 1,
-    "product_code": 5,
-    "customs_name": 6,
-    "components": 7,
+    "product_code": 6,       # 新商品编码
+    "customs_name": 7,       # 报关名称
+    "components": 10,       # 成分
     "product_appearance": 4,
 }
 

@@ -121,17 +121,18 @@ class DocumentService:
     def __init__(self):
         self.msds_service = MSDSService()
 
-    def fill_booking_template(self, fields: dict) -> bytes:
+    def fill_booking_template(self, fields: dict, template_key: str = "booking_marked") -> bytes:
         """
         直接操作 xlsx zip 内部 XML，精准替换 {{FIELD_NAME}} 单元格值，
         不经过 openpyxl 加载/保存，完整保留所有 shapes 和格式。
         fields: dict，键为 FIELD_NAME（不带花括号），值为字符串
+        template_key: config.py 中的 TEMPLATES 键，默认 "booking_marked"
         """
         import zipfile, re, shutil, os
         from io import BytesIO
         from lxml import etree
 
-        template_path = TEMPLATES.get("booking_marked", TEMPLATES.get("booking"))
+        template_path = TEMPLATES.get(template_key, TEMPLATES.get("booking_marked", TEMPLATES.get("booking")))
         NS = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'
 
         # 1. 先用 openpyxl 只读模式找出 {{FIELD}} 单元格坐标（不保存）
@@ -206,14 +207,20 @@ class DocumentService:
 
     def generate_booking(self, fields: dict | None = None, template_type: str = "xlsx") -> Tuple[bytes, str, str]:
         """
-        生成订舱单：始终使用 xlsx 已标记模板。
+        生成订舱单：template_type="multi" 使用多产品模板 booking_multi，
+        其他情况使用 booking_marked。
         fields: 可选，键为字段名（无花括号），值未提供则返回空白模板。
         """
+        if template_type == "multi":
+            template_key = "booking_multi"
+        else:
+            template_key = "booking_marked"
+
         if fields:
-            content_xlsx = self.fill_booking_template(fields)
+            content_xlsx = self.fill_booking_template(fields, template_key=template_key)
         else:
             # 无参调用也使用 xlsx 已标记模板（空白版本）
-            template_path = TEMPLATES.get("booking_marked", TEMPLATES.get("booking"))
+            template_path = TEMPLATES.get(template_key, TEMPLATES.get("booking_marked", TEMPLATES.get("booking")))
             with open(template_path, "rb") as f:
                 content_xlsx = f.read()
 

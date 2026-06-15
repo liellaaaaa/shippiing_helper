@@ -135,6 +135,12 @@ class SaveService:
             else:
                 record.customs_name = None
 
+            # 报关相关字段透传
+            record.product_code = item.product_code
+            record.components = item.customs_ingredients
+            record.product_appearance = item.product_appearance
+            record.customs_match_status = item.customs_match_status
+
             # ── PI 专用字段 ──
             if pi_d:
                 record.pi_no = pi_d.pi_no

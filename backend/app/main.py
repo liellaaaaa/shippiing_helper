@@ -13,11 +13,12 @@ from app.api.v1 import documents, msds, transport, export_codes, onlyoffice
 from app.api.v1.data_center import router as data_center_router
 from app.api.v1.transport_reports import router as transport_reports_router
 from app.api.v1.name_mapping import router as name_mapping_router
-from app.core.config import MSDS_DIR, TRANSPORT_REPORTS_DIR
+from app.core.config import MSDS_DIR, TRANSPORT_REPORTS_DIR, CUSTOMS_CODES_JSON
 from app.database import SessionLocal
 from app.services.data_center_service import DataCenterService
 from app.services.transport_service import TransportService
 from app.services.name_mapping_service import load_name_mapping
+from app.services.customs_name_service import CustomsNameService
 
 app = FastAPI(
     title="ShippingHelper API",
@@ -62,6 +63,9 @@ async def startup():
     # 加载品名中英文对照表
     load_name_mapping()
     print("[startup] Product name mapping loaded")
+    # 加载报关名称服务
+    CustomsNameService.get_instance(CUSTOMS_CODES_JSON)
+    print("[startup] Customs name service loaded")
     db = SessionLocal()
     try:
         dc_svc = DataCenterService()

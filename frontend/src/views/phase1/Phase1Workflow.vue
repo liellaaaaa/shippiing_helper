@@ -152,6 +152,31 @@
                   <span class="info-label">报关品名</span>
                   <el-input v-model="piForm.customs_name" size="small" class="info-input" />
                 </div>
+                <!-- PI Header 字段（取到了什么数据就展示什么） -->
+                <div class="info-row" v-if="piForm.consignee_name">
+                  <span class="info-label">收货人</span>
+                  <el-input v-model="piForm.consignee_name" size="small" class="info-input" />
+                </div>
+                <div class="info-row" v-if="piForm.consignee_address">
+                  <span class="info-label">收货人地址</span>
+                  <el-input v-model="piForm.consignee_address" size="small" class="info-input" />
+                </div>
+                <div class="info-row" v-if="piForm.destination">
+                  <span class="info-label">目的港</span>
+                  <el-input v-model="piForm.destination" size="small" class="info-input" />
+                </div>
+                <div class="info-row" v-if="piForm.price_term">
+                  <span class="info-label">价格条款</span>
+                  <el-input v-model="piForm.price_term" size="small" class="info-input" />
+                </div>
+                <div class="info-row" v-if="piForm.loading_port">
+                  <span class="info-label">装货港</span>
+                  <el-input v-model="piForm.loading_port" size="small" class="info-input" />
+                </div>
+                <div class="info-row" v-if="piForm.invoice_to">
+                  <span class="info-label">发票抬头</span>
+                  <el-input v-model="piForm.invoice_to" size="small" class="info-input" />
+                </div>
               </div>
               <div v-else class="empty-placeholder">
                 <span>请上传 PI 合同文件（.xls/.xlsx/.pdf）</span>
@@ -256,6 +281,13 @@ const piForm = ref({
   total_amount: 0,
   hs_code: '',
   customs_name: '',
+  // PI Header 字段（后端已支持展示）
+  consignee_name: '',
+  consignee_address: '',
+  destination: '',
+  loading_port: '',
+  price_term: '',
+  invoice_to: '',
 })
 
 // Computed
@@ -324,6 +356,13 @@ async function handlePiFileSelected(file: File) {
       total_amount: firstItem.total_amount ?? 0,
       hs_code: firstItem.hs_code || '',
       customs_name: firstItem.customs_name || '',
+      // PI Header 字段
+      consignee_name: result.consignee_name || '',
+      consignee_address: result.consignee_address || '',
+      destination: result.destination || '',
+      loading_port: result.loading_port || '',
+      price_term: result.price_term || '',
+      invoice_to: result.invoice_to || '',
     }
     piParsed.value = true
     ElMessage.success(`PI 文件 "${file.name}" 解析成功`)

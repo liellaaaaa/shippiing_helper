@@ -31,6 +31,11 @@ class OrderDataItem(BaseModel):
     customs_name: Optional[str] = None
     order_requirement: Optional[str] = None
     notes: Optional[str] = None
+    # 报关相关字段（与 OrderPiRecord 对齐，前端不发送时为 None）
+    product_code: Optional[str] = None
+    customs_ingredients: Optional[str] = None
+    product_appearance: Optional[str] = None
+    customs_match_status: Optional[str] = None
 
 
 class OrderData(BaseModel):

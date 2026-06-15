@@ -332,6 +332,7 @@ def parse_pasted_data(
 
     for order in orders_by_no.values():
         for item in order.items:
+            print('[DEBUG] internal_code=' + str(item.internal_code))
             json_data = customs_svc.lookup(item.internal_code)
             if json_data is None:
                 item.customs_match_status = "not_found"

@@ -23,6 +23,11 @@ class OrderService:
         """
         orders, skipped_rows, warning = parse_pasted_data(raw_text)
 
+        # DEBUG: check customs_match_status after parse_pasted_data
+        for o in orders:
+            for i in o.items:
+                print("[ORDER_SVC DEBUG] ic=" + str(i.internal_code) + " hs=" + str(getattr(i, 'hs_code', 'MISSING')) + " cms=" + str(getattr(i, 'customs_match_status', 'MISSING')))
+
         # 知识库匹配（in-place 修改）
         for order in orders:
             fill_knowledge_for_order(order)

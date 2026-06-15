@@ -32,6 +32,13 @@ export interface PiUploadResponse {
   sales_person?: string
   pi_date?: string
   is_ordered: string
+  // PI Header 字段（后端 PiContractUploadResponse 已支持）
+  consignee_name?: string
+  consignee_address?: string
+  destination?: string
+  loading_port?: string
+  price_term?: string
+  invoice_to?: string
   items: PiContractItem[]
   confidence: Confidence
 }

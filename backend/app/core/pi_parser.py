@@ -526,7 +526,7 @@ def _extract_text_from_pdf_bytes(content: bytes) -> str:
         pix = page.get_pixmap(matrix=mat)
         img_bytes = pix.tobytes("png")
         img = Image.open(io.BytesIO(img_bytes))
-        text = pytesseract.image_to_string(img, lang="eng+chi")
+        text = pytesseract.image_to_string(img, lang="chi_sim+eng", config="--psm 6")
         texts.append(text)
     doc.close()
     return "\n".join(texts)
@@ -576,6 +576,16 @@ def parse_proforma_invoice_from_text(text: str, filename: str = "") -> PiContrac
         lines = after.split(chr(10), 2)
         return lines[1].strip() if len(lines) >= 2 and lines[1].strip() else None
 
+    def scan_value(label_pat, value_pat):
+        """找标签后, 在后续文本中搜索匹配 value_pat 的值（如日期、价格条款关键字）"""
+        idx = re.search(label_pat, text, re.IGNORECASE)
+        if not idx:
+            return None
+        # 在标签后 200 字符内找 value_pat
+        window = text[idx.end(): idx.end() + 200]
+        m = re.search(value_pat, window)
+        return m.group(0).strip() if m else None
+
     # 1) PI/Order No — 多种 OCR 变形
     pi_no = (
         scan(r"ORDER\s+NO\s*[:;.]?") or
@@ -604,20 +614,26 @@ def parse_proforma_invoice_from_text(text: str, filename: str = "") -> PiContrac
         m = re.search(r"(?mi)^NAME\s*:\s*(.+)$", text, re.MULTILINE)
         consignee_name = m.group(1).strip() if m else None
 
-    # 3) consignee ADD
+    # 3) consignee ADD — 剥离尾部可能拼接的日期（2列布局OCR会拼接右列）
     consignee_address = scan(r"ADD\s*:") or scan(r"ADDRESS\s*:")
+    if consignee_address:
+        consignee_address = re.sub(r"\s+\d{4}[-/.]\d{1,2}[-/.]\d{1,2}\s*$", "", consignee_address).strip()
 
     # 4) destination
     destination = scan(r"[0-9]\.\s*DEST\s*:") or scan(r"DEST\s*INAT\s*ION\s*:")
 
     # 5) date
-    pi_date = scan(r"DATE\s*:")
+    pi_date = scan_value(r"DATE\s*[:;]?", r"\d{4}[-/.]\d{1,2}[-/.]\d{1,2}") or scan(r"DATE\s*:")
 
     # 6) Port of loading (装货地)
     loading_port = scan(r"Port\s+of\s+loading\s*:") or scan(r"Loading\s+Port\s*:")
 
-    # 7) Price Term (价格条款)
+    # 7) Price Term (价格条款) — 兼容 "Price Term: CIF" 标签 与 表格表头 "CIF ISTANBUL" 独立行
     price_term = scan(r"Price\s+Term\s*:")
+    if not price_term:
+        # 兜底: 找表头的 CIF/FOB/C&F/CFR 关键字
+        m = re.search(r"\b(CIF|FOB|CFR|C\s*&\s*F|EXW|FCA|CPT|CIP|DAP|DPU)\b", text)
+        price_term = m.group(0) if m else None
 
     # 8) Invoice To (发票抬头)
     invoice_to = scan(r"INVOICE\s+TO\s*[:.]?\s*NAME\s*:") or scan(r"INVOICE\s+TO\s*:")

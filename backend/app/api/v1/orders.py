@@ -26,6 +26,27 @@ from app.schemas.order import (
 router = APIRouter(prefix="/api/v1/orders", tags=["订单管理"])
 
 
+# 临时调试接口
+@router.post("/debug_match")
+async def debug_match(request: dict):
+    """直接测试匹配逻辑"""
+    from app.services.order_service import OrderService
+    svc = OrderService()
+    raw_text = request.get("raw_text", "")
+    result = svc.parse_paste(raw_text)
+    items_info = []
+    for o in result.orders:
+        for i in o.items:
+            items_info.append({
+                "internal_code": i.internal_code,
+                "hs_code": i.hs_code,
+                "customs_name": i.customs_name,
+                "customs_match_status": getattr(i, 'customs_match_status', 'NO_ATTR'),
+                "product_code": getattr(i, 'product_code', 'NO_ATTR'),
+            })
+    return {"items": items_info}
+
+
 @router.post(
     "/paste",
     response_model=PasteParseResponse,

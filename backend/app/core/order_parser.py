@@ -335,15 +335,27 @@ def parse_pasted_data(
             json_data = customs_svc.lookup(item.internal_code)
             if json_data is None:
                 item.customs_match_status = "not_found"
-            elif item.customs_name and item.customs_name != json_data.get("customs_name"):
+                continue
+
+            # Collect conflict types
+            conflict_types = []
+            if item.customs_name and item.customs_name != json_data.get("customs_name"):
+                conflict_types.append("customs_name")
+            if item.hs_code and item.hs_code != json_data.get("product_code"):
+                conflict_types.append("hs_code")
+
+            if conflict_types:
                 item.customs_match_status = "conflict"
-                item.conflict_customs_name = json_data.get("customs_name")
-                # 冲突时也补全其他字段
-                item.hs_code = item.hs_code or json_data.get("product_code")
+                if "customs_name" in conflict_types:
+                    item.conflict_customs_name = json_data.get("customs_name")
+                if "hs_code" in conflict_types:
+                    item.conflict_hs_code = json_data.get("product_code")
+                # Fill other fields even in conflict
                 item.customs_ingredients = json_data.get("components")
                 item.product_code = json_data.get("product_code")
                 item.product_appearance = json_data.get("product_appearance")
             elif not item.customs_name:
+                # Empty - auto-fill
                 item.customs_name = json_data.get("customs_name")
                 item.customs_ingredients = json_data.get("components")
                 item.product_code = json_data.get("product_code")
@@ -351,6 +363,7 @@ def parse_pasted_data(
                 item.hs_code = item.hs_code or json_data.get("product_code")
                 item.customs_match_status = "filled"
             else:
+                # Perfect match
                 item.customs_match_status = "matched"
                 item.hs_code = item.hs_code or json_data.get("product_code")
                 item.customs_ingredients = json_data.get("components")

@@ -34,6 +34,7 @@ class OrderItemSchema(BaseModel):
     product_appearance: Optional[str] = None
     customs_match_status: Optional[str] = None  # matched / conflict / filled / not_found
     conflict_customs_name: Optional[str] = None  # 仅 conflict 时有
+    conflict_hs_code: Optional[str] = None  # 仅 hs_code 冲突时有
     # 前端用：_selected 跟踪复选框状态（不出现在请求体中）
     _selected: Optional[bool] = None
 

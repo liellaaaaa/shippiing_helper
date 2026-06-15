@@ -418,13 +418,16 @@ async function openDocument(type: 'booking' | 'loi') {
   }
 }
 
-const bookingInitialValues = computed(() => ({
-  consignee: currentOrderInfo.value.consignee,
-  port: currentOrderInfo.value.port,
-  desc: currentOrderInfo.value.product_cn,
-  gross_weight: currentOrderInfo.value.gross_weight_kg,
-  measurement: currentOrderInfo.value.volume_cbm,
-}))
+const bookingInitialValues = computed(() => {
+  const items = currentOrderItems.value || []
+  return {
+    consignee: currentOrderInfo.value.consignee,
+    port: currentOrderInfo.value.port,
+    customs_names: items.map(it => it.customs_name || it.product_cn || ''),
+    gross_weight: currentOrderInfo.value.gross_weight_kg,
+    measurement: currentOrderInfo.value.volume_cbm,
+  }
+})
 
 async function onBookingConfirm(fields: import('./components/BookingConfirmDialog.vue').BookingForm) {
   try {

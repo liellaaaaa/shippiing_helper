@@ -12,7 +12,7 @@ export const phase2Api = {
     place_of_delivery: string
     marks: string
     no_kind_pkg: string
-    desc: string
+    customs_names: string[]
     gross_weight: string
     measurement: string
     template_type?: 'xls' | 'xlsx'

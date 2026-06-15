@@ -43,22 +43,22 @@
       <el-form-item label="件数/柜型">
         <el-input v-model="form.no_kind_pkg" placeholder="如 4 PALLETS" />
       </el-form-item>
-      <el-form-item label="货名">
-        <el-input v-model="form.desc" placeholder="产品中文名" />
-      </el-form-item>
-      <el-form-item label="毛重">
-        <el-input v-model="form.gross_weight" placeholder="如 2600">
-          <template #append>KGS</template>
-        </el-input>
-      </el-form-item>
-      <el-form-item label="尺码">
-        <el-input v-model="form.measurement" placeholder="如 4.64">
-          <template #append>CBM</template>
-        </el-input>
-      </el-form-item>
       <el-form-item label="唛头">
         <el-input v-model="form.marks" placeholder="可留空" />
       </el-form-item>
+      <el-table :data="goodsRows" border size="small" class="goods-table">
+        <el-table-column label="报关名称" prop="customsName" />
+        <el-table-column label="毛重(KGS)">
+          <template #default="{ row, $index }">
+            <el-input v-model="row.grossWeight" :disabled="$index > 0" size="small" />
+          </template>
+        </el-table-column>
+        <el-table-column label="尺码(CBM)">
+          <template #default="{ row, $index }">
+            <el-input v-model="row.measurement" :disabled="$index > 0" size="small" />
+          </template>
+        </el-table-column>
+      </el-table>
     </el-form>
 
     <template #footer>
@@ -82,8 +82,14 @@ export interface BookingForm {
   place_of_delivery: string
   marks: string
   no_kind_pkg: string
-  desc: string
+  customs_names: string[]
   gross_weight: string
+  measurement: string
+}
+
+interface GoodsRow {
+  customsName: string
+  grossWeight: string
   measurement: string
 }
 
@@ -98,7 +104,7 @@ const defaultForm = (): BookingForm => ({
   place_of_delivery: '',
   marks: '',
   no_kind_pkg: '',
-  desc: '',
+  customs_names: [],
   gross_weight: '',
   measurement: '',
 })
@@ -116,6 +122,7 @@ const emit = defineEmits<{
 const form = ref<BookingForm>(defaultForm())
 const loading = ref(false)
 const visible = ref(props.modelValue)
+const goodsRows = ref<GoodsRow[]>([])
 
 watch(() => props.modelValue, (v) => {
   visible.value = v
@@ -135,6 +142,17 @@ watch(() => props.modelValue, (v) => {
       form.value.pod = initial.port
       form.value.place_of_delivery = initial.port
     }
+    // 初始化货物表格
+    const names = (initial as any).customs_names || []
+    goodsRows.value = names.map((n: string) => ({
+      customsName: n,
+      grossWeight: '',
+      measurement: '',
+    }))
+    if (goodsRows.value.length) {
+      goodsRows.value[0].grossWeight = (initial as any).gross_weight || ''
+      goodsRows.value[0].measurement = (initial as any).measurement || ''
+    }
   }
 })
 
@@ -142,7 +160,12 @@ watch(visible, (v) => emit('update:modelValue', v))
 
 function onConfirm() {
   loading.value = true
-  emit('confirm', { ...form.value })
+  emit('confirm', {
+    ...form.value,
+    customs_names: goodsRows.value.map(r => r.customsName),
+    gross_weight: goodsRows.value[0]?.grossWeight || '',
+    measurement: goodsRows.value[0]?.measurement || '',
+  })
   loading.value = false
   visible.value = false
 }
@@ -161,5 +184,8 @@ function onClosed() {
   margin: 12px 0 8px;
   padding-bottom: 4px;
   border-bottom: 1px solid #dcdfe6;
+}
+.goods-table {
+  margin-bottom: 12px;
 }
 </style>

@@ -1,7 +1,7 @@
 # ShippingHelper API 文档
 
-> 本文档描述 Phase 1 订单粘贴解析模块的 API 接口规范。
-> 版本：v1.0.0
+> 外贸船务效率工具 — 完整 API 接口规范。
+> 版本：v2.0.0（2026-06-15）
 > Base URL：`http://localhost:8000`
 > 文档地址：`http://localhost:8000/docs`（Swagger UI）
 
@@ -19,6 +19,7 @@
 |-------------|------|----------|
 | 200 | 成功 | 正常返回数据 |
 | 400 | 请求参数错误 | 解析失败、空文本，分隔符无法识别 |
+| 404 | 资源不存在 | 订单/记录/文件不存在 |
 | 422 | Pydantic 验证错误 | 字段类型不匹配，必填字段缺失 |
 | 500 | 服务器内部错误 | 数据库保存失败（事务已回滚） |
 
@@ -32,13 +33,75 @@
 
 ---
 
-## 接口列表
+## 接口总览
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
 | GET | `/health` | 健康检查 |
+| **订单管理** | | |
 | POST | `/api/v1/orders/paste` | 解析粘贴文本 |
 | POST | `/api/v1/orders` | 保存订单 |
+| GET | `/api/v1/orders/{id}` | 查询单个订单 |
+| **PI 合同管理** | | |
+| POST | `/api/v1/pi/upload` | 上传并解析 PI 文件 |
+| POST | `/api/v1/pi/contracts` | 保存 PI 合同（待实现） |
+| GET | `/api/v1/pi/contracts` | 查询 PI 合同（待实现） |
+| **数据关联** | | |
+| GET | `/api/v1/merge/orders` | 查询订单列表（含关联状态） |
+| GET | `/api/v1/merge/orders/{order_id}/comparison` | 订单比对数据 |
+| GET | `/api/v1/merge/orders/{order_id}/pi-contracts` | 订单关联的 PI 合同 |
+| **包装计算** | | |
+| GET | `/api/v1/packaging/types` | 获取所有包装种类 |
+| GET | `/api/v1/packaging/pallets` | 获取所有托盘种类 |
+| POST | `/api/v1/packaging/calculate` | 计算包装方案 |
+| POST | `/api/v1/packaging/calculate-schemes` | 计算所有包装方案 |
+| POST | `/api/v1/packaging/calculate-order` | 订单级别包装汇总计算 |
+| GET | `/api/v1/packages/calculate` | 包装计算统一入口（海运/空运/陆运） |
+| GET | `/api/v1/packages/types` | 获取所有包装类型（用于下拉） |
+| GET | `/api/v1/packages/recommend` | 根据 internal_code 推荐包装类型 |
+| **数据看板** | | |
+| GET | `/api/v1/dashboard/orders` | 获取数据看板合并数据 |
+| GET | `/api/v1/dashboard/export` | 导出数据看板 Excel |
+| POST | `/api/v1/dashboard/records` | 落库 — 双轨合并数据写入 |
+| GET | `/api/v1/dashboard/records` | 查询落库记录 |
+| GET | `/api/v1/dashboard/records/{record_id}` | 查询单条落库记录 |
+| DELETE | `/api/v1/dashboard/records/{record_id}` | 删除订单 |
+| **文档生成** | | |
+| POST | `/api/v1/documents/booking` | 生成订舱单 |
+| GET | `/api/v1/documents/loi` | 生成 LOI |
+| GET | `/api/v1/documents/msds` | 生成 MSDS |
+| GET | `/api/v1/documents/msds/{msds_id}` | 加载指定 MSDS 文件 |
+| GET | `/api/v1/documents/customs` | 生成出口报关资料 |
+| GET | `/api/v1/documents/history/{order_id}` | 获取文档历史版本 |
+| GET | `/api/v1/documents/template/{template_type}` | 打开空白模板 |
+| GET | `/api/v1/documents/my-templates` | 我的模板列表 |
+| **OnlyOffice** | | |
+| POST | `/api/v1/onlyoffice/jwt` | 创建 JWT 配置 |
+| POST | `/api/v1/onlyoffice/callback` | OnlyOffice 保存回调 |
+| GET | `/api/v1/onlyoffice/download/{doc_key}` | 下载文档 |
+| **MSDS** | | |
+| GET | `/api/v1/msds/` | MSDS 列表（分页） |
+| GET | `/api/v1/msds/{msds_id}/content` | 获取 MSDS 内容和物理特性 |
+| POST | `/api/v1/msds/reindex` | 重建 MSDS 索引 |
+| **运输** | | |
+| POST | `/api/v1/transport/upload` | 上传运输鉴定报告（PDF） |
+| **出口编码** | | |
+| GET | `/api/v1/export-codes/` | 查询出口编码（HS Code） |
+| **数据中心** | | |
+| GET | `/api/v1/data-center/search` | 数据中心搜索（MSDS） |
+| GET | `/api/v1/data-center/files/{file_id}` | 预览 MSDS 文件 |
+| POST | `/api/v1/data-center/upload-corrected/{file_id}` | 上传修正版 MSDS |
+| POST | `/api/v1/data-center/reindex` | 重建数据中心索引 |
+| GET | `/api/v1/data-center/summary/{file_id}` | 获取 MSDS 摘要 |
+| GET | `/api/v1/data-center/tree` | 获取 references/ 目录树 |
+| GET | `/api/v1/data-center/file` | 按路径读取文件 |
+| **运输鉴定报告** | | |
+| GET | `/api/v1/transport-reports/search` | 搜索运输鉴定报告 |
+| GET | `/api/v1/transport-reports/files/{filename}` | 预览运输鉴定报告 PDF |
+| POST | `/api/v1/transport-reports/reindex` | 重建运输鉴定报告索引 |
+| **品名对照** | | |
+| GET | `/api/v1/name-mapping` | 获取所有品名对照数据 |
+| GET | `/api/v1/name-mapping/lookup` | 查询对应语言名称 |
 
 ---
 
@@ -46,14 +109,10 @@
 
 ### GET `/health`
 
-**描述：** 验证服务是否正常运行。
-
-**响应示例：**
+**响应：**
 
 ```json
-{
-  "status": "ok"
-}
+{ "status": "ok" }
 ```
 
 ---
@@ -62,19 +121,13 @@
 
 ### POST `/api/v1/orders/paste`
 
-**描述：** 解析用户从 Excel/Spreadsheet 复制的订单数据。
+解析用户从 Excel/Spreadsheet 复制的订单数据。
 
 **功能：**
 1. 自动识别分隔符（Tab 分隔或换行分隔）
 2. 按订单号聚合多行（一单多品）
 3. 批次内去重（后出现的同名数据覆盖前面的）
 4. 知识库匹配（H.S.Code + 报关品名自动补全）
-
-**请求头：**
-
-```
-Content-Type: application/json
-```
 
 **请求体：**
 
@@ -83,29 +136,6 @@ Content-Type: application/json
   "raw_text": "订单号\t客户编号\t内部编号\t产品中文名\t规格kg\t订单量kg\nHT260304E01\tTOA-DOVECHEM\tSILI-001\t有机硅柔软剂\t25\t2400"
 }
 ```
-
-**请求体字段说明：**
-
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| raw_text | string | ✅ | 粘贴的原始文本，支持 Tab 分隔（Excel）或换行分隔（网页表格） |
-
-**粘贴数据列名映射（支持中英文别名）：**
-
-| 内部字段 | 中文列名 | 英文列名 |
-|----------|---------|---------|
-| order_no | 订单号 | Order No / PO / PO Number |
-| customer_code | 客户编号 | Customer Code / Client Code |
-| internal_code | 内部编号 | Internal Code / Product Code / SKU |
-| product_cn | 产品中文名 | Product Name (CN) / Description |
-| spec_kg | 规格kg | Spec / Specification |
-| quantity_kg | 订单量kg | Quantity / QTY (kg) |
-| unit_price | 单价/kg | Unit Price / Price per kg |
-| total_amount | 总金额 | Total Amount / Amount |
-| salesperson | 业务员 | Salesperson / Sales Rep |
-| merchandiser | 跟单员 | Merchandiser / Merch |
-| customs_name | 报关名称 | Customs Name |
-| hs_code | H.S.Code | HS Code / H.S. |
 
 **成功响应（200）：**
 
@@ -123,10 +153,7 @@ Content-Type: application/json
           "spec_kg": 25.0,
           "quantity_kg": 2400.0,
           "hs_code": null,
-          "customs_name": "有机硅柔软剂 25.0kg",
-          "hs_code_warning": "H.S.Code 位数不足（当前 0 位），请核对或补足 10 位",
-          "warning": "报关品名由系统自动生成，请务必核对！",
-          "_selected": true
+          "customs_name": null
         }
       ],
       "header_conflict_warning": null
@@ -137,86 +164,18 @@ Content-Type: application/json
 }
 ```
 
-**响应字段说明：**
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| orders | array | 解析出的订单列表 |
-| orders[].order_no | string | 订单号 |
-| orders[].customer_code | string | 客户编号 |
-| orders[].salesperson | string | 业务员 |
-| orders[].items | array | 产品明细列表 |
-| orders[].items[].internal_code | string | **必填** 内部编码 |
-| orders[].items[].product_cn | string | 产品中文名 |
-| orders[].items[].spec_kg | float | 规格kg |
-| orders[].items[].quantity_kg | float | 订单量kg |
-| orders[].items[].hs_code | string | H.S.Code（未匹配为 null） |
-| orders[].items[].customs_name | string | 报关品名 |
-| orders[].items[].hs_code_warning | string | H.S.Code 位数不足警告（当 hs_code 不足 10 位时） |
-| orders[].items[].warning | string | 报关品名自动生成警告 |
-| orders[].items[]._selected | boolean | 前端复选框状态 |
-| orders[].header_conflict_warning | string | 订单头字段冲突警告（如同一订单号内客户编号不一致） |
-| skipped_rows | array | 因缺少必要字段被跳过的行 |
-| skipped_rows[].line_index | int | 行号（第几行） |
-| skipped_rows[].reason | string | 跳过原因 |
-| skipped_rows[].raw_data | array | 原始数据 |
-| warning | string | 批次内重复等警告信息 |
-
-**错误响应：**
-
-- `400`：粘贴文本为空或解析失败
-
-```json
-{
-  "detail": "粘贴文本不能为空"
-}
-```
-
-- `422`：请求体验证失败
-
-```json
-{
-  "detail": [
-    {
-      "loc": ["body", "raw_text"],
-      "msg": "field required",
-      "type": "value_error.missing"
-    }
-  ]
-}
-```
-
-**H.S.Code 知识库匹配优先级：**
-1. PI 数据中的 H.S.Code（最高）
-2. 知识库按 `internal_code` 精确匹配
-3. 知识库按产品中文名精确匹配（长度 > 4）
-4. 均未命中 → `hs_code = null`，前端显示"待填写"
-
-**报关品名知识库匹配优先级：**
-1. 用户粘贴数据中已有
-2. PI 数据中的报关品名
-3. 知识库匹配结果
-4. 均未命中 → 自动生成 `产品中文名 + 规格kg`，前端显示警告
-
 ---
 
 ## 3. 保存订单
 
 ### POST `/api/v1/orders`
 
-**描述：** 将解析后的订单数据保存到数据库。
+将解析后的订单数据保存到数据库。
 
-**功能：**
-- 订单号已存在：**覆盖**旧数据（删除旧 order_items，插入新的）
+- 订单号已存在：**覆盖**旧数据
 - 订单号不存在：**新建**订单
 
-**事务保证：** orders（订单头）+ order_items（产品明细）要么全部成功，要么全部回滚，绝不会出现在"订单头存进去了但明细没存进去"的脏数据。
-
-**请求头：**
-
-```
-Content-Type: application/json
-```
+**事务保证：** orders + order_items 要么全部成功，要么全部回滚。
 
 **请求体：**
 
@@ -240,24 +199,7 @@ Content-Type: application/json
 }
 ```
 
-**请求体字段说明：**
-
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| order.order_no | string | ✅ | 订单号（唯一索引） |
-| order.customer_code | string | | 客户编号 |
-| order.salesperson | string | | 业务员 |
-| order.items | array | | 产品明细列表 |
-| order.items[].internal_code | string | ✅ | 内部编码（产品级） |
-| order.items[].product_cn | string | | 产品中文名 |
-| order.items[].spec_kg | float | | 规格kg |
-| order.items[].quantity_kg | float | | 订单量kg |
-| order.items[].unit_price | float | | 单价/kg |
-| order.items[].total_amount | float | | 总金额 |
-| order.items[].hs_code | string | | H.S.Code |
-| order.items[].customs_name | string | | 报关品名 |
-
-**成功响应（200）：**
+**响应：**
 
 ```json
 {
@@ -267,37 +209,278 @@ Content-Type: application/json
 }
 ```
 
-**响应字段说明：**
+---
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| order_id | int | 订单在数据库中的主键 ID |
-| items_count | int | 保存的产品明细数量 |
-| message | string | 操作结果描述 |
+## 4. 上传并解析 PI 文件
 
-**错误响应：**
+### POST `/api/v1/pi/upload`
 
-- `500`：数据库保存失败
+支持 `.xlsx`、`.xls`、`.pdf` 格式，自动解析 PI 合同。
 
-```json
-{
-  "detail": "保存失败，事务已回滚: <错误信息>"
-}
-```
+**请求：** `multipart/form-data`，`file` 字段
 
-- `422`：Pydantic 验证错误
+**响应：**
 
 ```json
 {
-  "detail": [
+  "pi_no": "PI20260315",
+  "customer_code": "TOA-DOVECHEM",
+  "sales_person": "张三",
+  "pi_date": "2026-03-15",
+  "consignee_name": "...",
+  "consignee_address": "...",
+  "destination": "...",
+  "items": [
     {
-      "loc": ["body", "order", "items", 0, "internal_code"],
-      "msg": "field required",
-      "type": "value_error.missing"
+      "internal_code": "SILI-001",
+      "quantity": 2400,
+      "unit_price": 29.5,
+      "total_amount": 70800,
+      "product_color": "...",
+      "hs_code": "...",
+      "customs_name": "...",
+      "customs_composition": "...",
+      "order_customs_name": "...",
+      "notes": "..."
     }
-  ]
+  ],
+  "confidence": 0.95
 }
 ```
+
+---
+
+## 5. 数据看板
+
+### GET `/api/v1/dashboard/orders`
+
+获取数据看板合并数据（按订单分组，支持分页和筛选）。
+
+**参数：**
+- `search`: 模糊搜索（订单号/客户编码/PI号）
+- `status`: 状态筛选（`pending` / `confirmed`）
+- `page`: 页码（默认 1）
+- `page_size`: 每页数量（默认 20，最大 200）
+
+### POST `/api/v1/dashboard/records`
+
+Phase 1 核心落库接口。接收订单+PI+包装数据，写入 `order_pi_records` 表。
+
+**请求体：**
+
+```json
+{
+  "order_data": { ... },
+  "pi_data": { ... },
+  "packaging_result": { ... }
+}
+```
+
+**响应：**
+
+```json
+{
+  "record_id": 1,
+  "status": "confirmed",
+  "message": "数据已成功落库"
+}
+```
+
+### GET `/api/v1/dashboard/export`
+
+导出数据看板 Excel 文件。
+
+---
+
+## 6. 数据关联
+
+### GET `/api/v1/merge/orders`
+
+查询订单列表（含关联状态），支持 Tab 筛选和分页。
+
+**参数：**
+- `tab`: `pending` / `completed` / `all`
+- `search`: 模糊搜索
+- `page`: 页码
+- `page_size`: 每页数量
+
+### GET `/api/v1/merge/orders/{order_id}/comparison`
+
+获取指定订单的合并比对数据，包含每个 item 的 `diff.status` 和 flags。
+
+### GET `/api/v1/merge/orders/{order_id}/pi-contracts`
+
+获取指定订单关联的所有 PI 合同列表。
+
+---
+
+## 7. 包装计算
+
+### GET `/api/v1/packaging/types`
+
+返回所有包装种类（含规格参数）。
+
+### POST `/api/v1/packaging/calculate`
+
+输入包装种类+数量+是否打卡板 → 返回计算结果。
+
+**请求体：**
+
+```json
+{
+  "packaging_name": "铁桶 200L",
+  "order_qty_kg": 2400.0,
+  "use_pallet": true
+}
+```
+
+**响应：**
+
+```json
+{
+  "drums": 12,
+  "pallets": 1,
+  "drums_per_pallet": 12,
+  "pallet_type": "1.1*1.1m",
+  "total_cbm": 2.16,
+  "total_weight_kg": 534.0,
+  "fits_20gp": true,
+  "fits_40gp": true,
+  "recommended": "20GP",
+  "remainder": 0,
+  "full_pallets": 1
+}
+```
+
+### POST `/api/v1/packaging/calculate-order`
+
+订单级别包装汇总计算，支持多产品。
+
+### GET `/api/v1/packages/calculate`
+
+包装计算统一入口，支持海运/空运/陆运三种模式。
+
+**参数：**
+- `mode`: `order` / `manual`
+- `quantity_kg`: 订单量 kg
+- `packaging_name`: 包装类型名称
+- `pallet_spec`: `1.0x1.0` / `1.1x1.1`
+- `pallet_qty`: 单板数量
+- `no_pallet`: 是否不打卡板
+- `transport_mode`: `sea` / `air` / `land`
+
+---
+
+## 8. 文档生成
+
+### POST `/api/v1/documents/booking`
+
+生成订舱单，字段通过 JSON body 传入。
+
+**请求体：**
+
+```json
+{
+  "shipper": "...",
+  "consignee": "...",
+  "notify": "...",
+  "cut_off_date": "...",
+  "place_of_receipt": "...",
+  "pol": "...",
+  "pod": "...",
+  "place_of_delivery": "...",
+  "marks": "...",
+  "no_kind_pkg": "...",
+  "desc": "...",
+  "gross_weight": "...",
+  "measurement": "...",
+  "template_type": "xlsx"
+}
+```
+
+### GET `/api/v1/documents/loi`
+
+生成 LOI。参数：`order_no`, `pi_no`。
+
+### GET `/api/v1/documents/msds`
+
+生成 MSDS。参数：`product`。
+
+### GET `/api/v1/documents/customs`
+
+生成出口报关资料工作簿（5个 sheet 的 xlsx）。参数：`order_id`。
+
+### GET `/api/v1/documents/template/{template_type}
+
+打开空白模板。`template_type`: `booking` / `loi` / `msds`。
+
+### GET `/api/v1/documents/my-templates`
+
+我的模板列表（独立于订单的模板实例）。
+
+---
+
+## 9. OnlyOffice 回调
+
+### POST `/api/v1/onlyoffice/callback`
+
+OnlyOffice Document Server 保存文档时的回调接口。
+
+**参数：**
+- `doc_key`: 文档键
+- `user`: 用户名
+
+**请求：** `multipart/form-data`，`file` 字段（文件流）
+
+**行为：**
+1. 接收 Document Server 发送的文件流
+2. 检查 content_hash 避免重复保存
+3. 写入 `shipment_docs` 表
+4. 版本号递增
+
+### GET `/api/v1/onlyoffice/download/{doc_key}`
+
+下载指定版本的文档。
+
+---
+
+## 10. 数据中心
+
+### GET `/api/v1/data-center/search`
+
+三级优先级搜索 MSDS 文件（文件名/产品名/物理特性）。
+
+参数：`q` 查询字符串。
+
+### GET `/api/v1/data-center/tree`
+
+返回完整 `references/` 目录树。
+
+### GET `/api/v1/data-center/file`
+
+按文件路径直接读取 `references/` 下的文件。参数：`path`。
+
+---
+
+## 11. 运输鉴定报告
+
+### GET `/api/v1/transport-reports/search`
+
+在 `references/海运鉴定报告/` 目录中搜索 PDF。参数：`q`。
+
+### POST `/api/v1/transport-reports/reindex`
+
+手动重建运输鉴定报告索引。
+
+---
+
+## 12. 品名对照
+
+### GET `/api/v1/name-mapping/lookup`
+
+查询对应语言名称。
+
+参数：`cn` 或 `en`（二选一）。
 
 ---
 
@@ -311,7 +494,9 @@ Content-Type: application/json
 | order_no | TEXT | 订单号（唯一） |
 | customer_code | TEXT | 客户编号 |
 | salesperson | TEXT | 业务员 |
-| ... | ... | 其他业务字段 |
+| order_status | TEXT | 订单状态 |
+| locked_by | TEXT | 锁定人 |
+| locked_at | DATETIME | 锁定时间 |
 
 ### order_items（产品明细表）
 
@@ -323,7 +508,72 @@ Content-Type: application/json
 | product_cn | TEXT | 产品中文名 |
 | spec_kg | REAL | 规格kg |
 | quantity_kg | REAL | 订单量kg |
-| ... | ... | 其他业务字段 |
+
+### order_pi_records（合并记录表）
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER | 主键 |
+| order_no | TEXT | 订单号 |
+| customer_code | TEXT | 客户编号 |
+| internal_code | TEXT | 内部编码 |
+| product_cn | TEXT | 产品中文名 |
+| quantity_kg | REAL | 订单量 |
+| pi_no | TEXT | PI 号 |
+| status | TEXT | pending / confirmed |
+
+### pi_contracts（PI 合同表）
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER | 主键 |
+| pi_no | TEXT | PI 合同号 |
+| customer_code | TEXT | 客户编码 |
+| sales_person | TEXT | 业务员 |
+| pi_date | DATE | PI 日期 |
+| consignee_name | TEXT | 收货人 |
+| destination | TEXT | 目的地 |
+
+### packaging_types（包装类型表）
+
+13 种包装类型，含桶身体参数、容量、托盘配合等信息。
+
+### pallets（托盘类型表）
+
+2 种托盘：`1.0x1.0m` 和 `1.1x1.1m`。
+
+### shipment_docs（文档版本表）
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER | 主键 |
+| doc_key | TEXT | 文档键 |
+| doc_type | TEXT | booking / loi / msds / customs |
+| order_id | INTEGER | 关联订单 ID |
+| file_blob | TEXT | Base64 编码的文件内容 |
+| content_hash | TEXT | MD5 哈希（用于去重） |
+| version | INTEGER | 版本号 |
+| file_name | TEXT | 文件名 |
+
+### msds_index（MSDS 索引表）
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER | 主键 |
+| filename | TEXT | 文件名 |
+| product_name_cn | TEXT | 产品中文名 |
+| physical_form | TEXT | 物理形态 |
+| ion_type | TEXT | 离子类型 |
+| ph | TEXT | pH 值 |
+| file_path | TEXT | 文件路径 |
+
+### transport_report（运输鉴定报告索引表）
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER | 主键 |
+| filename | TEXT | 文件名 |
+| file_path | TEXT | 文件路径 |
 
 ---
 
@@ -332,6 +582,12 @@ Content-Type: application/json
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | DATABASE_URL | `sqlite:///../data/shipping_helper.db` | 数据库连接地址 |
+| DOCUMENT_SERVER_URL | `http://localhost:8080` | OnlyOffice Document Server 地址 |
+| API_BASE_URL | `http://localhost:8000` | API 基础地址 |
+| ONLYOFFICE_CALLBACK_BASE_URL | `http://host.docker.internal:8000` | OnlyOffice 回调地址 |
+| MSDS_DIR | `references/MSDS/` | MSDS 文件目录 |
+| TRANSPORT_REPORTS_DIR | `references/海运鉴定报告/` | 运输鉴定报告目录 |
+| REFERENCES_DIR | `references/` | 参考文件根目录 |
 
 ---
 

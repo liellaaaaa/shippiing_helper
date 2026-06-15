@@ -324,4 +324,27 @@ def parse_pasted_data(
             pass  # Already handled via item-level fields
         # header_conflict_warning logic would check across items, not needed here
 
+    # Inject customs name matching logic before returning
+    from app.services.customs_name_service import CustomsNameService
+    from app.core.config import CUSTOMS_CODES_JSON
+
+    customs_svc = CustomsNameService.get_instance(CUSTOMS_CODES_JSON)
+
+    for order in orders_by_no.values():
+        for item in order.items:
+            json_data = customs_svc.lookup(item.internal_code)
+            if json_data is None:
+                item.customs_match_status = "not_found"
+            elif item.customs_name and item.customs_name != json_data.get("customs_name"):
+                item.customs_match_status = "conflict"
+                item.conflict_customs_name = json_data.get("customs_name")
+            elif not item.customs_name:
+                item.customs_name = json_data.get("customs_name")
+                item.customs_ingredients = json_data.get("components")
+                item.product_code = json_data.get("product_code")
+                item.product_appearance = json_data.get("product_appearance")
+                item.customs_match_status = "filled"
+            else:
+                item.customs_match_status = "matched"
+
     return list(orders_by_no.values()), skipped_rows, warnings[0] if warnings else None

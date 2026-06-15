@@ -29,6 +29,11 @@ class OrderItemSchema(BaseModel):
     volume_cbm: Optional[float] = None
     hs_code_warning: Optional[str] = None   # H.S.Code 位数不足警告
     warning: Optional[str] = None            # 报关品名自动生成警告
+    # 报关品名匹配状态（解析时注入）
+    product_code: Optional[str] = None
+    product_appearance: Optional[str] = None
+    customs_match_status: Optional[str] = None  # matched / conflict / filled / not_found
+    conflict_customs_name: Optional[str] = None  # 仅 conflict 时有
     # 前端用：_selected 跟踪复选框状态（不出现在请求体中）
     _selected: Optional[bool] = None
 

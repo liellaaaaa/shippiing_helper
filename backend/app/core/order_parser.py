@@ -338,13 +338,23 @@ def parse_pasted_data(
             elif item.customs_name and item.customs_name != json_data.get("customs_name"):
                 item.customs_match_status = "conflict"
                 item.conflict_customs_name = json_data.get("customs_name")
+                # 冲突时也补全其他字段
+                item.hs_code = item.hs_code or json_data.get("product_code")
+                item.customs_ingredients = json_data.get("components")
+                item.product_code = json_data.get("product_code")
+                item.product_appearance = json_data.get("product_appearance")
             elif not item.customs_name:
                 item.customs_name = json_data.get("customs_name")
                 item.customs_ingredients = json_data.get("components")
                 item.product_code = json_data.get("product_code")
                 item.product_appearance = json_data.get("product_appearance")
+                item.hs_code = item.hs_code or json_data.get("product_code")
                 item.customs_match_status = "filled"
             else:
                 item.customs_match_status = "matched"
+                item.hs_code = item.hs_code or json_data.get("product_code")
+                item.customs_ingredients = json_data.get("components")
+                item.product_code = json_data.get("product_code")
+                item.product_appearance = json_data.get("product_appearance")
 
     return list(orders_by_no.values()), skipped_rows, warnings[0] if warnings else None

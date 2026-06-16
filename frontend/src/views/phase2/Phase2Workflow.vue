@@ -182,6 +182,21 @@
               <span v-if="selectedOrderId && currentOrderInfo.fits_20gp" class="info-value" :class="currentOrderInfo.fits_20gp === '适合' ? 'text-success' : 'text-danger'">{{ currentOrderInfo.fits_20gp }}</span>
               <span v-else class="info-value muted">—</span>
             </div>
+            <!-- 一单多品明细列表 -->
+            <div v-if="currentOrderItems.length > 1" class="product-list-section">
+              <el-collapse>
+                <el-collapse-item title="产品明细" name="products">
+                  <el-table :data="currentOrderItems" size="small" stripe>
+                    <el-table-column prop="internal_code" label="Internal Code" min-width="100" />
+                    <el-table-column prop="product_cn" label="品名" min-width="120" show-overflow-tooltip />
+                    <el-table-column prop="order.hs_code" label="HS Code" min-width="80" />
+                    <el-table-column prop="order.quantity" label="数量(kg)" min-width="80" align="right" />
+                    <el-table-column prop="order.gross_weight" label="毛重(kg)" min-width="80" align="right" />
+                    <el-table-column prop="order.volume" label="体积(m³)" min-width="80" align="right" />
+                  </el-table>
+                </el-collapse-item>
+              </el-collapse>
+            </div>
           </div>
         </el-card>
 
@@ -375,27 +390,32 @@ async function onOrderChange(orderId: number): Promise<void> {
     if (pis.length > 0 && !selectedPiNo.value) {
       selectedPiNo.value = pis[0].pi_no
     }
-    // Populate editable fields
-    const productCn = data.items?.[0]?.product_cn || ''
-    // 自动查询英文名
+    // Populate editable fields — 汇总所有产品的品名/英文名/HS Code
+    const items = data.items || []
+    // 英文名取第一个产品的（有值的情况下）
+    const firstCn = items[0]?.product_cn || ''
     let productEn = ''
-    if (productCn) {
+    if (firstCn) {
       try {
-        const res = await nameMappingApi.lookupByCn(productCn)
+        const res = await nameMappingApi.lookupByCn(firstCn)
         productEn = res.data.en || ''
       } catch {
         productEn = ''
       }
     }
+    // 多产品时用 / 连接
+    const productCnAll = items.map(it => it.product_cn).filter(Boolean).join(' / ')
+    const hsCodeAll = items.map(it => it.order?.hs_code).filter(Boolean).join(' / ')
+    const productEnAll = items.map(it => it.order?.product_en).filter(Boolean).join(' / ')
     currentOrderInfo.value = {
       order_no: data.order_no || '',
       customer_code: data.customer_code || '',
       consignee: pis[0]?.consignee || '',
       notify: '',
       port: pis[0]?.destination || '',
-      product_cn: productCn,
-      product_en: productEn,
-      hs_code: data.items?.[0]?.order?.hs_code || '',
+      product_cn: productCnAll,
+      product_en: productEnAll || productEn,
+      hs_code: hsCodeAll,
       gross_weight_kg: data.gross_weight_kg ? String(data.gross_weight_kg) : '',
       volume_cbm: data.volume_cbm ? String(data.volume_cbm) : '',
       drum_count: data.drum_count ? String(data.drum_count) : '',
@@ -636,6 +656,29 @@ onMounted(() => {
 :deep(.info-row .el-input__wrapper) {
   font-size: 12px;
   font-family: 'JetBrains Mono', monospace;
+}
+
+.product-list-section {
+  margin-top: 8px;
+}
+.product-list-section :deep(.el-collapse) {
+  border: none;
+}
+.product-list-section :deep(.el-collapse-item__header) {
+  font-size: 12px;
+  color: var(--el-text-color-secondary, #909399);
+  padding-left: 4px;
+  line-height: 28px;
+  height: 28px;
+}
+.product-list-section :deep(.el-collapse-item__wrap) {
+  border: none;
+}
+.product-list-section :deep(.el-collapse-item__content) {
+  padding: 0;
+}
+.product-list-section :deep(.el-table) {
+  font-size: 11px;
 }
 
 

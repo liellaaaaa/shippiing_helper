@@ -1,4 +1,4 @@
-import axios from 'axios'
+import { apiClient } from '@/api/axios'
 
 export const phase2Api = {
   generateBooking(fields: {
@@ -17,85 +17,85 @@ export const phase2Api = {
     measurement: string
     template_type?: 'xls' | 'xlsx'
   }) {
-    return axios.post('/api/v1/documents/booking', fields)
+    return apiClient.post('/api/v1/documents/booking', fields)
   },
   generateLoi(orderNo: string, piNo: string) {
-    return axios.get('/api/v1/documents/loi', { params: { order_no: orderNo, pi_no: piNo } })
+    return apiClient.get('/api/v1/documents/loi', { params: { order_no: orderNo, pi_no: piNo } })
   },
   generateMsds(product: string) {
-    return axios.get('/api/v1/documents/msds', { params: { product } })
+    return apiClient.get('/api/v1/documents/msds', { params: { product } })
   },
   generateCustoms(orderId: number | null) {
-    return axios.get('/api/v1/documents/customs', {
+    return apiClient.get('/api/v1/documents/customs', {
       params: { order_id: orderId }
     })
   },
   getDocHistory(orderId: number) {
-    return axios.get(`/api/v1/documents/history/${orderId}`)
+    return apiClient.get(`/api/v1/documents/history/${orderId}`)
   },
   listMsds(params: { page?: number; pageSize?: number; search?: string }) {
-    return axios.get('/api/v1/msds', { params })
+    return apiClient.get('/api/v1/msds', { params })
   },
   getMsdsContent(id: number) {
-    return axios.get(`/api/v1/msds/${id}/content`)
+    return apiClient.get(`/api/v1/msds/${id}/content`)
   },
   loadMsds(msdsId: number) {
-    return axios.get(`/api/v1/documents/msds/${msdsId}`)
+    return apiClient.get(`/api/v1/documents/msds/${msdsId}`)
   },
   reindexMsds() {
-    return axios.post('/api/v1/msds/reindex')
+    return apiClient.post('/api/v1/msds/reindex')
   },
   uploadTransportReport(file: File) {
     const formData = new FormData()
     formData.append('file', file)
-    return axios.post('/api/v1/transport/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
+    return apiClient.post('/api/v1/transport/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
   },
   getExportCodes(internalCode: string) {
-    return axios.get('/api/v1/export-codes', { params: { internal_code: internalCode } })
+    return apiClient.get('/api/v1/export-codes', { params: { internal_code: internalCode } })
   },
   getJwt(documentKey: string, fileType: string) {
-    return axios.post('/api/v1/onlyoffice/jwt', null, { params: { documentKey, fileType } })
+    return apiClient.post('/api/v1/onlyoffice/jwt', null, { params: { documentKey, fileType } })
   },
   openBlankTemplate(type: 'booking' | 'loi' | 'msds') {
-    return axios.get(`/api/v1/documents/template/${type}`)
+    return apiClient.get(`/api/v1/documents/template/${type}`)
   },
   listMyTemplates() {
-    return axios.get('/api/v1/documents/my-templates')
+    return apiClient.get('/api/v1/documents/my-templates')
   },
 
   // ── 数据中心 ───────────────────────────────────────────────
   searchDataCenter(query: string) {
-    return axios.get('/api/v1/data-center/search', { params: { q: query } })
+    return apiClient.get('/api/v1/data-center/search', { params: { q: query } })
   },
   getDataCenterFileUrl(fileId: number) {
     return `/api/v1/data-center/files/${fileId}`
   },
   getDataCenterSummary(fileId: number) {
-    return axios.get(`/api/v1/data-center/summary/${fileId}`)
+    return apiClient.get(`/api/v1/data-center/summary/${fileId}`)
   },
   uploadCorrectedMsds(fileId: number, file: File, user: string = 'admin') {
     const formData = new FormData()
     formData.append('file', file)
-    return axios.post(`/api/v1/data-center/upload-corrected/${fileId}`, formData, {
+    return apiClient.post(`/api/v1/data-center/upload-corrected/${fileId}`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
       params: { user },
     })
   },
   reindexDataCenter() {
-    return axios.post('/api/v1/data-center/reindex')
+    return apiClient.post('/api/v1/data-center/reindex')
   },
   getDataCenterTree() {
-    return axios.get('/api/v1/data-center/tree')
+    return apiClient.get('/api/v1/data-center/tree')
   },
 
   // ── 运输鉴定报告 ─────────────────────────────────────────────
   searchTransportReports(query: string) {
-    return axios.get('/api/v1/transport-reports/search', { params: { q: query } })
+    return apiClient.get('/api/v1/transport-reports/search', { params: { q: query } })
   },
   getTransportReportFileUrl(filename: string) {
     return `/api/v1/transport-reports/files/${encodeURIComponent(filename)}`
   },
   reindexTransportReports() {
-    return axios.post('/api/v1/transport-reports/reindex')
+    return apiClient.post('/api/v1/transport-reports/reindex')
   },
 }

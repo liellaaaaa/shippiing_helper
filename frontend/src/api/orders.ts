@@ -1,4 +1,4 @@
-import axios from 'axios'
+import { apiClient } from '@/api/axios'
 
 const BASE_URL = '/api/v1'
 
@@ -54,12 +54,12 @@ export interface OrderSaveResponse {
 
 export const ordersApi = {
   parsePaste: async (rawText: string): Promise<PasteParseResponse> => {
-    const resp = await axios.post(`${BASE_URL}/orders/paste`, { raw_text: rawText })
+    const resp = await apiClient.post(`${BASE_URL}/orders/paste`, { raw_text: rawText })
     return resp.data
   },
 
   saveOrder: async (order: ParsedOrderSchema): Promise<OrderSaveResponse> => {
-    const resp = await axios.post(`${BASE_URL}/orders`, { order })
+    const resp = await apiClient.post(`${BASE_URL}/orders`, { order })
     return resp.data
   }
 }

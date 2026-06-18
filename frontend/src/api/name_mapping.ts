@@ -1,4 +1,4 @@
-import axios from 'axios'
+import { apiClient } from '@/api/axios'
 
 export interface NameMapping {
   en: string
@@ -6,11 +6,11 @@ export interface NameMapping {
 }
 
 export const nameMappingApi = {
-  getAll: () => axios.get<{ mappings: NameMapping[] }>('/api/v1/name-mapping'),
+  getAll: () => apiClient.get<{ mappings: NameMapping[] }>('/api/v1/name-mapping'),
 
   lookupByCn: (cn: string) =>
-    axios.get<{ cn: string; en: string | null }>('/api/v1/name-mapping/lookup', { params: { cn } }),
+    apiClient.get<{ cn: string; en: string | null }>('/api/v1/name-mapping/lookup', { params: { cn } }),
 
   lookupByEn: (en: string) =>
-    axios.get<{ en: string; cn: string | null }>('/api/v1/name-mapping/lookup', { params: { en } }),
+    apiClient.get<{ en: string; cn: string | null }>('/api/v1/name-mapping/lookup', { params: { en } }),
 }

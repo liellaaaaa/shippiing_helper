@@ -1,4 +1,4 @@
-import axios from 'axios'
+import { apiClient } from '@/api/axios'
 
 const BASE_URL = '/api/v1/dashboard'
 
@@ -45,12 +45,12 @@ export const getDashboardOrders = async (params: {
   page?: number
   page_size?: number
 }): Promise<DashboardResponse> => {
-  const response = await axios.get<DashboardResponse>(`${BASE_URL}/orders`, { params })
+  const response = await apiClient.get<DashboardResponse>(`${BASE_URL}/orders`, { params })
   return response.data
 }
 
 export const deleteDashboardOrder = async (recordId: number) => {
-  await axios.delete(`${BASE_URL}/records/${recordId}`)
+  await apiClient.delete(`${BASE_URL}/records/${recordId}`)
 }
 
 export const exportDashboardExcel = (params?: {

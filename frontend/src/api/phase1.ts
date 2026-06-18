@@ -1,4 +1,4 @@
-import axios from 'axios'
+import { apiClient } from '@/api/axios'
 
 const BASE_URL = '/api/v1/dashboard'
 
@@ -107,7 +107,7 @@ export interface OrderPiRecord {
 // ─── API ──────────────────────────────────────────────────────────────────────
 
 export const saveOrderPiRecord = async (data: SaveRecordRequest): Promise<SaveRecordResponse> => {
-  const resp = await axios.post<SaveRecordResponse>(`${BASE_URL}/records`, data)
+  const resp = await apiClient.post<SaveRecordResponse>(`${BASE_URL}/records`, data)
   return resp.data
 }
 
@@ -117,11 +117,11 @@ export const queryOrderPiRecords = async (params?: {
   page?: number
   page_size?: number
 }) => {
-  const resp = await axios.get(`${BASE_URL}/records`, { params })
+  const resp = await apiClient.get(`${BASE_URL}/records`, { params })
   return resp.data
 }
 
 export const getOrderPiRecord = async (id: number): Promise<OrderPiRecord> => {
-  const resp = await axios.get(`${BASE_URL}/records/${id}`)
+  const resp = await apiClient.get(`${BASE_URL}/records/${id}`)
   return resp.data
 }

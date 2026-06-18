@@ -35,13 +35,20 @@ class DataCenterService:
         extensions = {".doc", ".docx", ".pdf"}
         count = 0
 
+        # 第一遍：扫描所有文件，记录去后缀名 → 文件的映射（优先.docx）
+        name_to_file = {}  # name_without_ext → (filename, file_path, ext)
         for root, _dirs, files in os.walk(dir_path):
             for filename in files:
                 ext = os.path.splitext(filename)[1].lower()
                 if ext not in extensions:
                     continue
+                name_without_ext = os.path.splitext(filename)[0]
+                # 优先选择 .docx
+                if name_without_ext not in name_to_file or ext == ".docx":
+                    name_to_file[name_without_ext] = (filename, os.path.join(root, filename), ext)
 
-                file_path = os.path.join(root, filename)
+        # 第二遍：处理去重后的文件列表
+        for filename, file_path, ext in name_to_file.values():
 
                 # 提取文本 + 理化特征
                 text = self._msds.extract_text(file_path)
@@ -52,7 +59,7 @@ class DataCenterService:
                 name_without_ext = os.path.splitext(filename)[0]
                 product_name_cn = re.sub(r"^\d+[-_]*", "", name_without_ext)
 
-                file_format = "pdf" if ext == ".pdf" else "doc"
+                file_format = "pdf" if ext == ".pdf" else ("docx" if ext == ".docx" else "doc")
 
                 # Upsert msds_indexes
                 existing = db_session.query(MSDSIndex).filter(

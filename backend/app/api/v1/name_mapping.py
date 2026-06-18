@@ -9,7 +9,7 @@ from typing import Optional
 
 from app.services.name_mapping_service import get_all_mappings, get_en_name, get_cn_name
 
-router = APIRouter(prefix="/name-mapping", tags=["品名对照"])
+router = APIRouter(prefix="/api/v1/name-mapping", tags=["品名对照"])
 
 
 @router.get("")

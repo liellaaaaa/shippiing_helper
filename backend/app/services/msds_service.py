@@ -10,6 +10,7 @@ from typing import Optional
 import subprocess
 
 import pdfplumber
+from docx import Document
 from app.database import SessionLocal
 from app.models.msds_index import MSDSIndex
 
@@ -39,24 +40,24 @@ class MSDSService:
             return ""
 
     def _extract_docx(self, file_path: str) -> str:
-        """解析 .docx（ZIP + XML）"""
-        text_parts: list[str] = []
-
+        """使用 python-docx 提取 .docx 文本（段落 + 表格）"""
         try:
-            with zipfile.ZipFile(file_path, "r") as zf:
-                with zf.open("word/document.xml") as fh:
-                    import xml.etree.ElementTree as ET
-
-                    tree = ET.parse(fh)
-                    root = tree.getroot()
-                    # 收集所有文本节点
-                    for elem in root.iter():
-                        if elem.text and elem.text.strip():
-                            text_parts.append(elem.text.strip())
+            doc = Document(file_path)
+            text_parts: list[str] = []
+            # 提取段落文本
+            for para in doc.paragraphs:
+                if para.text.strip():
+                    text_parts.append(para.text.strip())
+            # 提取表格文本
+            for table in doc.tables:
+                for row in table.rows:
+                    for cell in row.cells:
+                        for para in cell.paragraphs:
+                            if para.text.strip():
+                                text_parts.append(para.text.strip())
+            return "\n".join(text_parts)
         except Exception:
-            pass
-
-        return "\n".join(text_parts)
+            return ""
 
     def _extract_doc(self, file_path: str) -> str:
         """解析 .doc（二进制，antiword 或 chardet 回退）"""
@@ -190,13 +191,20 @@ class MSDSService:
         extensions = {".doc", ".docx", ".pdf"}
         count = 0
 
+        # 第一遍：扫描所有文件，记录去后缀名 → 文件的映射（优先.docx）
+        name_to_file = {}  # name_without_ext → (filename, file_path, ext)
         for root, _dirs, files in os.walk(dir_path):
             for filename in files:
                 ext = os.path.splitext(filename)[1].lower()
                 if ext not in extensions:
                     continue
+                name_without_ext = os.path.splitext(filename)[0]
+                # 优先选择 .docx
+                if name_without_ext not in name_to_file or ext == ".docx":
+                    name_to_file[name_without_ext] = (filename, os.path.join(root, filename), ext)
 
-                file_path = os.path.join(root, filename)
+        # 第二遍：处理去重后的文件列表
+        for filename, file_path, ext in name_to_file.values():
 
                 # 提取产品名（去数字前缀，如 "001_ABC.doc" → "ABC"）
                 name_without_ext = os.path.splitext(filename)[0]

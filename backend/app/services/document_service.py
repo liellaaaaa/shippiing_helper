@@ -347,10 +347,86 @@ class DocumentService:
             buf = BytesIO()
             doc.save(buf)
             content = buf.getvalue()
+            # Fix XML-level ordering: if a table immediately precedes a section heading
+            # paragraph, swap them so the heading appears before the table in the rendered document.
+            content = self._swap_table_heading_order(content)
         finally:
             db.close()
         doc_key = self._sanitize_doc_key(f"msds_{product_name}_{int(time.time())}")
         return content, doc_key, base64.b64encode(content).decode()
+
+    @staticmethod
+    def _swap_table_heading_order(content: bytes) -> bytes:
+        """
+        Fix OOXML body element ordering: if a <w:tbl> immediately precedes a
+        <w:p> that starts with a section heading (e.g. "3、" or "13、"),
+        swap them so the heading paragraph appears before the table.
+        This corrects rendering in editors (OnlyOffice) that follow XML element order.
+        """
+        import zipfile, re
+        from lxml import etree
+
+        NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+        # Section heading pattern: paragraph that starts with a non-digit character,
+        # contains Chinese text, and ends with "：" (looks like a section label).
+        section_heading_pattern = re.compile(r"^[^\d\s][^：]*：")
+
+        try:
+            zin = zipfile.ZipFile(BytesIO(content), "r")
+            sheet_xml = zin.read("word/document.xml")
+            zin.close()
+        except Exception:
+            return content
+
+        tree = etree.fromstring(sheet_xml)
+        body = tree.find(f"{{{NS}}}body")
+        if body is None:
+            return content
+
+        children = list(body)
+        swapped = False
+
+        i = 0
+        while i < len(children) - 1:
+            curr = children[i]
+            nxt = children[i + 1]
+            curr_tag = curr.tag.split("}")[1] if "}" in curr.tag else curr.tag
+            nxt_tag = nxt.tag.split("}")[1] if "}" in nxt.tag else nxt.tag
+
+            if curr_tag == "tbl" and nxt_tag == "p":
+                # Extract text of next paragraph
+                texts = [t.text or "" for t in nxt.findall(f".//{{{NS}}}t")]
+                para_text = "".join(texts).strip()
+                if section_heading_pattern.match(para_text):
+                    # Swap: move heading before table
+                    body.remove(nxt)
+                    body.insert(i, nxt)
+                    children = list(body)
+                    swapped = True
+                    # After swapping, re-evaluate at same position since a new
+                    # element is now before the table; skip ahead to avoid infinite loop
+                    i += 1
+                    continue
+
+            i += 1
+
+        if not swapped:
+            return content
+
+        # Repack the docx with the reordered XML
+        out = BytesIO()
+        with zipfile.ZipFile(BytesIO(content), "r") as zin:
+            with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zout:
+                for item in zin.namelist():
+                    if item == "word/document.xml":
+                        zout.writestr(
+                            item,
+                            etree.tostring(tree, xml_declaration=True, encoding="UTF-8", standalone=True),
+                        )
+                    else:
+                        zout.writestr(item, zin.read(item))
+        out.seek(0)
+        return out.read()
 
     @staticmethod
     def _sanitize_doc_key(key: str) -> str:
@@ -513,6 +589,9 @@ class DocumentService:
         else:
             with open(file_path, "rb") as f:
                 content = f.read()
+            # Fix table/heading order in .docx before returning
+            if file_path.endswith(".docx"):
+                content = self._swap_table_heading_order(content)
 
         # 构建 doc_key（使用原始文件名，去掉空格括号等）
         import re

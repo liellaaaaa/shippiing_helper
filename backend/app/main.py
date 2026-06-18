@@ -60,6 +60,14 @@ import os
 
 JWT_SECRET = os.getenv("JWT_SECRET", "shipping-helper-secret-key-change-in-production")
 
+# CORS 允许的来源列表（与 CORSMiddleware 保持一致）
+ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:5174",
+]
+
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
     """全局认证中间件，排除登录和健康检查端点."""
@@ -74,7 +82,8 @@ async def auth_middleware(request: Request, call_next):
     if not auth_header or not auth_header.startswith("Bearer "):
         return JSONResponse(
             status_code=401,
-            content={"detail": "未授权，请先登录"}
+            content={"detail": "未授权，请先登录"},
+            headers={"Access-Control-Allow-Origin": request.headers.get("origin", "*")}
         )
 
     # 验证 token
@@ -89,7 +98,8 @@ async def auth_middleware(request: Request, call_next):
     except JWTError:
         return JSONResponse(
             status_code=401,
-            content={"detail": "无效的认证凭证"}
+            content={"detail": "无效的认证凭证"},
+            headers={"Access-Control-Allow-Origin": request.headers.get("origin", "*")}
         )
 
     return await call_next(request)

@@ -7,7 +7,7 @@ from app.core.config import MSDS_DIR
 router = APIRouter(prefix="/api/v1/msds", tags=["msds"])
 
 
-@router.get("/")
+@router.get("")
 async def list_msds(page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100), search: str = Query("")):
     db = SessionLocal()
     try:

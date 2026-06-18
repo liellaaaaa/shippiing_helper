@@ -65,7 +65,8 @@ async def auth_middleware(request: Request, call_next):
     """全局认证中间件，排除登录和健康检查端点."""
     # 放行路径
     if request.url.path in ["/health", "/docs", "/redoc", "/openapi.json"] or \
-       request.url.path.startswith("/api/v1/auth/"):
+       request.url.path.startswith("/api/v1/auth/") or \
+       request.url.path.startswith("/api/v1/onlyoffice/"):
         return await call_next(request)
 
     # 检查 Authorization header

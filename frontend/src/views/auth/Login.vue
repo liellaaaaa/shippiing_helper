@@ -17,7 +17,6 @@
         :model="form"
         :rules="rules"
         class="login-form"
-        @submit.prevent="handleLogin"
       >
         <el-form-item prop="name">
           <el-input

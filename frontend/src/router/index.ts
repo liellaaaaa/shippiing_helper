@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 import Layout from '@/views/Layout.vue'
 import Phase1Workflow from '@/views/phase1/Phase1Workflow.vue'
 import Phase2Workflow from '@/views/phase2/Phase2Workflow.vue'
@@ -9,6 +10,12 @@ import DataCenter from '@/views/data-center/DataCenter.vue'
 const router = createRouter({
   history: createWebHistory(),
   routes: [
+    {
+      path: '/login',
+      name: 'Login',
+      component: () => import('@/views/auth/Login.vue'),
+      meta: { title: '登录', public: true }
+    },
     {
       path: '/',
       component: Layout,
@@ -54,7 +61,25 @@ const router = createRouter({
 
 router.beforeEach((to, _from, next) => {
   document.title = (to.meta.title as string || 'ShippingHelper') + ' - ShippingHelper'
-  next()
+
+  const authStore = useAuthStore()
+
+  // 允许访问登录页
+  if (to.path === '/login') {
+    if (authStore.isLoggedIn) {
+      next('/workflow')
+    } else {
+      next()
+    }
+    return
+  }
+
+  // 其他页面需要登录
+  if (!authStore.isLoggedIn) {
+    next('/login')
+  } else {
+    next()
+  }
 })
 
 export default router

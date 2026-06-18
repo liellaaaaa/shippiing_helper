@@ -1,7 +1,5 @@
 import { apiClient } from '@/api/axios'
 
-const BASE_URL = '/api/v1/merge'
-
 export interface OrderListItem {
   id: number
   order_no: string
@@ -64,16 +62,16 @@ export const getOrderList = async (params: {
   page?: number
   page_size?: number
 }): Promise<OrderListResponse> => {
-  const response = await apiClient.get<OrderListResponse>(`${BASE_URL}/orders`, { params })
+  const response = await apiClient.get<OrderListResponse>(`/merge/orders`, { params })
   return response.data
 }
 
 export const getOrderComparison = async (orderId: number): Promise<OrderComparisonResponse> => {
-  const response = await apiClient.get<OrderComparisonResponse>(`${BASE_URL}/orders/${orderId}/comparison`)
+  const response = await apiClient.get<OrderComparisonResponse>(`/merge/orders/${orderId}/comparison`)
   return response.data
 }
 
 export const getOrderPiContracts = async (orderId: number): Promise<{pi_no: string; consignee: string; destination: string}[]> => {
-  const response = await apiClient.get<{pi_no: string; consignee: string; destination: string}[]>(`${BASE_URL}/orders/${orderId}/pi-contracts`)
+  const response = await apiClient.get<{pi_no: string; consignee: string; destination: string}[]>(`/merge/orders/${orderId}/pi-contracts`)
   return response.data
 }

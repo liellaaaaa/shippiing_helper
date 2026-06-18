@@ -1,7 +1,5 @@
 import { apiClient } from '@/api/axios'
 
-const BASE_URL = '/api/v1/pi'
-
 export interface PiContractItem {
   row_index: number
   status: 'success' | 'error'
@@ -89,12 +87,12 @@ export const uploadPiFile = async (file: File): Promise<PiUploadResponse> => {
   const formData = new FormData()
   formData.append('file', file)
   // Do NOT set Content-Type header manually — axios must set it with boundary
-  const response = await apiClient.post<PiUploadResponse>(`${BASE_URL}/upload`, formData)
+  const response = await apiClient.post<PiUploadResponse>(`/pi/upload`, formData)
   return response.data
 }
 
 export const savePiContract = async (data: PiSaveRequest): Promise<PiSaveResponse> => {
-  const response = await apiClient.post<PiSaveResponse>(`${BASE_URL}/contracts`, data)
+  const response = await apiClient.post<PiSaveResponse>(`/pi/contracts`, data)
   return response.data
 }
 
@@ -103,6 +101,6 @@ export const queryPiContracts = async (params: {
   customer_code?: string
   internal_code?: string
 }): Promise<PiQueryResponse> => {
-  const response = await apiClient.get<PiQueryResponse>(`${BASE_URL}/contracts`, { params })
+  const response = await apiClient.get<PiQueryResponse>(`/pi/contracts`, { params })
   return response.data
 }

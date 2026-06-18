@@ -1,7 +1,5 @@
 import { apiClient } from '@/api/axios'
 
-const BASE_URL = '/api/v1'
-
 export interface OrderItemSchema {
   internal_code: string
   product_cn?: string
@@ -54,12 +52,12 @@ export interface OrderSaveResponse {
 
 export const ordersApi = {
   parsePaste: async (rawText: string): Promise<PasteParseResponse> => {
-    const resp = await apiClient.post(`${BASE_URL}/orders/paste`, { raw_text: rawText })
+    const resp = await apiClient.post(`/orders/paste`, { raw_text: rawText })
     return resp.data
   },
 
   saveOrder: async (order: ParsedOrderSchema): Promise<OrderSaveResponse> => {
-    const resp = await apiClient.post(`${BASE_URL}/orders`, { order })
+    const resp = await apiClient.post(`/orders`, { order })
     return resp.data
   }
 }

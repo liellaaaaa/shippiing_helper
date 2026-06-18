@@ -17,85 +17,85 @@ export const phase2Api = {
     measurement: string
     template_type?: 'xls' | 'xlsx'
   }) {
-    return apiClient.post('/api/v1/documents/booking', fields)
+    return apiClient.post('/documents/booking', fields)
   },
   generateLoi(orderNo: string, piNo: string) {
-    return apiClient.get('/api/v1/documents/loi', { params: { order_no: orderNo, pi_no: piNo } })
+    return apiClient.get('/documents/loi', { params: { order_no: orderNo, pi_no: piNo } })
   },
   generateMsds(product: string) {
-    return apiClient.get('/api/v1/documents/msds', { params: { product } })
+    return apiClient.get('/documents/msds', { params: { product } })
   },
   generateCustoms(orderId: number | null) {
-    return apiClient.get('/api/v1/documents/customs', {
+    return apiClient.get('/documents/customs', {
       params: { order_id: orderId }
     })
   },
   getDocHistory(orderId: number) {
-    return apiClient.get(`/api/v1/documents/history/${orderId}`)
+    return apiClient.get(`/documents/history/${orderId}`)
   },
   listMsds(params: { page?: number; pageSize?: number; search?: string }) {
-    return apiClient.get('/api/v1/msds', { params })
+    return apiClient.get('/msds', { params })
   },
   getMsdsContent(id: number) {
-    return apiClient.get(`/api/v1/msds/${id}/content`)
+    return apiClient.get(`/msds/${id}/content`)
   },
   loadMsds(msdsId: number) {
-    return apiClient.get(`/api/v1/documents/msds/${msdsId}`)
+    return apiClient.get(`/documents/msds/${msdsId}`)
   },
   reindexMsds() {
-    return apiClient.post('/api/v1/msds/reindex')
+    return apiClient.post('/msds/reindex')
   },
   uploadTransportReport(file: File) {
     const formData = new FormData()
     formData.append('file', file)
-    return apiClient.post('/api/v1/transport/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
+    return apiClient.post('/transport/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
   },
   getExportCodes(internalCode: string) {
-    return apiClient.get('/api/v1/export-codes', { params: { internal_code: internalCode } })
+    return apiClient.get('/export-codes', { params: { internal_code: internalCode } })
   },
   getJwt(documentKey: string, fileType: string) {
-    return apiClient.post('/api/v1/onlyoffice/jwt', null, { params: { documentKey, fileType } })
+    return apiClient.post('/onlyoffice/jwt', null, { params: { documentKey, fileType } })
   },
   openBlankTemplate(type: 'booking' | 'loi' | 'msds') {
-    return apiClient.get(`/api/v1/documents/template/${type}`)
+    return apiClient.get(`/documents/template/${type}`)
   },
   listMyTemplates() {
-    return apiClient.get('/api/v1/documents/my-templates')
+    return apiClient.get('/documents/my-templates')
   },
 
   // ── 数据中心 ───────────────────────────────────────────────
   searchDataCenter(query: string) {
-    return apiClient.get('/api/v1/data-center/search', { params: { q: query } })
+    return apiClient.get('/data-center/search', { params: { q: query } })
   },
   getDataCenterFileUrl(fileId: number) {
-    return `/api/v1/data-center/files/${fileId}`
+    return `/data-center/files/${fileId}`
   },
   getDataCenterSummary(fileId: number) {
-    return apiClient.get(`/api/v1/data-center/summary/${fileId}`)
+    return apiClient.get(`/data-center/summary/${fileId}`)
   },
   uploadCorrectedMsds(fileId: number, file: File, user: string = 'admin') {
     const formData = new FormData()
     formData.append('file', file)
-    return apiClient.post(`/api/v1/data-center/upload-corrected/${fileId}`, formData, {
+    return apiClient.post(`/data-center/upload-corrected/${fileId}`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
       params: { user },
     })
   },
   reindexDataCenter() {
-    return apiClient.post('/api/v1/data-center/reindex')
+    return apiClient.post('/data-center/reindex')
   },
   getDataCenterTree() {
-    return apiClient.get('/api/v1/data-center/tree')
+    return apiClient.get('/data-center/tree')
   },
 
   // ── 运输鉴定报告 ─────────────────────────────────────────────
   searchTransportReports(query: string) {
-    return apiClient.get('/api/v1/transport-reports/search', { params: { q: query } })
+    return apiClient.get('/transport-reports/search', { params: { q: query } })
   },
   getTransportReportFileUrl(filename: string) {
-    return `/api/v1/transport-reports/files/${encodeURIComponent(filename)}`
+    return `/transport-reports/files/${encodeURIComponent(filename)}`
   },
   reindexTransportReports() {
-    return apiClient.post('/api/v1/transport-reports/reindex')
+    return apiClient.post('/transport-reports/reindex')
   },
 }

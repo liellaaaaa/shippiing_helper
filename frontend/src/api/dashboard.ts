@@ -1,7 +1,5 @@
 import { apiClient } from '@/api/axios'
 
-const BASE_URL = '/api/v1/dashboard'
-
 export interface DashboardProduct {
   id: number
   internal_code: string
@@ -45,12 +43,12 @@ export const getDashboardOrders = async (params: {
   page?: number
   page_size?: number
 }): Promise<DashboardResponse> => {
-  const response = await apiClient.get<DashboardResponse>(`${BASE_URL}/orders`, { params })
+  const response = await apiClient.get<DashboardResponse>(`/dashboard/orders`, { params })
   return response.data
 }
 
 export const deleteDashboardOrder = async (recordId: number) => {
-  await apiClient.delete(`${BASE_URL}/records/${recordId}`)
+  await apiClient.delete(`/dashboard/records/${recordId}`)
 }
 
 export const exportDashboardExcel = (params?: {
@@ -58,5 +56,5 @@ export const exportDashboardExcel = (params?: {
   status?: string
 }) => {
   const queryString = params ? `?${new URLSearchParams(params as any).toString()}` : ''
-  window.location.href = `${BASE_URL}/export${queryString}`
+  window.location.href = `/dashboard/export${queryString}`
 }

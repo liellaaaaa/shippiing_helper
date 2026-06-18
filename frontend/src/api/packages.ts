@@ -1,7 +1,5 @@
 import { apiClient } from '@/api/axios'
 
-const BASE_URL = '/api/v1/packages'
-
 // ── Types ────────────────────────────────────────────────────────────────────────
 
 export interface PackagingType {
@@ -64,7 +62,7 @@ export interface RecommendResponse {
 // ── API Functions ─────────────────────────────────────────────────────────────
 
 export const getPackagingTypes = async (): Promise<{ types: PackagingType[] }> => {
-  const response = await apiClient.get<{ types: PackagingType[] }>(`${BASE_URL}/types`)
+  const response = await apiClient.get<{ types: PackagingType[] }>(`/packages/types`)
   return response.data
 }
 
@@ -79,12 +77,12 @@ export const calculatePackage = async (params: {
   order_id?: number
   internal_code?: string
 }): Promise<CalculationResult> => {
-  const response = await apiClient.get<CalculationResult>(`${BASE_URL}/calculate`, { params })
+  const response = await apiClient.get<CalculationResult>(`/packages/calculate`, { params })
   return response.data
 }
 
 export const recommendPackaging = async (internalCode: string): Promise<RecommendResponse> => {
-  const response = await apiClient.get<RecommendResponse>(`${BASE_URL}/recommend`, {
+  const response = await apiClient.get<RecommendResponse>(`/packages/recommend`, {
     params: { internal_code: internalCode }
   })
   return response.data

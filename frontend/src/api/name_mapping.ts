@@ -6,11 +6,11 @@ export interface NameMapping {
 }
 
 export const nameMappingApi = {
-  getAll: () => apiClient.get<{ mappings: NameMapping[] }>('/api/v1/name-mapping'),
+  getAll: () => apiClient.get<{ mappings: NameMapping[] }>('/name-mapping'),
 
   lookupByCn: (cn: string) =>
-    apiClient.get<{ cn: string; en: string | null }>('/api/v1/name-mapping/lookup', { params: { cn } }),
+    apiClient.get<{ cn: string; en: string | null }>('/name-mapping/lookup', { params: { cn } }),
 
   lookupByEn: (en: string) =>
-    apiClient.get<{ en: string; cn: string | null }>('/api/v1/name-mapping/lookup', { params: { en } }),
+    apiClient.get<{ en: string; cn: string | null }>('/name-mapping/lookup', { params: { en } }),
 }

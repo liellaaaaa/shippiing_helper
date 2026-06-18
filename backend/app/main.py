@@ -13,6 +13,7 @@ from app.api.v1 import documents, msds, transport, export_codes, onlyoffice
 from app.api.v1.data_center import router as data_center_router
 from app.api.v1.transport_reports import router as transport_reports_router
 from app.api.v1.name_mapping import router as name_mapping_router
+from app.api.v1.auth import router as auth_router
 from app.core.config import MSDS_DIR, TRANSPORT_REPORTS_DIR, CUSTOMS_CODES_JSON
 from app.database import SessionLocal
 from app.services.data_center_service import DataCenterService
@@ -50,6 +51,47 @@ app.include_router(onlyoffice.router)
 app.include_router(data_center_router)
 app.include_router(transport_reports_router)
 app.include_router(name_mapping_router)
+app.include_router(auth_router)
+
+from fastapi import Request
+from fastapi.responses import JSONResponse
+from jose import jwt, JWTError
+import os
+
+JWT_SECRET = os.getenv("JWT_SECRET", "shipping-helper-secret-key-change-in-production")
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    """全局认证中间件，排除登录和健康检查端点."""
+    # 放行路径
+    if request.url.path in ["/health", "/docs", "/redoc", "/openapi.json"] or \
+       request.url.path.startswith("/api/v1/auth/"):
+        return await call_next(request)
+
+    # 检查 Authorization header
+    auth_header = request.headers.get("authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "未授权，请先登录"}
+        )
+
+    # 验证 token
+    try:
+        token = auth_header[7:]
+        payload = jwt.decode(
+            token,
+            JWT_SECRET,
+            algorithms=["HS256"]
+        )
+        request.state.user = {"name": payload.get("sub")}
+    except JWTError:
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "无效的认证凭证"}
+        )
+
+    return await call_next(request)
 
 
 @app.get("/health")

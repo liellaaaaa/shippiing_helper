@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException, status
 from app.models.user import LoginRequest, TokenResponse
 from app.services.auth_service import authenticate
 
-router = APIRouter(prefix="/auth", tags=["认证"])
+router = APIRouter(prefix="/api/v1/auth", tags=["认证"])
 
 
 @router.post("/login", response_model=TokenResponse)

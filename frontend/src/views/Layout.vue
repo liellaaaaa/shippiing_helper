@@ -68,6 +68,21 @@
 
         <div class="nav-actions">
           <div class="nav-divider"></div>
+          <el-dropdown trigger="click" @command="handleCommand">
+            <div class="user-badge">
+              <el-icon><User /></el-icon>
+              <span class="user-name">{{ authStore.userName }}</span>
+              <el-icon class="el-icon--right"><ArrowDown /></el-icon>
+            </div>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="logout">
+                  <el-icon><SwitchButton /></el-icon>
+                  退出登录
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
       </div>
     </nav>
@@ -77,8 +92,54 @@
 </template>
 
 <script setup lang="ts">
+import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { User, ArrowDown, SwitchButton } from '@element-plus/icons-vue'
+import { useAuthStore } from '@/stores/auth'
+
+const router = useRouter()
+const authStore = useAuthStore()
+
+function handleCommand(command: string) {
+  if (command === 'logout') {
+    authStore.logout()
+    ElMessage.success('已退出登录')
+    router.push('/login')
+  }
+}
 </script>
 
 <style>
 @import '@/styles/global.css';
+
+.user-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.user-badge:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.user-name {
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.el-dropdown-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 </style>

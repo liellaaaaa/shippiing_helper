@@ -321,28 +321,50 @@ class MSDSGeneratorService:
         return content, doc_key
 
     def _update_product_name(self, doc: Document, new_name: str):
-        """更新文档中的产品名称"""
-        from docx.shared import Pt
+        """更新文档中的产品名称。保留原始段落格式和字体属性。"""
+        from docx.shared import Pt, Pt as PtType
+        from copy import copy
+
         for para in doc.paragraphs:
             if "产品名称：" in para.text:
-                # 找到"产品名称："的位置，保留前面的空格
                 full_text = para.text
                 idx = full_text.find("产品名称：")
                 prefix = full_text[:idx]
 
-                # 清空所有 run
+                # 保存原始段落格式（line_spacing 等）
+                pf = para.paragraph_format
+                saved_line_spacing = pf.line_spacing
+                saved_first_indent = pf.first_line_indent
+                saved_left_indent = pf.left_indent
+
+                # 保存原始 run 的字体属性（取第一个 run 的字体）
+                first_run = para.runs[0] if para.runs else None
+                orig_font_name = first_run.font.name if first_run else None
+                orig_font_size = first_run.font.size if first_run else None
+
+                # 清空所有 run 并重建
                 for run in para.runs:
                     run.text = ""
                 para.clear()
 
-                # 统一使用宋体12pt
-                run = para.add_run(prefix + f"产品名称：{new_name}")
-                run.font.name = "宋体"
-                run.font.size = Pt(12)
+                new_run = para.add_run(prefix + f"产品名称：{new_name}")
+                # 保持与原始一致的字体（继承而非显式设置）
+                if orig_font_name:
+                    new_run.font.name = orig_font_name
+                elif orig_font_size:
+                    # 原始有字号但无显式字体名，保持字号继承
+                    new_run.font.size = orig_font_size
+
+                # 恢复段落格式
+                pf.line_spacing = saved_line_spacing
+                pf.first_line_indent = saved_first_indent
+                pf.left_indent = saved_left_indent
                 break
 
     def _update_composition_table(self, doc: Document, composition: list):
-        """更新成分表格"""
+        """更新成分表格，保留原有字体。"""
+        from docx.shared import Pt
+
         tables = doc.tables
         if not tables:
             return
@@ -359,6 +381,20 @@ class MSDSGeneratorService:
         if not comp_table:
             return
 
+        # 获取原始单元格的字体样式（从第一行数据行获取）
+        sample_row = comp_table.rows[1] if len(comp_table.rows) > 1 else None
+        sample_fonts = []
+        if sample_row and len(sample_row.cells) >= 3:
+            for cell in sample_row.cells:
+                if cell.paragraphs and cell.paragraphs[0].runs:
+                    first_run = cell.paragraphs[0].runs[0]
+                    sample_fonts.append({
+                        "name": first_run.font.name,
+                        "size": first_run.font.size,
+                    })
+                else:
+                    sample_fonts.append({"name": None, "size": None})
+
         # 更新每一行
         for i, item in enumerate(composition):
             row_idx = i + 1  # 跳过表头
@@ -367,16 +403,47 @@ class MSDSGeneratorService:
 
             row = comp_table.rows[row_idx]
             if len(row.cells) >= 3:
-                row.cells[0].text = item.get("component_cn", "")
-                row.cells[1].text = item.get("cas", "")
-                row.cells[2].text = item.get("percentage", "")
+                new_values = [
+                    item.get("component_cn", ""),
+                    item.get("cas", ""),
+                    item.get("percentage", ""),
+                ]
+                for col_idx, new_val in enumerate(new_values):
+                    if col_idx >= len(row.cells):
+                        continue
+                    cell = row.cells[col_idx]
+                    # 直接修改现有 run 的文本，保留字体
+                    if cell.paragraphs and cell.paragraphs[0].runs:
+                        # 只修改第一个 run 的文本，清空其余 run
+                        para = cell.paragraphs[0]
+                        for r_idx, run in enumerate(para.runs):
+                            if r_idx == 0:
+                                run.text = new_val
+                            else:
+                                run.text = ""
+                        # 如果没有 run，创建一个
+                        if not para.runs:
+                            new_run = para.add_run(new_val)
+                            if col_idx < len(sample_fonts) and sample_fonts[col_idx]["name"]:
+                                new_run.font.name = sample_fonts[col_idx]["name"]
+                            if col_idx < len(sample_fonts) and sample_fonts[col_idx]["size"]:
+                                new_run.font.size = sample_fonts[col_idx]["size"]
+                    else:
+                        # 没有段落，创建一个
+                        para = cell.paragraphs[0] if cell.paragraphs else cell.add_paragraph()
+                        new_run = para.add_run(new_val)
+                        if col_idx < len(sample_fonts) and sample_fonts[col_idx]["name"]:
+                            new_run.font.name = sample_fonts[col_idx]["name"]
+                        if col_idx < len(sample_fonts) and sample_fonts[col_idx]["size"]:
+                            new_run.font.size = sample_fonts[col_idx]["size"]
 
     def _update_physicochemical(self, doc: Document, physicochemical: dict):
         """
-        更新理化特性。
+        更新理化特性，保留原始段落格式和字体。
         格式：{"外观与性状": "蓝色透明液体", "离子性": "阴离子", "PH值": "3±1", ...}
         """
         from docx.shared import Pt
+
         # 映射前端字段名到文档中实际存在的 key
         key_map = {
             'appearance': '外观与性状',
@@ -410,11 +477,31 @@ class MSDSGeneratorService:
                 prefix = text[:colon_idx + 1]  # 保留原始 key 大小写
                 new_text = f"{prefix}{value}"
 
-                # 清空所有run，统一使用宋体12pt
+                # 保存原始段落格式
+                pf = para.paragraph_format
+                saved_line_spacing = pf.line_spacing
+                saved_first_indent = pf.first_line_indent
+                saved_left_indent = pf.left_indent
+
+                # 保存原始 run 的字体属性
+                first_run = para.runs[0] if para.runs else None
+                orig_font_name = first_run.font.name if first_run else None
+                orig_font_size = first_run.font.size if first_run else None
+
+                # 清空所有 run 并重建
                 for run in para.runs:
                     run.text = ""
                 para.clear()
+
                 new_run = para.add_run(new_text)
-                new_run.font.name = "宋体"
-                new_run.font.size = Pt(12)
+                # 保持与原始一致的字体
+                if orig_font_name:
+                    new_run.font.name = orig_font_name
+                elif orig_font_size:
+                    new_run.font.size = orig_font_size
+
+                # 恢复段落格式
+                pf.line_spacing = saved_line_spacing
+                pf.first_line_indent = saved_first_indent
+                pf.left_indent = saved_left_indent
                 break

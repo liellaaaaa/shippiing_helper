@@ -17,6 +17,7 @@
 | 2026/05/28 | 包装计算逻辑明确（13种包装、卡板映射、20GP判定） |
 | 2026/05/28 | 全栈统一 OnlyOffice，移除 Luckysheet |
 | 2026/05/28 | orders 表拆分为 orders（订单头）+ order_items（产品明细），支持"一单多品" |
+| 2026/06/22 | 完成 JWT 登录认证功能（2026-06-18 实现） |
 
 ---
 
@@ -283,7 +284,26 @@ shipping_helper_web/
 
 ---
 
-## 10. Open Questions
+## 10. 认证（2026-06-18 实现）
+
+**JWT Token 认证**已完成实现：
+
+| 组件 | 状态 | 说明 |
+|------|------|------|
+| 后端 AuthService | ✅ 完成 | JWT token 生成和验证 |
+| 登录 API | ✅ 完成 | `POST /api/v1/auth/login` |
+| 全局中间件 | ✅ 完成 | 除登录和健康检查外所有 API 需要认证 |
+| 前端 Axios 拦截器 | ✅ 完成 | 自动附加 token，处理 401 |
+| Pinia Auth Store | ✅ 完成 | token 状态管理 |
+| 登录页面 | ✅ 完成 | `/login` 路由 |
+| 路由守卫 | ✅ 完成 | 未登录跳转登录页 |
+
+**技术实现：**
+- 用户数据：`backend/data/users.json`（name + password）
+- Token 有效期：24 小时
+- 算法：HS256
+
+## 11. Open Questions
 
 1. OnlyOffice 使用 Cloud 版还是自部署社区版？
 2. 是否需要导出历史订单为 Excel？

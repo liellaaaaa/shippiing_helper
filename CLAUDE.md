@@ -23,6 +23,7 @@ ShippingHelper 是一款外贸船务效率工具。
 |------|------|
 | 前端 | Vue 3 + Vite + Element Plus + Pinia |
 | 后端 | FastAPI + SQLAlchemy + SQLite |
+| 认证 | JWT Token（python-jose） |
 | 文档编辑 | OnlyOffice Document Server（Docker） |
 | 编辑器 | OnlyOffice（Excel + Word 统一，不使用 Luckysheet） |
 
@@ -110,6 +111,7 @@ shipping_helper/
 │   └── app/
 │       ├── api/
 │       │   ├── v1/
+│       │   │   ├── auth.py        # POST /api/v1/auth/login（JWT 认证）
 │       │   │   ├── orders.py      # POST /api/v1/orders/paste, POST /api/v1/orders
 │       │   │   ├── pi.py         # POST /api/v1/pi/upload (.xlsx/.xls/.pdf)
 │       │   │   ├── merge.py      # GET /api/v1/merge/orders, /comparison, /pi-contracts
@@ -132,6 +134,7 @@ shipping_helper/
 │       │   ├── config.py          # 目录路径和环境配置
 │       │   └── name_mapping.py    # 产品名称中英文对照
 │       ├── services/
+│       │   ├── auth_service.py    # JWT 认证服务
 │       │   ├── order_service.py   # 订单服务层
 │       │   ├── pi_service.py      # PI 服务层
 │       │   ├── packaging_service.py # 包装计算（桶数、托盘、20GP）
@@ -147,6 +150,7 @@ shipping_helper/
 │       │   ├── name_mapping_service.py # 品名对照查询
 │       │   └── export_codes_service.py # HS code 查询
 │       ├── models/
+│       │   ├── user.py           # User Pydantic 模型
 │       │   ├── order.py          # orders, order_items, packaging_types, pallets, products_knowledge
 │       │   ├── pi_contract.py     # PiContract, PiContractItem, PiData
 │       │   ├── order_pi_record.py # OrderPiRecord（合并记录）
@@ -163,6 +167,7 @@ shipping_helper/
 ├── frontend/
 │   └── src/
 │       ├── api/
+│       │   ├── axios.ts         # Axios 实例 + JWT 拦截器
 │       │   ├── orders.ts        # POST /orders/paste, /orders
 │       │   ├── pi.ts            # PI 上传 API
 │       │   ├── merge.ts         # GET /merge/orders, /comparison, /pi-contracts
@@ -172,6 +177,11 @@ shipping_helper/
 │       │   ├── phase1.ts        # Phase 1 API 客户端
 │       │   ├── phase2.ts        # Phase 2 API 客户端（documents, msds, data-center, onlyoffice）
 │       │   └── name_mapping.ts  # GET /name-mapping, /lookup
+│       ├── stores/
+│       │   └── auth.ts         # Pinia 认证状态管理
+│       ├── views/
+│           ├── auth/
+│           │   └── Login.vue    # 登录页面
 │       ├── components/
 │       │   └── phase1/
 │       │       ├── PasteTextarea.vue       # 订单粘贴输入
@@ -482,6 +492,7 @@ docker run -d -p 8080:80 onlyoffice/documentserver
 
 | 模块 | 状态 | 备注 |
 |------|------|------|
+| JWT 登录认证 | ✅ 完成 | AuthService、登录页面、路由守卫、Axios 拦截器 |
 | Phase 2 API 路由 | ✅ 完成 | 所有端点已在 main.py 注册 |
 | OnlyOfficeService | ✅ 完成 | 单证生成（Booking/LOI/MSDS）、基于标记填充 |
 | DocumentService | ✅ 完成 | 模板复制、BLOB 存储、版本管理 |
@@ -497,4 +508,4 @@ docker run -d -p 8080:80 onlyoffice/documentserver
 | 我的模板 | ✅ 完成 | `GET /api/v1/documents/my-templates` |
 | 报关资料 | ✅ 完成 | `GET /api/v1/documents/customs`（5 sheet 工作簿） |
 
-*最后更新：2026/06/15*
+*最后更新：2026/06/22*

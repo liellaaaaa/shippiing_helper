@@ -1,7 +1,7 @@
 # ShippingHelper API 文档
 
 > 外贸船务效率工具 — 完整 API 接口规范。
-> 版本：v2.0.0（2026-06-15）
+> 版本：v2.1.0（2026-06-22）
 > Base URL：`http://localhost:8000`
 > 文档地址：`http://localhost:8000/docs`（Swagger UI）
 
@@ -9,7 +9,18 @@
 
 ## 认证
 
-当前版本无需认证，后续 Phase 2 会添加 Token 认证。
+**JWT Token 认证**（2026-06-18 实现）
+
+所有 API 端点（除登录和健康检查外）均需要认证。
+
+**登录流程：**
+1. 调用 `POST /api/v1/auth/login` 获取 token
+2. 后续请求携带 `Authorization: Bearer <token>` header
+
+**错误响应（401）：**
+```json
+{ "detail": "未授权，请先登录" }
+```
 
 ---
 
@@ -19,6 +30,7 @@
 |-------------|------|----------|
 | 200 | 成功 | 正常返回数据 |
 | 400 | 请求参数错误 | 解析失败、空文本，分隔符无法识别 |
+| 401 | 未授权 | 未登录或 token 无效 |
 | 404 | 资源不存在 | 订单/记录/文件不存在 |
 | 422 | Pydantic 验证错误 | 字段类型不匹配，必填字段缺失 |
 | 500 | 服务器内部错误 | 数据库保存失败（事务已回滚） |
@@ -38,6 +50,8 @@
 | 方法 | 路径 | 描述 |
 |------|------|------|
 | GET | `/health` | 健康检查 |
+| **认证** | | |
+| POST | `/api/v1/auth/login` | 用户登录，获取 JWT token |
 | **订单管理** | | |
 | POST | `/api/v1/orders/paste` | 解析粘贴文本 |
 | POST | `/api/v1/orders` | 保存订单 |
@@ -117,7 +131,44 @@
 
 ---
 
-## 2. 解析粘贴文本
+## 2. 用户登录
+
+### POST `/api/v1/auth/login`
+
+用户登录，验证用户名和密码，返回 JWT token。
+
+**请求体：**
+
+```json
+{
+  "name": "张三",
+  "password": "zhangsan123"
+}
+```
+
+**成功响应（200）：**
+
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token_type": "bearer"
+}
+```
+
+**错误响应（401）：**
+
+```json
+{ "detail": "用户名或密码错误" }
+```
+
+**说明：**
+- `access_token` 有效期 24 小时
+- 后续请求需在 Header 中携带：`Authorization: Bearer <access_token>`
+- 用户数据存储在 `backend/data/users.json`
+
+---
+
+## 3. 解析粘贴文本
 
 ### POST `/api/v1/orders/paste`
 
@@ -166,7 +217,7 @@
 
 ---
 
-## 3. 保存订单
+## 4. 保存订单
 
 ### POST `/api/v1/orders`
 
@@ -211,7 +262,7 @@
 
 ---
 
-## 4. 上传并解析 PI 文件
+## 5. 上传并解析 PI 文件
 
 ### POST `/api/v1/pi/upload`
 
@@ -250,7 +301,7 @@
 
 ---
 
-## 5. 数据看板
+## 6. 数据看板
 
 ### GET `/api/v1/dashboard/orders`
 
@@ -292,7 +343,7 @@ Phase 1 核心落库接口。接收订单+PI+包装数据，写入 `order_pi_rec
 
 ---
 
-## 6. 数据关联
+## 7. 数据关联
 
 ### GET `/api/v1/merge/orders`
 
@@ -314,7 +365,7 @@ Phase 1 核心落库接口。接收订单+PI+包装数据，写入 `order_pi_rec
 
 ---
 
-## 7. 包装计算
+## 8. 包装计算
 
 ### GET `/api/v1/packaging/types`
 
@@ -371,7 +422,7 @@ Phase 1 核心落库接口。接收订单+PI+包装数据，写入 `order_pi_rec
 
 ---
 
-## 8. 文档生成
+## 9. 文档生成
 
 ### POST `/api/v1/documents/booking`
 
@@ -420,7 +471,7 @@ Phase 1 核心落库接口。接收订单+PI+包装数据，写入 `order_pi_rec
 
 ---
 
-## 9. OnlyOffice 回调
+## 10. OnlyOffice 回调
 
 ### POST `/api/v1/onlyoffice/callback`
 
@@ -444,7 +495,7 @@ OnlyOffice Document Server 保存文档时的回调接口。
 
 ---
 
-## 10. 数据中心
+## 11. 数据中心
 
 ### GET `/api/v1/data-center/search`
 
@@ -462,7 +513,7 @@ OnlyOffice Document Server 保存文档时的回调接口。
 
 ---
 
-## 11. 运输鉴定报告
+## 12. 运输鉴定报告
 
 ### GET `/api/v1/transport-reports/search`
 
@@ -474,7 +525,7 @@ OnlyOffice Document Server 保存文档时的回调接口。
 
 ---
 
-## 12. 品名对照
+## 13. 品名对照
 
 ### GET `/api/v1/name-mapping/lookup`
 

@@ -121,16 +121,38 @@
           <div class="info-rows">
             <div class="info-row">
               <span class="info-label">发货人</span>
-              <span class="info-value">HONGHAO CHEMICAL CO., LTD.</span>
+              <!-- 编辑状态 -->
+              <div v-if="selectedOrderId && shipperEditing" class="shipper-edit-row">
+                <el-input
+                  v-model="currentOrderInfo.shipper"
+                  type="textarea"
+                  :rows="3"
+                  size="small"
+                  placeholder="公司名称+地址+TEL/传真"
+                />
+              </div>
+              <!-- 选择状态 -->
+              <el-select
+                v-else-if="selectedOrderId"
+                v-model="shipperSelectValue"
+                placeholder="请选择发货人"
+                size="small"
+                style="width:100%"
+                @change="(val: string) => { if (val === '__other__') { shipperEditing = true; shipperSelectValue = '' } else if (val === 'HONGHAO') { currentOrderInfo.shipper = SHIPPER_OPTIONS[0] } }"
+              >
+                <el-option label="HONGHAO CHEMICAL CO., LTD." value="HONGHAO" />
+                <el-option label="其他" value="__other__" />
+              </el-select>
+              <span v-else class="info-value muted">—</span>
             </div>
             <div class="info-row">
               <span class="info-label">收货人</span>
-              <el-input v-if="selectedOrderId" v-model="currentOrderInfo.consignee" size="small" placeholder="可编辑" />
+              <el-input v-if="selectedOrderId" v-model="currentOrderInfo.consignee" type="textarea" :rows="2" size="small" placeholder="公司名称+地址+TEL/传真" />
               <span v-else class="info-value muted">—</span>
             </div>
             <div class="info-row">
               <span class="info-label">通知人</span>
-              <el-input v-if="selectedOrderId" v-model="currentOrderInfo.notify" size="small" placeholder="可编辑" />
+              <el-input v-if="selectedOrderId" v-model="currentOrderInfo.notify" type="textarea" :rows="2" size="small" placeholder="公司名称+地址+TEL/传真" />
               <span v-else class="info-value muted">—</span>
             </div>
             <div class="info-row">
@@ -275,10 +297,13 @@ import { phase2Api } from '@/api/phase2'
 import { getOrderList, getOrderComparison, getOrderPiContracts, type OrderListItem } from '@/api/merge'
 import { getDashboardOrders, type DashboardOrder } from '@/api/dashboard'
 import { nameMappingApi } from '@/api/name_mapping'
+import { SHIPPER_OPTIONS } from '@/constants/shippers'
 
 const route = useRoute()
 
 const selectedOrderId = ref<number | null>(null)
+const shipperEditing = ref(false)
+const shipperSelectValue = ref('')
 const selectedPiNo = ref<string>('')
 const orderList = ref<DashboardOrder[]>([])
 const piList = ref<any[]>([])
@@ -317,8 +342,9 @@ const selectedBookingTemplate = ref<'xls' | 'xlsx'>('xlsx')
 const currentOrderInfo = ref({
   order_no: '',
   customer_code: '',
+  shipper: '',
   consignee: '',
-  notify: '',
+  notify: 'SAME AS CONSIGNEE',
   port: '',
   product_cn: '',
   product_en: '',
@@ -339,8 +365,14 @@ async function loadOrderList() {
   orderList.value = data.orders || []
 }
 
+function selectShipperPreset(text: string) {
+  currentOrderInfo.value.shipper = text
+}
+
 async function onOrderChange(orderId: number): Promise<void> {
   selectedPiNo.value = ''
+  shipperEditing.value = false
+  shipperSelectValue.value = ''
   if (!orderId) return
   try {
     const data = await getOrderComparison(orderId)
@@ -368,12 +400,16 @@ async function onOrderChange(orderId: number): Promise<void> {
     const productCnAll = items.map(it => it.product_cn).filter(Boolean).join(' / ')
     const hsCodeAll = items.map(it => it.order?.hs_code).filter(Boolean).join(' / ')
     const productEnAll = items.map(it => it.order?.product_en).filter(Boolean).join(' / ')
+    // 收货人 = 名称 + 地址（用换行连接）
+    const piConsigneeName = (pis[0] as any)?.consignee_name || ''
+    const piConsigneeAddr = (pis[0] as any)?.consignee_address || ''
+    const consigneeFull = [piConsigneeName, piConsigneeAddr].filter(Boolean).join('\n')
     currentOrderInfo.value = {
       order_no: data.order_no || '',
       customer_code: data.customer_code || '',
-      consignee: pis[0]?.consignee || '',
-      notify: '',
-      port: pis[0]?.destination || '',
+      consignee: consigneeFull,
+      notify: 'SAME AS CONSIGNEE',
+      port: (pis[0] as any)?.destination || '',
       product_cn: productCnAll,
       product_en: productEnAll || productEn,
       hs_code: hsCodeAll,
@@ -402,7 +438,9 @@ async function openDocument(type: 'booking' | 'loi') {
 const bookingInitialValues = computed(() => {
   const items = currentOrderItems.value || []
   return {
+    shipper: currentOrderInfo.value.shipper,
     consignee: currentOrderInfo.value.consignee,
+    notify: currentOrderInfo.value.notify,
     port: currentOrderInfo.value.port,
     customs_names: items.map(it => it.customs_name || it.product_cn || ''),
     gross_weight: currentOrderInfo.value.gross_weight_kg,
@@ -723,4 +761,13 @@ onMounted(() => {
 .info-panel::-webkit-scrollbar { width: 4px; }
 .info-panel::-webkit-scrollbar-track { background: transparent; }
 .info-panel::-webkit-scrollbar-thumb { background: #dcdfe6; border-radius: 2px; }
+
+.shipper-edit-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.shipper-edit-row .el-textarea {
+  flex: 1;
+}
 </style>

@@ -80,7 +80,7 @@ async def get_order_pi_contracts(
             ).all()
             if contracts:
                 return [
-                    {"pi_no": pc.pi_no, "consignee": pc.consignee_name, "destination": pc.destination}
+                    {"pi_no": pc.pi_no, "consignee_name": pc.consignee_name or "", "consignee_address": pc.consignee_address or "", "destination": pc.destination or ""}
                     for pc in contracts
                 ]
         # 备选：用 order_no 找所有 OrderPiRecord，再用 internal_code 查
@@ -97,7 +97,7 @@ async def get_order_pi_contracts(
         pi_contract_ids = list(set(item.pi_contract_id for item in pi_items))
         pi_contracts = db.query(PiContract).filter(PiContract.id.in_(pi_contract_ids)).all()
         return [
-            {"pi_no": pc.pi_no, "consignee": pc.consignee_name, "destination": pc.destination}
+            {"pi_no": pc.pi_no, "consignee_name": pc.consignee_name or "", "consignee_address": pc.consignee_address or "", "destination": pc.destination or ""}
             for pc in pi_contracts
         ]
 
@@ -116,7 +116,7 @@ async def get_order_pi_contracts(
         ).all()
         if contracts:
             return [
-                {"pi_no": pc.pi_no, "consignee": pc.consignee_name, "destination": pc.destination}
+                {"pi_no": pc.pi_no, "consignee_name": pc.consignee_name or "", "consignee_address": pc.consignee_address or "", "destination": pc.destination or ""}
                 for pc in contracts
             ]
 

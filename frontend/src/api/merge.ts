@@ -71,7 +71,7 @@ export const getOrderComparison = async (orderId: number): Promise<OrderComparis
   return response.data
 }
 
-export const getOrderPiContracts = async (orderId: number): Promise<{pi_no: string; consignee: string; destination: string}[]> => {
-  const response = await apiClient.get<{pi_no: string; consignee: string; destination: string}[]>(`/merge/orders/${orderId}/pi-contracts`)
+export const getOrderPiContracts = async (orderId: number): Promise<{pi_no: string; consignee_name: string; consignee_address: string; destination: string}[]> => {
+  const response = await apiClient.get<{pi_no: string; consignee_name: string; consignee_address: string; destination: string}[]>(`/merge/orders/${orderId}/pi-contracts`)
   return response.data
 }

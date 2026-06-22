@@ -61,30 +61,58 @@ class MSDSGeneratorService:
         """
         从旧 MSDS 文件解析出产品信息、成分、理化特性。
         直接从文档解析，不查 customs_codes.json。
-        返回：{
-            "product_name": str,
-            "composition": [{"component_cn": "", "cas": "", "percentage": ""}, ...],
-            "physicochemical": {"physical_form": "", "ion_type": "", "ph": "", ...},
-        }
         """
-        from app.services.msds_service import MSDSService
-        msds_svc = MSDSService()
+        # 直接用 Document 解析
+        doc = Document(file_path)
 
-        # 提取文本
-        text = msds_svc.extract_text(file_path)
-
-        # 提取成分表格
-        composition = msds_svc.extract_composition_table(text)
-
-        # 提取理化特性
-        physicochemical = msds_svc.extract_physical_props(text)
-
-        # 从文本中提取产品名称（找"产品名称："开头的行）
+        # 1. 提取产品名称（从段落中找"产品名称："）
         product_name = ""
-        for line in text.split("\n"):
-            if "产品名称：" in line:
-                product_name = line.split("产品名称：")[-1].strip()
+        for para in doc.paragraphs:
+            if "产品名称：" in para.text:
+                product_name = para.text.split("产品名称：")[-1].strip()
                 break
+
+        # 2. 提取成分表格（直接访问 docx table 对象）
+        composition = []
+        for table in doc.tables:
+            if table.rows:
+                first_row_text = "".join(c.text for c in table.rows[0].cells)
+                # 检查是否是成分表格（表头包含"组分"或"成分"）
+                if "组分" in first_row_text or "成分" in first_row_text:
+                    for row in table.rows[1:]:  # 跳过表头
+                        if len(row.cells) >= 3:
+                            composition.append({
+                                "component_cn": row.cells[0].text.strip(),
+                                "cas": row.cells[1].text.strip(),
+                                "percentage": row.cells[2].text.strip(),
+                            })
+                    break
+
+        # 3. 提取理化特性（从段落中解析 key-value）
+        physicochemical = {}
+        import re
+        for para in doc.paragraphs:
+            text = para.text
+            if "外观与性状：" in text:
+                physicochemical["physical_form"] = text.split("外观与性状：")[-1].strip()
+            elif "离子性：" in text:
+                physicochemical["ion_type"] = text.split("离子性：")[-1].strip()
+            elif "离子型：" in text:
+                physicochemical["ion_type"] = text.split("离子型：")[-1].strip()
+            elif re.search(r'[pP][Hh][值]?[:：]\s*([\d±.]+)', text):
+                m = re.search(r'[pP][Hh][值]?[:：]\s*([\d±.]+)', text)
+                if m:
+                    physicochemical["ph"] = m.group(1)
+            elif "熔点：" in text:
+                physicochemical["melting_point"] = text.split("：")[-1].strip()
+            elif "沸点" in text and "：" in text:
+                physicochemical["boiling_point"] = text.split("：")[-1].strip()
+            elif "相对密度：" in text:
+                physicochemical["density"] = text.split("相对密度：")[-1].strip()
+            elif "闪点：" in text:
+                physicochemical["flash_point"] = text.split("闪点：")[-1].strip()
+            elif "溶解性：" in text:
+                physicochemical["solubility"] = text.split("溶解性：")[-1].strip()
 
         return {
             "product_name": product_name,
@@ -294,26 +322,24 @@ class MSDSGeneratorService:
 
     def _update_product_name(self, doc: Document, new_name: str):
         """更新文档中的产品名称"""
+        from docx.shared import Pt
         for para in doc.paragraphs:
             if "产品名称：" in para.text:
-                # 替换整行
-                for run in para.runs:
-                    if "产品名称：" in run.text:
-                        run.text = run.text.replace(
-                            run.text.split("产品名称：")[1].strip(), new_name
-                        )
-                        # 只改第一个
-                        break
-                break
+                # 找到"产品名称："的位置，保留前面的空格
+                full_text = para.text
+                idx = full_text.find("产品名称：")
+                prefix = full_text[:idx]
 
-        # 也更新文档标题（通常是第一个段落）
-        if doc.paragraphs:
-            first_para = doc.paragraphs[0]
-            if "化学品安全资料说明书" in first_para.text:
-                # 标题不变，但第二个段落是产品名
-                if len(doc.paragraphs) > 1 and doc.paragraphs[1].text.strip():
-                    # 替换第二段
-                    pass
+                # 清空所有 run
+                for run in para.runs:
+                    run.text = ""
+                para.clear()
+
+                # 统一使用宋体12pt
+                run = para.add_run(prefix + f"产品名称：{new_name}")
+                run.font.name = "宋体"
+                run.font.size = Pt(12)
+                break
 
     def _update_composition_table(self, doc: Document, composition: list):
         """更新成分表格"""
@@ -350,23 +376,45 @@ class MSDSGeneratorService:
         更新理化特性。
         格式：{"外观与性状": "蓝色透明液体", "离子性": "阴离子", "PH值": "3±1", ...}
         """
+        from docx.shared import Pt
+        # 映射前端字段名到文档中实际存在的 key
+        key_map = {
+            'appearance': '外观与性状',
+            'ion_type': '离子性',
+            'ph': 'PH值',
+            'melting_point': '熔点',
+            'boiling_point': '沸点',
+            'density': '相对密度',
+            'flash_point': '闪点',
+            'solubility': '溶解性',
+        }
+
         for para in doc.paragraphs:
             text = para.text
-            for key, value in physicochemical.items():
-                if not value:  # 跳过空值
+            for field_key, value in physicochemical.items():
+                if not value:
                     continue
-                if key in text:
-                    # 找到对应的行，替换值
-                    # 格式："外观与性状：蓝色透明液体"
-                    import re
-                    pattern = rf"({re.escape(key)}[：:]\s*)([^\n]+)"
-                    match = re.search(pattern, text)
-                    if match:
-                        # 替换冒号后面的值
-                        old_value = match.group(2)
-                        new_text = text.replace(old_value, value, 1)
-                        # 重建 paragraph runs
-                        if para.runs:
-                            first_run_text = para.runs[0].text
-                            para.runs[0].text = first_run_text.replace(text, new_text)
-                        break
+                # 找到文档中对应的 key
+                doc_key = key_map.get(field_key, field_key)
+                # 大小写敏感匹配
+                if f"{doc_key}：" not in text:
+                    continue
+
+                # 找到冒号位置（用 doc_key 本身在文本中的位置）
+                colon_idx = text.find(doc_key)
+                if colon_idx == -1:
+                    continue
+                colon_idx = text.find("：", colon_idx)
+                if colon_idx == -1:
+                    continue
+                prefix = text[:colon_idx + 1]  # 保留原始 key 大小写
+                new_text = f"{prefix}{value}"
+
+                # 清空所有run，统一使用宋体12pt
+                for run in para.runs:
+                    run.text = ""
+                para.clear()
+                new_run = para.add_run(new_text)
+                new_run.font.name = "宋体"
+                new_run.font.size = Pt(12)
+                break

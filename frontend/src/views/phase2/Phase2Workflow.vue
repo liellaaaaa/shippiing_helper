@@ -72,7 +72,7 @@
           @click="openDocument('loi')"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px">
-            <path d="M14 2H6a2 2 0 0 1 2v20a2 2 0 0 1-2 2H18a2 2 0 0 1-2-2V8l4-4z"/><path d="M14 2v6h6M16 13l4-4 4 4"/>
+            <path d="M14 2H6a2 2 0 0 1 2v20a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8l4-4z"/><path d="M14 2v6h6M16 13l4-4 4 4"/>
           </svg>
           LOI保函
         </el-button>

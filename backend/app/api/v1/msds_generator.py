@@ -42,6 +42,10 @@ class GenerateRequest(BaseModel):
     physicochemical: Optional[PhysicochemicalEdit] = None
 
 
+class ParseRequest(BaseModel):
+    filePath: str
+
+
 @router.get("/search")
 async def search_msds(keyword: str = Query(..., min_length=1)):
     """
@@ -52,13 +56,13 @@ async def search_msds(keyword: str = Query(..., min_length=1)):
 
 
 @router.post("/parse")
-async def parse_msds(file_path: str = Body(..., embed=True)):
+async def parse_msds(request: ParseRequest):
     """
     解析旧 MSDS 文件，提取产品信息、成分、理化特性。
     直接从文档解析，不查 customs_codes.json。
     """
     try:
-        data = msds_gen_svc.parse_msds_file(file_path)
+        data = msds_gen_svc.parse_msds_file(request.filePath)
         return data
     except Exception as e:
         return {"error": str(e)}

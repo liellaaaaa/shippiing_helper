@@ -25,18 +25,15 @@
     <!-- 旧 MSDS 文件列表 -->
     <div v-if="!selectedFile && msdsFiles.length > 0" class="file-list">
       <div class="section-title">选择旧 MSDS 文件</div>
-      <el-list>
-        <el-list-item
-          v-for="file in msdsFiles"
-          :key="file.path"
-          @click="onSelectFile(file)"
-        >
-          <div class="file-item">
-            <el-icon><Document /></el-icon>
-            <span>{{ file.name }}</span>
-          </div>
-        </el-list-item>
-      </el-list>
+      <div
+        v-for="file in msdsFiles"
+        :key="file.path"
+        class="file-item"
+        @click="onSelectFile(file)"
+      >
+        <el-icon><Document /></el-icon>
+        <span>{{ file.name }}</span>
+      </div>
     </div>
 
     <div v-else-if="!selectedFile && searchKeyword && !loading" class="no-results">

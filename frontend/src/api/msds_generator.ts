@@ -54,9 +54,7 @@ export const msdsGeneratorApi = {
    * 解析旧 MSDS 文件，提取产品信息、成分、理化特性
    */
   parseMSDS(filePath: string): Promise<MSDSParseResult> {
-    return apiClient.post('/msds-generator/parse', filePath, {
-      headers: { 'Content-Type': 'application/json' }
-    })
+    return apiClient.post('/msds-generator/parse', { filePath })
   },
 
   /**

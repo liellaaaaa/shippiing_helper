@@ -445,6 +445,8 @@ const bookingInitialValues = computed(() => {
     customs_names: items.map(it => it.customs_name || it.product_cn || ''),
     gross_weight: currentOrderInfo.value.gross_weight_kg,
     measurement: currentOrderInfo.value.volume_cbm,
+    drum_count: currentOrderInfo.value.drum_count,
+    pallet_count: currentOrderInfo.value.pallet_count,
   }
 })
 

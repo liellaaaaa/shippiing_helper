@@ -85,6 +85,8 @@ export interface BookingForm {
   customs_names: string[]
   gross_weight: string
   measurement: string
+  drum_count?: string
+  pallet_count?: string
 }
 
 interface GoodsRow {
@@ -152,6 +154,14 @@ watch(() => props.modelValue, (v) => {
     if (goodsRows.value.length) {
       goodsRows.value[0].grossWeight = (initial as any).gross_weight || ''
       goodsRows.value[0].measurement = (initial as any).measurement || ''
+    }
+    // 件数/柜型：优先用托盘数，其次桶数
+    const palletCount = (initial as any).pallet_count
+    const drumCount = (initial as any).drum_count
+    if (palletCount) {
+      form.value.no_kind_pkg = palletCount
+    } else if (drumCount) {
+      form.value.no_kind_pkg = drumCount
     }
   }
 })

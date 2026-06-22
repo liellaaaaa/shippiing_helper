@@ -62,6 +62,7 @@ class DiffInfo(BaseModel):
 
 class ComparisonItem(BaseModel):
     """比对明细行"""
+    id: int
     internal_code: str
     product_cn: Optional[str] = None
     order: Optional[OrderItemData] = None

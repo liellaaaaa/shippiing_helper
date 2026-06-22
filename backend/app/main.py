@@ -10,6 +10,7 @@ from app.api.v1.packages import router as packages_router
 from app.api.v1.packaging import router as packaging_router
 from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1 import documents, msds, transport, export_codes, onlyoffice
+from app.api.v1.msds_generator import router as msds_generator_router
 from app.api.v1.data_center import router as data_center_router
 from app.api.v1.transport_reports import router as transport_reports_router
 from app.api.v1.name_mapping import router as name_mapping_router
@@ -52,6 +53,7 @@ app.include_router(data_center_router)
 app.include_router(transport_reports_router)
 app.include_router(name_mapping_router)
 app.include_router(auth_router)
+app.include_router(msds_generator_router)
 
 from fastapi import Request
 from fastapi.responses import JSONResponse

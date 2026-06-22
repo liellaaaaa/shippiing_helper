@@ -1,24 +1,11 @@
 <template>
   <div class="field-ref-card">
-    <!-- 文档类型切换 -->
-    <div class="ref-tabs">
-      <button
-        v-for="t in docTypes"
-        :key="t.value"
-        class="ref-tab"
-        :class="{ active: selectedType === t.value }"
-        @click="selectedType = t.value; clearSelection()"
-      >
-        {{ t.label }}
-      </button>
-    </div>
-
     <!-- 搜索框 -->
     <div class="ref-search">
       <input
         v-model="searchQuery"
         class="ref-search-input"
-        :placeholder="selectedType === 'msds' ? '搜索MSDS，如 吸湿排汗' : '搜索运输鉴定报告'"
+        placeholder="搜索运输鉴定报告（品名/报关名）"
         @keyup.enter="doSearch"
       />
       <button class="ref-search-btn" @click="doSearch" :disabled="searching">
@@ -27,182 +14,188 @@
       </button>
     </div>
 
-    <!-- MSDS 搜索结果列表 -->
-    <div v-if="selectedType === 'msds' && results.length" class="ref-results">
+    <!-- 搜索结果列表 -->
+    <div v-if="searchResults.length > 0" class="ref-results">
+      <div class="ref-results-header">搜索结果（{{ searchResults.length }}）</div>
       <div
-        v-for="r in results"
+        v-for="r in searchResults"
         :key="r.id"
         class="ref-result-item"
-        :class="{ selected: selectedId === r.id }"
-        @click="selectResult(r)"
+        :class="{ linked: isLinked(r.id) }"
+        @click="addReport(r)"
+        :title="isLinked(r.id) ? '已关联，可追加' : '点击添加'"
       >
-        <span class="ref-result-name">{{ r.filename }}</span>
+        <div class="ref-result-main">
+          <span class="ref-result-cn">{{ r.product_name_cn || '—' }}</span>
+          <span class="ref-result-en">{{ r.product_name_en || '' }}</span>
+        </div>
+        <div class="ref-result-sub">
+          <span class="ref-result-no">{{ r.report_no }}</span>
+          <span v-if="isLinked(r.id)" class="ref-result-badge">已关联</span>
+        </div>
       </div>
     </div>
 
-    <!-- 运输鉴定报告搜索结果列表 -->
-    <div v-if="selectedType === 'transport' && results.length" class="ref-results">
-      <div
-        v-for="r in results"
-        :key="r.id"
-        class="ref-result-item"
-        :class="{ selected: selectedId === r.id }"
-        @click="selectResult(r)"
-      >
-        <span class="ref-result-name">{{ r.filename }}</span>
-      </div>
-    </div>
-
-    <!-- 无搜索结果显示空状态提示 -->
-    <div v-if="!searching && searchDone && !results.length" class="ref-empty">
+    <div v-if="searchDone && searchResults.length === 0 && searchQuery" class="ref-empty">
       <span>无匹配结果</span>
     </div>
 
-    <!-- 选中后的字段展示区 -->
-    <div v-if="selectedRecord" class="ref-fields">
-      <div class="ref-fields-header">
-        <span>{{ selectedRecord.filename || selectedRecord.product_name_cn }}</span>
-        <button class="ref-copy-all" @click="copyAllFields" title="复制所有字段">📋</button>
+    <!-- 已关联的鉴定报告列表 -->
+    <div v-if="linkedReports.length > 0" class="linked-section">
+      <div class="linked-section-header">
+        <span>已选报告</span>
+        <span class="linked-count">{{ linkedReports.length }}</span>
       </div>
-      <div class="ref-field-list">
-        <div v-for="f in displayFields" :key="f.key" class="ref-field-row">
-          <span class="ref-field-label">{{ f.label }}</span>
-          <span class="ref-field-value" :title="String(f.value)">{{ f.value || '—' }}</span>
-          <button class="ref-field-copy" @click="copy(f.value)" title="复制">
+      <div
+        v-for="(report, idx) in linkedReports"
+        :key="report.link_id"
+        class="linked-report-card"
+      >
+        <div class="linked-report-header">
+          <span class="linked-report-num">Report {{ idx + 1 }}</span>
+          <button class="linked-report-remove" @click="removeReport(idx)" title="移除">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
             </svg>
           </button>
+        </div>
+        <div class="linked-report-fields">
+          <div class="lr-field">
+            <span class="lr-field-label">报告编号</span>
+            <span class="lr-field-value" :title="report.report_no">{{ report.report_no || '—' }}</span>
+            <button class="lr-copy" @click="copy(report.report_no)" title="复制">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+              </svg>
+            </button>
+          </div>
+          <div class="lr-field">
+            <span class="lr-field-label">品名中文</span>
+            <span class="lr-field-value" :title="report.product_name_cn">{{ report.product_name_cn || '—' }}</span>
+            <button class="lr-copy" @click="copy(report.product_name_cn)" title="复制">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+              </svg>
+            </button>
+          </div>
+          <div class="lr-field">
+            <span class="lr-field-label">品名英文</span>
+            <span class="lr-field-value" :title="report.product_name_en">{{ report.product_name_en || '—' }}</span>
+            <button class="lr-copy" @click="copy(report.product_name_en)" title="复制">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+              </svg>
+            </button>
+          </div>
+          <div class="lr-field">
+            <span class="lr-field-label">样品描述(中)</span>
+            <span class="lr-field-value" :title="report.sample_desc_cn">{{ report.sample_desc_cn || '—' }}</span>
+            <button class="lr-copy" @click="copy(report.sample_desc_cn)" title="复制">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+              </svg>
+            </button>
+          </div>
+          <div class="lr-field">
+            <span class="lr-field-label">样品描述(英)</span>
+            <span class="lr-field-value" :title="report.sample_desc_en">{{ report.sample_desc_en || '—' }}</span>
+            <button class="lr-copy" @click="copy(report.sample_desc_en)" title="复制">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
     </div>
 
     <!-- 初始空状态 -->
-    <div v-if="!selectedRecord && !searchDone" class="ref-init">
+    <div v-if="!searchDone && !searchResults.length" class="ref-init">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".3">
         <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
         <polyline points="13 2 13 8 20 8"/>
       </svg>
-      <span>搜索MSDS或运输鉴定报告，提取字段复制到文档</span>
+      <span>搜索运输鉴定报告，提取字段用于制作MSDS</span>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { phase2Api } from '@/api/phase2'
 
-interface MSDSResult {
-  id: number
-  filename: string
-  product_name_cn: string
-  physical_form: string
-  ion_type: string
-  ph: string
-}
-
-interface TransportResult {
+// ─── Types ───────────────────────────────────────────────────────────────────
+interface TransportReportSearchItem {
   id: number
   filename: string
   report_no: string
-  sample_description: string
+  product_name_cn: string
+  product_name_en: string
+  sample_desc_cn: string
+  sample_desc_en: string
 }
 
-interface DisplayField {
-  key: string
-  label: string
-  value: string
+interface LinkedReport {
+  id: number
+  filename: string
+  report_no: string
+  product_name_cn: string
+  product_name_en: string
+  sample_desc_cn: string
+  sample_desc_en: string
 }
 
-const docTypes = [
-  { value: 'msds' as const, label: 'MSDS' },
-  { value: 'transport' as const, label: '运输鉴定报告' },
-]
-
-const selectedType = ref<'msds' | 'transport'>('msds')
+// ─── State ───────────────────────────────────────────────────────────────────
 const searchQuery = ref('')
 const searching = ref(false)
 const searchDone = ref(false)
-const results = ref<(MSDSResult | TransportResult)[]>([])
-const selectedId = ref<number | null>(null)
-const selectedRecord = ref<any | null>(null)
+const searchResults = ref<TransportReportSearchItem[]>([])
+const linkedReports = ref<LinkedReport[]>([])
 
-const displayFields = computed<DisplayField[]>(() => {
-  if (!selectedRecord.value) return []
-  if (selectedType.value === 'msds') {
-    const r = selectedRecord.value as MSDSResult
-    return [
-      { key: 'product_name_cn', label: '产品名称', value: r.product_name_cn || '' },
-      { key: 'physical_form', label: '外观与性状', value: r.physical_form || '' },
-      { key: 'ion_type', label: '离子型', value: r.ion_type || '' },
-      { key: 'ph', label: 'pH值', value: r.ph || '' },
-    ]
-  } else {
-    const r = selectedRecord.value as TransportResult
-    return [
-      { key: 'report_no', label: '报告编号', value: r.report_no || '' },
-      { key: 'sample_description', label: '样品名称', value: r.sample_description || '' },
-    ]
-  }
-})
-
+// ─── Search ───────────────────────────────────────────────────────────────────
 async function doSearch() {
   if (!searchQuery.value.trim()) return
   searching.value = true
   searchDone.value = false
-  results.value = []
-  selectedRecord.value = null
-  selectedId.value = null
+  searchResults.value = []
   try {
-    if (selectedType.value === 'msds') {
-      const res = await phase2Api.listMsds({ search: searchQuery.value, pageSize: 20 })
-      results.value = res.data.items || []
-    } else {
-      const res = await phase2Api.searchTransportReports(searchQuery.value)
-      results.value = res.data.items || []
-    }
+    const res = await phase2Api.searchTransportReportsByName(searchQuery.value)
+    searchResults.value = res.data?.items || []
   } catch {
-    results.value = []
+    searchResults.value = []
   } finally {
     searching.value = false
     searchDone.value = true
   }
 }
 
-async function selectResult(r: MSDSResult | TransportResult) {
-  selectedId.value = r.id
-  selectedRecord.value = r
+// ─── Add / Remove ─────────────────────────────────────────────────────────────
+function isLinked(reportId: number): boolean {
+  return linkedReports.value.some(r => r.id === reportId)
 }
 
-function clearSelection() {
-  results.value = []
-  selectedRecord.value = null
-  selectedId.value = null
+function addReport(report: TransportReportSearchItem) {
+  if (isLinked(report.id)) {
+    ElMessage.info('已添加，可继续追加其他报告')
+    return
+  }
+  linkedReports.value.push({ ...report })
   searchQuery.value = ''
+  searchResults.value = []
   searchDone.value = false
 }
 
+function removeReport(index: number) {
+  linkedReports.value.splice(index, 1)
+}
+
+// ─── Copy ────────────────────────────────────────────────────────────────────
 async function copy(text: string) {
   if (!text) return
   try {
     await navigator.clipboard.writeText(text)
     ElMessage.success('已复制')
-  } catch {
-    ElMessage.warning('复制失败')
-  }
-}
-
-async function copyAllFields() {
-  const text = displayFields.value
-    .map(f => `${f.label}: ${f.value}`)
-    .filter(f => f.includes(': '))
-    .join('\n')
-  if (!text) return
-  try {
-    await navigator.clipboard.writeText(text)
-    ElMessage.success('已复制所有字段')
   } catch {
     ElMessage.warning('复制失败')
   }
@@ -214,41 +207,67 @@ async function copyAllFields() {
   display: flex;
   flex-direction: column;
   height: 100%;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
-/* ── Tabs ─────────────────────────────────────────────── */
-.ref-tabs {
+/* ── Current Item ─────────────────────────────────────────── */
+.current-item {
   display: flex;
-  gap: 0;
-  border-bottom: 1px solid var(--el-border-color-light, #e4e7ed);
-  padding: 0 12px;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--el-fill-color-lighter);
+  border-bottom: 1px solid var(--el-border-color-extra-light);
   flex-shrink: 0;
 }
-.ref-tab {
-  padding: 8px 14px;
-  border: none;
-  background: transparent;
-  font-size: 12px;
-  color: var(--el-text-color-secondary, #909399);
+.current-item--active {
+  background: var(--el-color-primary-light-9);
+  border-bottom-color: var(--el-color-primary-light-7);
+}
+.current-item--empty {
+  background: #fff8e6;
+  border-bottom-color: #ffe6b0;
   cursor: pointer;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  transition: color 0.15s, border-color 0.15s;
+  transition: background 0.15s;
 }
-.ref-tab:hover { color: var(--el-color-primary, #409eff); }
-.ref-tab.active {
-  color: var(--el-color-primary, #409eff);
-  border-bottom-color: var(--el-color-primary, #409eff);
+.current-item--empty:hover { background: #fff3cc; }
+.current-item-label {
+  font-size: 10px;
+  color: var(--el-text-color-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.current-item-name {
+  font-size: 13px;
   font-weight: 600;
+  color: var(--el-text-color-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+.current-item-code {
+  font-size: 10px;
+  color: var(--el-color-info-light-3);
+  font-family: 'JetBrains Mono', monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.current-item-hint {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--el-color-warning, #e6a23c);
+  white-space: nowrap;
+}
+.muted { color: var(--el-text-color-placeholder); font-weight: 400; }
 
 /* ── Search ─────────────────────────────────────────────── */
 .ref-search {
   display: flex;
   gap: 6px;
   padding: 8px 12px;
-  border-bottom: 1px solid var(--el-border-color-extra-light, #f2f6fc);
+  border-bottom: 1px solid var(--el-border-color-extra-light);
   flex-shrink: 0;
 }
 .ref-search-input {
@@ -278,131 +297,194 @@ async function copyAllFields() {
 .ref-search-btn:hover:not(:disabled) { opacity: 0.75; }
 .ref-search-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-/* ── Results list ───────────────────────────────────────────── */
+/* ── Search Results ─────────────────────────────────────── */
 .ref-results {
   flex-shrink: 0;
-  max-height: 120px;
+  max-height: 140px;
   overflow-y: auto;
-  border-bottom: 1px solid var(--el-border-color-extra-light, #f2f6fc);
+  border-bottom: 1px solid var(--el-border-color-extra-light);
+}
+.ref-results-header {
+  font-size: 10px;
+  color: var(--el-text-color-secondary);
+  padding: 4px 12px;
+  background: var(--el-fill-color-light);
+  border-bottom: 1px solid var(--el-border-color-extra-light);
 }
 .ref-result-item {
-  display: flex;
-  align-items: center;
   padding: 6px 12px;
   cursor: pointer;
-  border-bottom: 1px solid var(--el-border-color-extra-light, #f2f6fc);
+  border-bottom: 1px solid var(--el-border-color-extra-light);
   transition: background 0.12s;
-  gap: 6px;
 }
 .ref-result-item:last-child { border-bottom: none; }
 .ref-result-item:hover { background: var(--el-fill-color-light, #f5f7fa); }
-.ref-result-item.selected { background: var(--el-color-primary-light-9, #ecf5ff); }
-.ref-result-name {
-  font-size: 11px;
-  font-family: 'JetBrains Mono', monospace;
-  color: var(--el-text-color-primary, #303133);
+.ref-result-item.linked { opacity: 0.65; }
+.ref-result-main {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  margin-bottom: 2px;
+}
+.ref-result-cn {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--el-text-color-primary);
+}
+.ref-result-en {
+  font-size: 10px;
+  color: var(--el-text-color-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.ref-result-sub {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.ref-result-no {
+  font-size: 10px;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--el-color-info);
+}
+.ref-result-badge {
+  font-size: 9px;
+  background: var(--el-color-success-light-9, #e8f5e9);
+  color: var(--el-color-success, #67c23a);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
 
-/* ── Empty / Init ───────────────────────────────────────── */
-.ref-empty, .ref-init {
+/* ── Empty ─────────────────────────────────────────────── */
+.ref-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  color: var(--el-text-color-placeholder, #c0c4cc);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+/* ── Linked Reports ──────────────────────────────────────── */
+.linked-section {
+  flex: 1;
+  overflow-y: auto;
+}
+.linked-section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--el-fill-color-lighter);
+  border-bottom: 1px solid var(--el-border-color-extra-light);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--el-text-color-secondary);
+  flex-shrink: 0;
+}
+.linked-count {
+  background: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 10px;
+}
+
+.linked-report-card {
+  border-bottom: 1px solid var(--el-border-color-extra-light);
+}
+.linked-report-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background: var(--el-fill-color-light);
+  border-bottom: 1px solid var(--el-border-color-extra-light);
+}
+.linked-report-num {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--el-color-primary);
+}
+.linked-report-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  color: var(--el-text-color-placeholder);
+  cursor: pointer;
+  border-radius: 3px;
+  transition: color 0.15s, background 0.15s;
+}
+.linked-report-remove:hover {
+  color: var(--el-color-danger);
+  background: var(--el-color-danger-light-9);
+}
+
+.linked-report-fields {
+  display: flex;
+  flex-direction: column;
+}
+.lr-field {
+  display: grid;
+  grid-template-columns: 80px 1fr 22px;
+  align-items: center;
+  gap: 4px;
+  padding: 0 12px;
+  height: 30px;
+  border-bottom: 1px solid var(--el-border-color-extra-light);
+}
+.lr-field:last-child { border-bottom: none; }
+.lr-field-label {
+  font-size: 10px;
+  color: var(--el-text-color-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lr-field-value {
+  font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--el-text-color-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lr-copy {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  color: var(--el-text-color-placeholder);
+  cursor: pointer;
+  border-radius: 3px;
+  transition: color 0.15s, background 0.15s;
+}
+.lr-copy:hover {
+  color: var(--el-color-primary);
+  background: var(--el-color-primary-light-9);
+}
+
+/* ── Init ───────────────────────────────────────────────── */
+.ref-init {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 16px 12px;
+  padding: 20px 12px;
   color: var(--el-text-color-placeholder, #c0c4cc);
   font-size: 11px;
   text-align: center;
   flex-shrink: 0;
 }
 .ref-init span { max-width: 160px; line-height: 1.4; }
-
-/* ── Fields display ───────────────────────────────────────── */
-.ref-fields {
-  flex: 1;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-}
-.ref-fields-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 6px 12px;
-  background: var(--el-fill-color-lighter, #f5f7fa);
-  border-bottom: 1px solid var(--el-border-color-extra-light, #f2f6fc);
-  font-size: 11px;
-  color: var(--el-text-color-secondary, #909399);
-  font-weight: 500;
-  gap: 8px;
-  flex-shrink: 0;
-}
-.ref-fields-header span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.ref-copy-all {
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  font-size: 12px;
-  flex-shrink: 0;
-  padding: 2px 4px;
-  border-radius: 3px;
-  transition: background 0.15s;
-}
-.ref-copy-all:hover { background: var(--el-fill-color, #f5f7fa); }
-
-.ref-field-list {
-  display: flex;
-  flex-direction: column;
-}
-.ref-field-row {
-  display: grid;
-  grid-template-columns: 80px 1fr 26px;
-  align-items: center;
-  gap: 6px;
-  padding: 0 12px;
-  height: 34px;
-  border-bottom: 1px solid var(--el-border-color-extra-light, #f2f6fc);
-}
-.ref-field-row:last-child { border-bottom: none; }
-.ref-field-label {
-  font-size: 11px;
-  color: var(--el-text-color-secondary, #909399);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.ref-field-value {
-  font-size: 12px;
-  font-family: 'JetBrains Mono', monospace;
-  color: var(--el-text-color-primary, #303133);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.ref-field-copy {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border: none;
-  background: transparent;
-  color: var(--el-text-color-placeholder, #c0c4cc);
-  cursor: pointer;
-  border-radius: 3px;
-  flex-shrink: 0;
-  transition: color 0.15s, background 0.15s;
-}
-.ref-field-copy:hover {
-  color: var(--el-color-primary, #409eff);
-  background: var(--el-color-primary-light-9, #ecf5ff);
-}
 </style>

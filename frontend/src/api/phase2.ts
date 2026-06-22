@@ -92,6 +92,20 @@ export const phase2Api = {
   searchTransportReports(query: string) {
     return apiClient.get('/transport-reports/search', { params: { q: query } })
   },
+  searchTransportReportsByName(query: string) {
+    return apiClient.get('/transport-reports/search-by-name', { params: { q: query } })
+  },
+  getLinkedReports(orderItemId: number) {
+    return apiClient.get(`/transport-reports/linked/${orderItemId}`)
+  },
+  linkTransportReport(orderItemId: number, transportReportId: number) {
+    return apiClient.post('/transport-reports/link', null, {
+      params: { order_item_id: orderItemId, transport_report_id: transportReportId },
+    })
+  },
+  unlinkTransportReport(linkId: number) {
+    return apiClient.delete(`/transport-reports/unlink/${linkId}`)
+  },
   getTransportReportFileUrl(filename: string) {
     return `/transport-reports/files/${encodeURIComponent(filename)}`
   },

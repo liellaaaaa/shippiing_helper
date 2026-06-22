@@ -76,7 +76,7 @@
           </svg>
           LOI保函
         </el-button>
-        <el-button size="small" @click="showMsdsDialog = true; loadMsdsList()">
+        <el-button size="small" @click="showMsdsDialog = true">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px">
             <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M8 13h8M8 17h8M8 9h2"/>
           </svg>
@@ -182,8 +182,8 @@
               <span v-if="selectedOrderId && currentOrderInfo.fits_20gp" class="info-value" :class="currentOrderInfo.fits_20gp === '适合' ? 'text-success' : 'text-danger'">{{ currentOrderInfo.fits_20gp }}</span>
               <span v-else class="info-value muted">—</span>
             </div>
-            <!-- 一单多品明细列表 -->
-            <div v-if="currentOrderItems.length > 1" class="product-list-section">
+            <!-- 产品明细列表 -->
+            <div v-if="currentOrderItems.length >= 1" class="product-list-section">
               <el-collapse>
                 <el-collapse-item title="产品明细" name="products">
                   <el-table :data="currentOrderItems" size="small" stripe>
@@ -200,7 +200,7 @@
           </div>
         </el-card>
 
-        <!-- Field Reference Card: MSDS + Transport Report -->
+        <!-- Field Reference Card: 运输鉴定报告 -->
         <el-card class="info-card ref-card" shadow="never" style="margin-top: 12px; flex: 1; display: flex; flex-direction: column; overflow: hidden;">
           <template #header>
             <div class="card-header">
@@ -208,7 +208,9 @@
             </div>
           </template>
           <div style="flex: 1; overflow: hidden; display: flex; flex-direction: column;">
-            <FieldReferenceCard style="flex: 1; overflow: hidden;" />
+            <FieldReferenceCard
+              style="flex: 1; overflow: hidden;"
+            />
           </div>
         </el-card>
       </aside>
@@ -251,44 +253,8 @@
       @confirm="onBookingConfirm"
     />
 
-    <!-- ── MSDS Dialog ──────────────────────────── -->
-    <el-dialog v-model="showMsdsDialog" title="选择 MSDS 文件" width="500px" :append-to-body="true" class="msds-dialog">
-      <!-- 搜索栏 -->
-      <div class="msds-search-row">
-        <el-input v-model="msdsSearchQuery" placeholder="搜索 MSDS 文件名..." size="default" clearable @keyup.enter="loadMsdsList">
-          <template #append>
-            <el-button @click="loadMsdsList">搜索</el-button>
-          </template>
-        </el-input>
-      </div>
-      <!-- 文件列表 -->
-      <div class="msds-file-list" v-loading="msdsLoading">
-        <div v-if="!msdsLoading && msdsFileList.length === 0" class="msds-empty">
-          <span v-if="msdsSearchDone">无匹配文件</span>
-          <span v-else>加载中...</span>
-        </div>
-        <div
-          v-for="f in msdsFileList"
-          :key="f.id"
-          class="msds-file-item"
-          :class="{ selected: selectedMsdsId === f.id }"
-          @click="selectedMsdsId = f.id"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;color:#409eff">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
-          </svg>
-          <div class="msds-file-info">
-            <span class="msds-file-name">{{ f.filename }}</span>
-            <span class="msds-file-product">{{ f.product_name_cn || '—' }}</span>
-          </div>
-          <span class="msds-file-badge" :class="f.filename.split('.').pop()">{{ f.filename.split('.').pop()?.toUpperCase() }}</span>
-        </div>
-      </div>
-      <template #footer>
-        <el-button @click="showMsdsDialog = false">取消</el-button>
-        <el-button type="primary" @click="openMsdsFile" :disabled="!selectedMsdsId || msdsOpening">打开文档</el-button>
-      </template>
-    </el-dialog>
+    <!-- ── MSDS Generator Dialog ──────────────────── -->
+    <MSDSGeneratorDialog v-model="showMsdsDialog" @generated="onMsdsGenerated" />
 
     <MyDocumentsDrawer v-model="showMyDocuments" @open-doc="onOpenMyDoc" />
 
@@ -301,6 +267,7 @@ import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import DocumentEditor from './components/DocumentEditor.vue'
 import BookingConfirmDialog from './components/BookingConfirmDialog.vue'
+import MSDSGeneratorDialog from './components/MSDSGeneratorDialog.vue'
 import MyDocumentsDrawer from './components/MyDocumentsDrawer.vue'
 import FieldReferenceCard from './components/FieldReferenceCard.vue'
 import { ArrowDown } from '@element-plus/icons-vue'
@@ -342,12 +309,6 @@ function startResize(e: MouseEvent) {
   document.addEventListener('mouseup', onMouseUp)
 }
 const showMsdsDialog = ref(false)
-const msdsSearchQuery = ref('')
-const msdsFileList = ref<any[]>([])
-const msdsLoading = ref(false)
-const msdsSearchDone = ref(false)
-const selectedMsdsId = ref<number | null>(null)
-const msdsOpening = ref(false)
 const showMyDocuments = ref(false)
 const showBookingDialog = ref(false)
 const selectedBookingTemplate = ref<'xls' | 'xlsx'>('xlsx')
@@ -462,38 +423,9 @@ async function onBookingConfirm(fields: import('./components/BookingConfirmDialo
   }
 }
 
-async function loadMsdsList() {
-  msdsLoading.value = true
-  msdsSearchDone.value = false
-  msdsFileList.value = []
-  try {
-    const res = await phase2Api.listMsds({ search: msdsSearchQuery.value, pageSize: 100 })
-    msdsFileList.value = res.data.items || []
-  } catch {
-    msdsFileList.value = []
-  } finally {
-    msdsLoading.value = false
-    msdsSearchDone.value = true
-  }
-}
-
-async function openMsdsFile() {
-  if (!selectedMsdsId.value) return
-  msdsOpening.value = true
-  showMsdsDialog.value = false
-  try {
-    const res = await phase2Api.loadMsds(selectedMsdsId.value)
-    if (res.data.error) {
-      ElMessage.error('加载失败: ' + res.data.error)
-      return
-    }
-    currentDocKey.value = res.data.documentKey || res.data.docKey
-    currentConfig.value = res.data
-  } catch (e: any) {
-    ElMessage.error('MSDS加载失败: ' + (e.message || ''))
-  } finally {
-    msdsOpening.value = false
-  }
+function onMsdsGenerated(config: any) {
+  currentDocKey.value = config.documentKey || config.docKey
+  currentConfig.value = config
 }
 
 async function openBlankTemplate(type: 'booking' | 'loi' | 'msds') {

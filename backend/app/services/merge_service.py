@@ -158,6 +158,7 @@ class MergeService:
                     product_en=r.product_en,
                 )
                 comparison_items.append(ComparisonItem(
+                    id=r.id,
                     internal_code=r.internal_code,
                     product_cn=r.product_cn,
                     order=order_data,
@@ -223,6 +224,7 @@ class MergeService:
                 )
             diff = self._compute_diff(item, pi_item)
             comparison_items.append(ComparisonItem(
+                id=item.id,
                 internal_code=item.internal_code,
                 product_cn=item.product_cn,
                 order=order_data,

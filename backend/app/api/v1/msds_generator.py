@@ -40,6 +40,8 @@ class GenerateRequest(BaseModel):
     product_name: Optional[str] = None
     composition: list[CompositionItem] = []
     physicochemical: Optional[PhysicochemicalEdit] = None
+    msds_number: Optional[str] = None
+    revision_date: Optional[str] = None
 
 
 class ParseRequest(BaseModel):
@@ -128,6 +130,8 @@ async def generate_msds(request: GenerateRequest):
             for item in request.composition
         ],
         "physicochemical": {},
+        "msds_number": request.msds_number or "",
+        "revision_date": request.revision_date or "",
     }
 
     # 处理理化特性

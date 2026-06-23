@@ -50,6 +50,19 @@
       <div class="form-section">
         <div class="form-section-title">产品信息</div>
         <el-form label-width="100px" label-position="left">
+          <el-form-item label="MSDS编号">
+            <el-input v-model="formData.msds_number" placeholder="如 HHJS-2615" />
+          </el-form-item>
+          <el-form-item label="修订时间">
+            <el-date-picker
+              v-model="formData.revision_date"
+              type="date"
+              placeholder="选择日期"
+              format="YYYY/MM/DD"
+              value-format="YYYY/MM/DD"
+              style="width: 100%"
+            />
+          </el-form-item>
           <el-form-item label="产品名称">
             <el-input v-model="formData.productName" placeholder="产品名称" />
           </el-form-item>
@@ -176,6 +189,8 @@ const msdsFiles = ref<MSDSFile[]>([])
 const selectedFile = ref<MSDSFile | null>(null)
 
 const formData = ref({
+  msds_number: '',
+  revision_date: '',
   productName: '',
   appearance: '',
   appearanceEn: '',
@@ -204,6 +219,8 @@ watch(() => props.modelValue, (v) => {
     selectedFile.value = null
     compositionRows.value = []
     formData.value = {
+      msds_number: '',
+      revision_date: '',
       productName: '',
       appearance: '',
       appearanceEn: '',
@@ -260,6 +277,8 @@ async function onSelectFile(file: MSDSFile) {
     }
 
     const data = res.data
+    formData.value.msds_number = data.msds_number || ''
+    formData.value.revision_date = data.revision_date || ''
     formData.value.productName = data.product_name || ''
     compositionRows.value = data.composition || []
 
@@ -302,6 +321,8 @@ async function onGenerate() {
       product_name: formData.value.productName,
       composition: compositionRows.value,
       physicochemical: formData.value.physicochemical,
+      msds_number: formData.value.msds_number,
+      revision_date: formData.value.revision_date,
     }
     const res = await msdsGeneratorApi.generate(request)
     emit('generated', res.data)

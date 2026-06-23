@@ -57,6 +57,22 @@ class MSDSGeneratorService:
                 for item in data.get("mappings", []):
                     self._products_name_map[item["cn"]] = item["en"]
 
+    def _parse_header(self, doc: Document) -> dict:
+        """从文档页眉提取 MSDS编号 和 修订时间"""
+        result = {"msds_number": "", "revision_date": ""}
+        for section in doc.sections:
+            for para in section.header.paragraphs:
+                text = para.text
+                if "MSDS编号：" in text:
+                    m = re.search(r'MSDS编号[：:]\s*(\S+)', text)
+                    if m:
+                        result["msds_number"] = m.group(1)
+                # 修订时间后面紧跟日期 YYYY/MM/DD
+                m = re.search(r'(\d{4}/\d{2}/\d{2})', text)
+                if m:
+                    result["revision_date"] = m.group(1)
+        return result
+
     def parse_msds_file(self, file_path: str) -> dict:
         """
         从旧 MSDS 文件解析出产品信息、成分、理化特性。
@@ -64,6 +80,9 @@ class MSDSGeneratorService:
         """
         # 直接用 Document 解析
         doc = Document(file_path)
+
+        # 0. 提取页眉（MSDS编号 + 修订时间）
+        header_info = self._parse_header(doc)
 
         # 1. 提取产品名称（从段落中找"产品名称："）
         product_name = ""
@@ -90,7 +109,6 @@ class MSDSGeneratorService:
 
         # 3. 提取理化特性（从段落中解析 key-value）
         physicochemical = {}
-        import re
         for para in doc.paragraphs:
             text = para.text
             if "外观与性状：" in text:
@@ -118,6 +136,8 @@ class MSDSGeneratorService:
             "product_name": product_name,
             "composition": composition,
             "physicochemical": physicochemical,
+            "msds_number": header_info["msds_number"],
+            "revision_date": header_info["revision_date"],
         }
 
     def search_msds(self, keyword: str) -> list[dict]:
@@ -308,6 +328,10 @@ class MSDSGeneratorService:
         if edits.get("physicochemical"):
             self._update_physicochemical(doc, edits["physicochemical"])
 
+        # 4. 修改页眉（MSDS编号 + 修订时间）
+        if edits.get("msds_number") or edits.get("revision_date"):
+            self._update_header(doc, edits.get("msds_number", ""), edits.get("revision_date", ""))
+
         # 保存到 BytesIO
         buf = BytesIO()
         doc.save(buf)
@@ -436,6 +460,56 @@ class MSDSGeneratorService:
                             new_run.font.name = sample_fonts[col_idx]["name"]
                         if col_idx < len(sample_fonts) and sample_fonts[col_idx]["size"]:
                             new_run.font.size = sample_fonts[col_idx]["size"]
+
+    def _update_header(self, doc: Document, msds_number: str, revision_date: str):
+        """更新文档页眉中的 MSDS编号 和 修订时间"""
+        for section in doc.sections:
+            for para in section.header.paragraphs:
+                text = para.text
+                new_text = text
+
+                # 替换 MSDS编号
+                if msds_number and "MSDS编号：" in text:
+                    pattern = r'(MSDS编号[：:]\s*)(\S+)'
+                    replacement = rf'\g<1>{msds_number}'
+                    new_text = re.sub(pattern, replacement, new_text)
+
+                # 替换修订时间：找到日期模式并替换
+                if revision_date:
+                    m = re.search(r'(\d{4}/\d{2}/\d{2})', new_text)
+                    if m:
+                        # 将整段替换为包含新日期的完整页眉文本
+                        # 格式：MSDS编号：HHJS-2615   修订时间：2026/03/17
+                        new_text = re.sub(r'(\d{4}/\d{2}/\d{2})', revision_date, new_text, count=1)
+
+                # 只有文本变化时才更新
+                if new_text != text:
+                    # 保存原始段落格式
+                    pf = para.paragraph_format
+                    saved_line_spacing = pf.line_spacing
+                    saved_first_indent = pf.first_line_indent
+                    saved_left_indent = pf.left_indent
+
+                    # 保存原始 run 的字体属性
+                    first_run = para.runs[0] if para.runs else None
+                    orig_font_name = first_run.font.name if first_run else None
+                    orig_font_size = first_run.font.size if first_run else None
+
+                    # 清空所有 run 并重建
+                    for run in para.runs:
+                        run.text = ""
+                    para.clear()
+
+                    new_run = para.add_run(new_text)
+                    if orig_font_name:
+                        new_run.font.name = orig_font_name
+                    elif orig_font_size:
+                        new_run.font.size = orig_font_size
+
+                    # 恢复段落格式
+                    pf.line_spacing = saved_line_spacing
+                    pf.first_line_indent = saved_first_indent
+                    pf.left_indent = saved_left_indent
 
     def _update_physicochemical(self, doc: Document, physicochemical: dict):
         """

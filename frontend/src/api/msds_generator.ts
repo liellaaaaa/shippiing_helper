@@ -34,12 +34,16 @@ export interface GenerateRequest {
   product_name?: string
   composition: CompositionItem[]
   physicochemical?: PhysicochemicalEdit
+  msds_number?: string
+  revision_date?: string
 }
 
 export interface MSDSParseResult {
   product_name: string
   composition: CompositionItem[]
   physicochemical: Physicochemical
+  msds_number: string
+  revision_date: string
 }
 
 export const msdsGeneratorApi = {

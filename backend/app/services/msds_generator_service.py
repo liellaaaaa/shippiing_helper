@@ -64,9 +64,15 @@ class MSDSGeneratorService:
             for para in section.header.paragraphs:
                 text = para.text
                 if "MSDS编号：" in text:
-                    m = re.search(r'MSDS编号[：:]\s*(\S+)', text)
-                    if m:
-                        result["msds_number"] = m.group(1)
+                    # 按"修定时间"分割，取前半部分，再按"MSDS编号："分割
+                    if "修定时间" in text:
+                        msds_part = text.split("修定时间")[0]
+                    elif "修订时间" in text:
+                        msds_part = text.split("修订时间")[0]
+                    else:
+                        msds_part = text
+                    if "MSDS编号：" in msds_part:
+                        result["msds_number"] = msds_part.split("MSDS编号：")[-1].strip()
                 # 修订时间后面紧跟日期 YYYY/MM/DD
                 m = re.search(r'(\d{4}/\d{2}/\d{2})', text)
                 if m:

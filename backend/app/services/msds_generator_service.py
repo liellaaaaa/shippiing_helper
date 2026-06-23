@@ -433,9 +433,41 @@ class MSDSGeneratorService:
         for i, item in enumerate(composition):
             row_idx = i + 1  # 跳过表头
             if row_idx >= len(comp_table.rows):
-                break
-
-            row = comp_table.rows[row_idx]
+                # 现有行不够，新增一行（复制最后一行的结构）
+                new_row = comp_table.add_row()
+                # 复制最后一行的单元格样式
+                if comp_table.rows and len(comp_table.rows) > 1:
+                    last_row = comp_table.rows[-2]  # 最后一 个有数据的行
+                    for col_idx in range(min(len(new_row.cells), len(last_row.cells))):
+                        src_cell = last_row.cells[col_idx]
+                        dst_cell = new_row.cells[col_idx]
+                        # 复制段落格式（paragraph_format 是只读属性，只能逐属性复制）
+                        if src_cell.paragraphs and dst_cell.paragraphs:
+                            src_para = src_cell.paragraphs[0]
+                            dst_para = dst_cell.paragraphs[0] if dst_cell.paragraphs else dst_cell.add_paragraph()
+                            src_fmt = src_para.paragraph_format
+                            dst_fmt = dst_para.paragraph_format
+                            # 逐属性复制（ParagraphFormat 的属性都是可写的）
+                            dst_fmt.alignment = src_fmt.alignment
+                            dst_fmt.line_spacing = src_fmt.line_spacing
+                            dst_fmt.line_spacing_rule = src_fmt.line_spacing_rule
+                            dst_fmt.space_before = src_fmt.space_before
+                            dst_fmt.space_after = src_fmt.space_after
+                            dst_fmt.left_indent = src_fmt.left_indent
+                            dst_fmt.right_indent = src_fmt.right_indent
+                            dst_fmt.first_line_indent = src_fmt.first_line_indent
+                            # 复制 run 样式（如果存在）
+                            if src_para.runs:
+                                src_run = src_para.runs[0]
+                                dst_run = dst_para.add_run("")
+                                dst_run.font.name = src_run.font.name
+                                dst_run.font.size = src_run.font.size
+                                dst_run.font.bold = src_run.font.bold
+                                if src_run.font.color.rgb:
+                                    dst_run.font.color.rgb = src_run.font.color.rgb
+                row = new_row
+            else:
+                row = comp_table.rows[row_idx]
             if len(row.cells) >= 3:
                 new_values = [
                     item.get("component_cn", ""),

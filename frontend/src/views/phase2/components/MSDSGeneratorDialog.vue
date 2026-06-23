@@ -100,7 +100,23 @@
               <el-tag v-else type="warning" size="small">否</el-tag>
             </template>
           </el-table-column>
+          <el-table-column label="操作" width="60" fixed="right">
+            <template #default="{ row, $index }">
+              <el-button
+                type="danger"
+                size="small"
+                link
+                :disabled="compositionRows.length <= 1"
+                @click="onDeleteCompositionRow($index)"
+              >
+                删除
+              </el-button>
+            </template>
+          </el-table-column>
         </el-table>
+        <div style="margin-top: 8px">
+          <el-button size="small" @click="onAddCompositionRow">+ 添加一行</el-button>
+        </div>
         <div class="table-tip">已核对的成分表示在对照表中找到匹配</div>
       </div>
 
@@ -299,6 +315,19 @@ async function onSelectFile(file: MSDSFile) {
   } finally {
     loading.value = false
   }
+}
+
+function onAddCompositionRow() {
+  compositionRows.value.push({
+    component_cn: '',
+    cas: '',
+    percentage: '',
+    verified: false,
+  })
+}
+
+function onDeleteCompositionRow(index: number) {
+  compositionRows.value.splice(index, 1)
 }
 
 function onBack() {

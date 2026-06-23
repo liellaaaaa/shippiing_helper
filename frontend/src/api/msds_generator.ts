@@ -9,6 +9,7 @@ export interface CompositionItem {
   component_cn: string
   cas: string
   percentage: string
+  verified?: boolean
 }
 
 export interface Physicochemical {

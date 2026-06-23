@@ -474,18 +474,35 @@ class MSDSGeneratorService:
                 text = para.text
                 new_text = text
 
-                # 替换 MSDS编号
+                # 替换 MSDS编号（用 split 避免正则贪婪匹配后面的"修订时间"文字）
                 if msds_number and "MSDS编号：" in text:
-                    pattern = r'(MSDS编号[：:]\s*)(\S+)'
-                    replacement = rf'\g<1>{msds_number}'
-                    new_text = re.sub(pattern, replacement, new_text)
+                    # 找到"修订时间"或"修定时间"的位置
+                    marker_name = ""
+                    marker_pos = -1
+                    for m_name in ["修定时间", "修订时间", "修订日期"]:
+                        pos = text.find(m_name)
+                        if pos >= 0:
+                            marker_pos = pos
+                            marker_name = m_name
+                            break
+                    if marker_pos > 0:
+                        # msds_prefix = "MSDS编号："（到冒号之后）
+                        msds_prefix = text.split("MSDS编号：")[0] + "MSDS编号："
+                        # 提取原始日期
+                        m = re.search(r'(\d{4}/\d{2}/\d{2})', text)
+                        orig_date = m.group(1) if m else ""
+                        # 用新编号 + 日期重建
+                        date_to_use = revision_date if revision_date else orig_date
+                        new_text = f"{msds_prefix}{msds_number}   {marker_name}：{date_to_use}"
+                    else:
+                        # 没有找到时间标记，直接替换MSDS编号部分
+                        msds_prefix = text.split("MSDS编号：")[0] + "MSDS编号："
+                        new_text = msds_prefix + msds_number
 
-                # 替换修订时间：找到日期模式并替换
+                # 替换修订时间（当 revision_date 有值时覆盖原有日期）
                 if revision_date:
                     m = re.search(r'(\d{4}/\d{2}/\d{2})', new_text)
                     if m:
-                        # 将整段替换为包含新日期的完整页眉文本
-                        # 格式：MSDS编号：HHJS-2615   修订时间：2026/03/17
                         new_text = re.sub(r'(\d{4}/\d{2}/\d{2})', revision_date, new_text, count=1)
 
                 # 只有文本变化时才更新

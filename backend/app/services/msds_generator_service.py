@@ -338,6 +338,10 @@ class MSDSGeneratorService:
         if edits.get("msds_number") or edits.get("revision_date"):
             self._update_header(doc, edits.get("msds_number", ""), edits.get("revision_date", ""))
 
+        # 5. 更新第16条"其他资讯"中的版次和更新日期
+        if edits.get("revision_date"):
+            self._update_section16(doc, edits["revision_date"])
+
         # 保存到 BytesIO
         buf = BytesIO()
         doc.save(buf)
@@ -533,6 +537,64 @@ class MSDSGeneratorService:
                     pf.line_spacing = saved_line_spacing
                     pf.first_line_indent = saved_first_indent
                     pf.left_indent = saved_left_indent
+
+    def _update_section16(self, doc: Document, revision_date: str):
+        """
+        更新第16条"其他资讯"中的版次和更新日期。
+        revision_date 格式: YYYY/MM/DD
+        - 版次: YYYY-MM（如 2026-05）
+        - 更新日期: YYYY年M月（如 2026年5月）
+        """
+        # 解析日期
+        parts = revision_date.split("/")
+        if len(parts) < 2:
+            return
+        year = parts[0]
+        month = parts[1]
+        # 去掉前导零
+        month_str = str(int(month))
+        banci = f"{year}-{month}"           # 版次: 2026-05
+        gengxin = f"{year}年{month_str}月"  # 更新日期: 2026年5月
+
+        for para in doc.paragraphs:
+            text = para.text
+            if "版次" not in text:
+                continue
+
+            new_text = text
+            # 替换版次: 找到 "版次：" 后的 YYYY-MM
+            m_ban = re.search(r'(版次[：:]\s*)([\d]{4}-[\d]{2})', new_text)
+            if m_ban:
+                new_text = new_text[:m_ban.start()] + m_ban.group(1) + banci + new_text[m_ban.end():]
+
+            # 替换更新日期: 找到 "更新日期：" 后的日期
+            m_geng = re.search(r'(更新日期[：:]\s*)([\d]+年[\d]+月)', new_text)
+            if m_geng:
+                new_text = new_text[:m_geng.start()] + m_geng.group(1) + gengxin + new_text[m_geng.end():]
+
+            if new_text != text:
+                # 保存并恢复段落格式
+                pf = para.paragraph_format
+                saved_line_spacing = pf.line_spacing
+                saved_first_indent = pf.first_line_indent
+                saved_left_indent = pf.left_indent
+                first_run = para.runs[0] if para.runs else None
+                orig_font_name = first_run.font.name if first_run else None
+                orig_font_size = first_run.font.size if first_run else None
+
+                for run in para.runs:
+                    run.text = ""
+                para.clear()
+                new_run = para.add_run(new_text)
+                if orig_font_name:
+                    new_run.font.name = orig_font_name
+                elif orig_font_size:
+                    new_run.font.size = orig_font_size
+
+                pf.line_spacing = saved_line_spacing
+                pf.first_line_indent = saved_first_indent
+                pf.left_indent = saved_left_indent
+            break
 
     def _update_physicochemical(self, doc: Document, physicochemical: dict):
         """

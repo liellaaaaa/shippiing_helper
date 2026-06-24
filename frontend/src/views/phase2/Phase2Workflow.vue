@@ -251,6 +251,7 @@
             :token="currentConfig.token"
             :download-url="currentConfig.downloadUrl"
             :url="currentConfig.url"
+            :callback-url="currentConfig.callbackUrl"
             :doc-type="currentConfig.docType"
             :title="currentConfig.title"
           />

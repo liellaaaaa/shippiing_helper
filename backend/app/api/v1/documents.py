@@ -122,6 +122,7 @@ async def load_msds(msds_id: int):
         callback_base = os.getenv("ONLYOFFICE_CALLBACK_BASE_URL", "http://host.docker.internal:8000")
         return {
             **config,
+            "documentServerUrl": "/documentserver",
             "url": f"{callback_base}/api/v1/onlyoffice/download/{safe_key}",
             "downloadUrl": f"{api_base}/api/v1/onlyoffice/download/{safe_key}",
         }
@@ -176,6 +177,7 @@ async def open_blank_template(template_type: str):
         callback_base = os.getenv("ONLYOFFICE_CALLBACK_BASE_URL", "http://host.docker.internal:8000")
         return {
             **config,
+            "documentServerUrl": "/documentserver",
             "url": f"{callback_base}/api/v1/onlyoffice/download/{safe_key}",
             "downloadUrl": f"{api_base}/api/v1/onlyoffice/download/{safe_key}",
         }
@@ -228,7 +230,6 @@ async def list_my_templates():
             "created_at": d.created_at.isoformat() if d.created_at else None,
             "url": f"{callback_base}/api/v1/onlyoffice/download/{quote(d.doc_key, safe='')}",
             "downloadUrl": f"{api_base}/api/v1/onlyoffice/download/{quote(d.doc_key, safe='')}",
-            "documentServerUrl": os.getenv("DOCUMENT_SERVER_URL", "http://localhost:8080"),
             "docType": "xlsx" if d.doc_type == "booking" else "docx",
         } for d in docs]
     finally:

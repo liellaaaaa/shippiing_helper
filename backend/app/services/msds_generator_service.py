@@ -358,67 +358,86 @@ class MSDSGeneratorService:
         从旧 MSDS 文件解析出产品信息、成分、理化特性。
         直接从文档解析，不查 customs_codes.json。
         """
-        # 直接用 Document 解析
-        doc = Document(file_path)
+        import threading
 
-        # 0. 提取页眉（MSDS编号 + 修订时间）
-        header_info = self._parse_header(doc)
+        # 超时保护：解析文件最多 10 秒，避免卡死
+        class TimeoutError(Exception):
+            pass
 
-        # 1. 提取产品名称（从段落中找"产品名称："）
-        product_name = ""
-        for para in doc.paragraphs:
-            if "产品名称：" in para.text:
-                product_name = para.text.split("产品名称：")[-1].strip()
-                break
+        result = {}
+        error = {}
 
-        # 2. 提取成分表格（直接访问 docx table 对象）
-        composition = []
-        for table in doc.tables:
-            if table.rows:
-                first_row_text = "".join(c.text for c in table.rows[0].cells)
-                # 检查是否是成分表格（表头包含"组分"或"成分"）
-                if "组分" in first_row_text or "成分" in first_row_text:
-                    for row in table.rows[1:]:  # 跳过表头
-                        if len(row.cells) >= 3:
-                            composition.append({
-                                "component_cn": row.cells[0].text.strip(),
-                                "cas": row.cells[1].text.strip(),
-                                "percentage": row.cells[2].text.strip(),
-                            })
-                    break
+        def _parse():
+            try:
+                doc = Document(file_path)
+                # 提取页眉（MSDS编号 + 修订时间）
+                header_info = self._parse_header(doc)
+                # 1. 提取产品名称（从段落中找"产品名称："）
+                product_name = ""
+                for para in doc.paragraphs:
+                    if "产品名称：" in para.text:
+                        product_name = para.text.split("产品名称：")[-1].strip()
+                        break
+                # 2. 提取成分表格
+                composition = []
+                for table in doc.tables:
+                    if table.rows:
+                        first_row_text = "".join(c.text for c in table.rows[0].cells)
+                        if "组分" in first_row_text or "成分" in first_row_text:
+                            for row in table.rows[1:]:
+                                if len(row.cells) >= 3:
+                                    composition.append({
+                                        "component_cn": row.cells[0].text.strip(),
+                                        "cas": row.cells[1].text.strip(),
+                                        "percentage": row.cells[2].text.strip(),
+                                    })
+                            break
+                # 3. 提取理化特性
+                import re
+                physicochemical = {}
+                for para in doc.paragraphs:
+                    text = para.text
+                    if "外观与性状：" in text:
+                        physicochemical["physical_form"] = text.split("外观与性状：")[-1].strip()
+                    elif "离子性：" in text:
+                        physicochemical["ion_type"] = text.split("离子性：")[-1].strip()
+                    elif "离子型：" in text:
+                        physicochemical["ion_type"] = text.split("离子型：")[-1].strip()
+                    elif re.search(r'[pP][Hh][值]?[:：]\s*([\d±.]+)', text):
+                        m = re.search(r'[pP][Hh][值]?[:：]\s*([\d±.]+)', text)
+                        if m:
+                            physicochemical["ph"] = m.group(1)
+                    elif "熔点：" in text:
+                        physicochemical["melting_point"] = text.split("：")[-1].strip()
+                    elif "沸点" in text and "：" in text:
+                        physicochemical["boiling_point"] = text.split("：")[-1].strip()
+                    elif "相对密度：" in text:
+                        physicochemical["density"] = text.split("相对密度：")[-1].strip()
+                    elif "闪点：" in text:
+                        physicochemical["flash_point"] = text.split("闪点：")[-1].strip()
+                    elif "溶解性：" in text:
+                        physicochemical["solubility"] = text.split("溶解性：")[-1].strip()
+                result["data"] = {
+                    "product_name": product_name,
+                    "composition": composition,
+                    "physicochemical": physicochemical,
+                    "msds_number": header_info["msds_number"],
+                    "revision_date": header_info["revision_date"],
+                }
+            except Exception as e:
+                error["e"] = e
 
-        # 3. 提取理化特性（从段落中解析 key-value）
-        physicochemical = {}
-        for para in doc.paragraphs:
-            text = para.text
-            if "外观与性状：" in text:
-                physicochemical["physical_form"] = text.split("外观与性状：")[-1].strip()
-            elif "离子性：" in text:
-                physicochemical["ion_type"] = text.split("离子性：")[-1].strip()
-            elif "离子型：" in text:
-                physicochemical["ion_type"] = text.split("离子型：")[-1].strip()
-            elif re.search(r'[pP][Hh][值]?[:：]\s*([\d±.]+)', text):
-                m = re.search(r'[pP][Hh][值]?[:：]\s*([\d±.]+)', text)
-                if m:
-                    physicochemical["ph"] = m.group(1)
-            elif "熔点：" in text:
-                physicochemical["melting_point"] = text.split("：")[-1].strip()
-            elif "沸点" in text and "：" in text:
-                physicochemical["boiling_point"] = text.split("：")[-1].strip()
-            elif "相对密度：" in text:
-                physicochemical["density"] = text.split("相对密度：")[-1].strip()
-            elif "闪点：" in text:
-                physicochemical["flash_point"] = text.split("闪点：")[-1].strip()
-            elif "溶解性：" in text:
-                physicochemical["solubility"] = text.split("溶解性：")[-1].strip()
-
-        return {
-            "product_name": product_name,
-            "composition": composition,
-            "physicochemical": physicochemical,
-            "msds_number": header_info["msds_number"],
-            "revision_date": header_info["revision_date"],
-        }
+        t = threading.Thread(target=_parse)
+        t.start()
+        t.join(timeout=10)  # 最多等10秒
+        if t.is_alive():
+            # 线程还在，说明超时了
+            raise TimeoutError("解析 MSDS 文件超时（10秒）")
+        if error.get("e"):
+            raise error["e"]
+        if not result:
+            raise RuntimeError("解析失败，未知错误")
+        return result["data"]
 
     def search_msds(self, keyword: str) -> list[dict]:
         """

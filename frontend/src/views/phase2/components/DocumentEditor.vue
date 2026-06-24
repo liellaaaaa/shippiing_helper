@@ -20,7 +20,8 @@ const props = defineProps<{
   docKey: string
   token: string
   downloadUrl: string
-  url?: string       // OnlyOffice 可访问的 URL（host.docker.internal:8000）
+  url?: string       // OnlyOffice 可访问的 URL
+  callbackUrl?: string  // 后端回调地址（OnlyOffice 保存时回调）
   docType?: string  // "cell" | "word" | "slide"
   title?: string    // 文档标题，传给 OnlyOffice 显示
 }>()
@@ -50,8 +51,9 @@ function buildConfig() {
       url: docUrl,
     },
     documentType: dt,
+    token: props.token,
     editorConfig: {
-      callbackUrl: `http://host.docker.internal:8000/api/v1/onlyoffice/callback?doc_key=${props.docKey}`,
+      callbackUrl: props.callbackUrl || `http://host.docker.internal:8000/api/v1/onlyoffice/callback?doc_key=${props.docKey}`,
       mode: 'edit',
       forcesave: true,
     },

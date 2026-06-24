@@ -37,6 +37,7 @@ export interface GenerateRequest {
   physicochemical?: PhysicochemicalEdit
   msds_number?: string
   revision_date?: string
+  language?: 'cn' | 'en'
 }
 
 export interface MSDSParseResult {

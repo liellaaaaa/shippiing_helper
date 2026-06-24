@@ -1288,24 +1288,27 @@ class MSDSGeneratorService:
         for para in doc.paragraphs:
             text = para.text
             new_text = text
-            changed = False
 
-            # 替换 Revision: 后的值（支持多种格式）
-            if "Revision:" in new_text or "Revision No.:" in new_text:
-                # 匹配 Revision: 或 Revision No.: 后面的内容
-                m = re.search(r'(Revision No?\.?:\s*)([\w.,\s/]+?)(?=\s+Update|\s*$)', new_text)
-                if m:
-                    new_text = new_text[:m.start()] + m.group(1) + msds_number + new_text[m.end():]
-                    changed = True
+            # 模板格式: "Revision: JAN.,2026             Update Date:JAN,2026"
+            # 1. 替换 Revision: 后的旧值（如 "JAN.,2026"）
+            if "Revision:" in new_text:
+                rev_label = "Revision: "
+                if rev_label in new_text:
+                    rev_idx = new_text.index(rev_label) + len(rev_label)
+                    next_label_idx = new_text.find("Update Date:", rev_idx)
+                    if next_label_idx >= 0:
+                        old_rev_val = new_text[rev_idx:next_label_idx].strip()
+                        new_text = new_text.replace(rev_label + old_rev_val, rev_label + msds_number, 1)
 
-            # 替换 Update Date: 后的值
-            if "Update Date:" in new_text or "Revision Date:" in new_text:
-                m = re.search(r'(Update Date:|Revision Date:\s*)([\w/.,\s]+?)(?=\s*$)', new_text)
-                if m:
-                    new_text = new_text[:m.start()] + m.group(1) + revision_date + new_text[m.end():]
-                    changed = True
+            # 2. 替换 Update Date: 后的旧值（如 "JAN,2026"）
+            if "Update Date:" in new_text:
+                date_label = "Update Date:"
+                if date_label in new_text:
+                    date_idx = new_text.index(date_label) + len(date_label)
+                    old_date_val = new_text[date_idx:].strip()
+                    new_text = new_text.replace(date_label + old_date_val, date_label + revision_date, 1)
 
-            if changed and new_text != text:
+            if new_text != text:
                 self._replace_para_text(para, new_text)
 
     # ===================== English MSDS Methods (old translate-based) =====================

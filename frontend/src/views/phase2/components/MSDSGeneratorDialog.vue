@@ -1,7 +1,7 @@
 <template>
   <el-dialog
     v-model="visible"
-    title="生成 MSDS"
+    :title="dialogTitle"
     width="700px"
     :append-to-body="true"
     class="msds-generator-dialog"
@@ -42,8 +42,20 @@
 
     <!-- 编辑区域 -->
     <div v-if="selectedFile" class="edit-section">
-      <div class="section-title">
-        {{ selectedFile.name }}
+      <div class="section-title-row">
+        <div class="section-title">{{ selectedFile.name }}</div>
+        <div class="language-toggle">
+          <button
+            class="lang-btn"
+            :class="{ 'lang-btn--active': language === 'cn' }"
+            @click="language = 'cn'"
+          >中文 MSDS</button>
+          <button
+            class="lang-btn"
+            :class="{ 'lang-btn--active': language === 'en' }"
+            @click="language = 'en'"
+          >English MSDS</button>
+        </div>
       </div>
 
       <!-- 产品信息 -->
@@ -173,7 +185,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search, Document } from '@element-plus/icons-vue'
 import { msdsGeneratorApi, type MSDSFile, type CompositionItem } from '@/api/msds_generator'
@@ -203,6 +215,9 @@ const loading = ref(false)
 const searchKeyword = ref('')
 const msdsFiles = ref<MSDSFile[]>([])
 const selectedFile = ref<MSDSFile | null>(null)
+const language = ref<'cn' | 'en'>('cn')
+
+const dialogTitle = computed(() => language.value === 'en' ? 'Generate MSDS (English)' : '生成 MSDS')
 
 const formData = ref({
   msds_number: '',
@@ -251,6 +266,7 @@ watch(() => props.modelValue, (v) => {
         solubility: '',
       },
     }
+    language.value = 'cn'  // 重置语言
   }
 })
 
@@ -352,6 +368,7 @@ async function onGenerate() {
       physicochemical: formData.value.physicochemical,
       msds_number: formData.value.msds_number,
       revision_date: formData.value.revision_date,
+      language: language.value,
     }
     const res = await msdsGeneratorApi.generate(request)
     emit('generated', res.data)
@@ -365,6 +382,33 @@ async function onGenerate() {
 </script>
 
 <style scoped>
+.section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.language-toggle {
+  display: flex;
+  gap: 4px;
+}
+.lang-btn {
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--el-border-color);
+  border-radius: 4px;
+  background: var(--el-fill-color-light);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.lang-btn:hover { border-color: var(--el-color-primary); }
+.lang-btn--active {
+  background: var(--el-color-primary);
+  color: #fff;
+  border-color: var(--el-color-primary);
+}
+
 .search-section {
   margin-bottom: 16px;
 }
@@ -392,7 +436,6 @@ async function onGenerate() {
 
 .section-title {
   font-weight: 600;
-  margin-bottom: 12px;
   color: #303133;
 }
 

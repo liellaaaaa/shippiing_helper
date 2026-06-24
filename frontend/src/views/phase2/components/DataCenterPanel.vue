@@ -1,17 +1,30 @@
 <template>
   <div class="data-center-panel">
-    <!-- 搜索栏 -->
-    <div class="search-bar">
-      <input
-        v-model="query"
-        class="search-input"
-        placeholder="输入关键词搜索MSDS，如 FIXING"
-        @keyup.enter="search"
-      />
-      <button class="search-btn" @click="search" :disabled="loading">
-        <span v-if="!loading">搜索</span>
-        <span v-else>搜索中...</span>
-      </button>
+    <!-- 语言切换 + 搜索栏 -->
+    <div class="search-header">
+      <div class="language-filter">
+        <button
+          v-for="opt in languageOptions"
+          :key="opt.value"
+          class="lang-btn"
+          :class="{ 'lang-btn--active': searchLanguage === opt.value }"
+          @click="searchLanguage = opt.value"
+        >
+          {{ opt.label }}
+        </button>
+      </div>
+      <div class="search-bar">
+        <input
+          v-model="query"
+          class="search-input"
+          placeholder="输入关键词搜索MSDS，如 FIXING"
+          @keyup.enter="search"
+        />
+        <button class="search-btn" @click="search" :disabled="loading">
+          <span v-if="!loading">搜索</span>
+          <span v-else>搜索中...</span>
+        </button>
+      </div>
     </div>
 
     <!-- 结果列表 -->
@@ -101,13 +114,19 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { phase2Api } from '@/api/phase2'
 
 const emit = defineEmits<{
-  (e: 'open-data-center-preview', file: { id: number; filename: string; file_format: string }): void
+  (e: 'open-data-center-preview', file: { id: number; filename: string; file_format: string; language: string }): void
 }>()
+
+const languageOptions = [
+  { label: '全部', value: 'all' },
+  { label: '中文 MSDS', value: 'cn' },
+  { label: 'English MSDS', value: 'en' },
+]
 
 interface MsdsResult {
   id: number
@@ -125,6 +144,7 @@ const query = ref('')
 const loading = ref(false)
 const searched = ref(false)
 const results = ref<MsdsResult[]>([])
+const allResults = ref<MsdsResult[]>([])  // 保留原始搜索结果
 const selectedId = ref<number | null>(null)
 const summary = ref<Partial<MsdsResult>>({})
 const showUploadDialog = ref(false)
@@ -132,6 +152,14 @@ const uploadInput = ref<HTMLInputElement>()
 const uploadFileName = ref('')
 const uploading = ref(false)
 const fileToUpload = ref<File | null>(null)
+const searchLanguage = ref('all')
+
+// 语言切换时重新过滤
+watch(searchLanguage, () => {
+  if (allResults.value.length > 0) {
+    filterResults()
+  }
+})
 
 
 async function search() {
@@ -140,7 +168,9 @@ async function search() {
   searched.value = true
   try {
     const res = await phase2Api.searchDataCenter(query.value)
-    results.value = res.data.items || []
+    allResults.value = res.data.items || []
+    // 根据语言过滤
+    filterResults()
   } catch (e) {
     ElMessage.error('搜索失败')
   } finally {
@@ -148,10 +178,26 @@ async function search() {
   }
 }
 
+function filterResults() {
+  if (searchLanguage.value === 'all') {
+    results.value = allResults.value
+  } else {
+    results.value = allResults.value.filter(r => {
+      if (searchLanguage.value === 'en') {
+        // 英文 MSDS：文件名含"英文"、"EN"、"English"
+        return /英文|EN|English/i.test(r.filename)
+      } else {
+        // 中文 MSDS：文件名不含英文相关关键词
+        return !/英文|EN|English/i.test(r.filename)
+      }
+    })
+  }
+}
+
 async function selectResult(r: MsdsResult) {
   selectedId.value = r.id
   // 通知右侧面板打开预览（预览显示在右侧大区域，不在左侧 accordion 内）
-  emit('open-data-center-preview', { id: r.id, filename: r.filename, file_format: r.file_format })
+  emit('open-data-center-preview', { id: r.id, filename: r.filename, file_format: r.file_format, language: searchLanguage.value })
   // 填充摘要字段
   summary.value = {
     id: r.id,
@@ -219,11 +265,36 @@ async function confirmUpload() {
 }
 
 /* ── 搜索栏 ─────────────────────────────────────────── */
-.search-bar {
+.search-header {
   display: flex;
+  flex-direction: column;
   gap: 8px;
   padding: 12px 12px 8px;
   border-bottom: 1px solid var(--el-border-color-extra-light);
+}
+.language-filter {
+  display: flex;
+  gap: 4px;
+}
+.lang-btn {
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--el-border-color);
+  border-radius: 4px;
+  background: var(--el-fill-color-light);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.lang-btn:hover { border-color: var(--el-color-primary); }
+.lang-btn--active {
+  background: var(--el-color-primary);
+  color: #fff;
+  border-color: var(--el-color-primary);
+}
+.search-bar {
+  display: flex;
+  gap: 8px;
 }
 .search-input {
   flex: 1;

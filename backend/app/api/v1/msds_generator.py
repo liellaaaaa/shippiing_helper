@@ -42,6 +42,7 @@ class GenerateRequest(BaseModel):
     physicochemical: Optional[PhysicochemicalEdit] = None
     msds_number: Optional[str] = None
     revision_date: Optional[str] = None
+    language: Optional[str] = "cn"  # "cn" for Chinese, "en" for English
 
 
 class ParseRequest(BaseModel):
@@ -118,6 +119,8 @@ async def generate_msds(request: GenerateRequest):
     基于旧 MSDS 文件，生成新的 MSDS 文档。
     返回 OnlyOffice 配置，供前端直接打开编辑。
     """
+    language = request.language or "cn"
+
     # 准备编辑内容
     edits = {
         "product_name": request.product_name or "",
@@ -138,33 +141,48 @@ async def generate_msds(request: GenerateRequest):
     if request.physicochemical:
         pc = request.physicochemical
         if pc.appearance:
-            edits["physicochemical"]["外观与性状"] = pc.appearance
+            edits["physicochemical"]["appearance"] = pc.appearance
         if pc.ion_type:
-            edits["physicochemical"]["离子性"] = pc.ion_type
+            edits["physicochemical"]["ion_type"] = pc.ion_type
         if pc.ph:
-            edits["physicochemical"]["PH值"] = pc.ph
+            edits["physicochemical"]["ph"] = pc.ph
         if pc.melting_point:
-            edits["physicochemical"]["熔点"] = pc.melting_point
+            edits["physicochemical"]["melting_point"] = pc.melting_point
         if pc.boiling_point:
-            edits["physicochemical"]["沸点/沸点范围（℃）"] = pc.boiling_point
+            edits["physicochemical"]["boiling_point"] = pc.boiling_point
         if pc.density:
-            edits["physicochemical"]["相对密度"] = pc.density
+            edits["physicochemical"]["density"] = pc.density
         if pc.flash_point:
-            edits["physicochemical"]["闪点"] = pc.flash_point
+            edits["physicochemical"]["flash_point"] = pc.flash_point
         if pc.solubility:
-            edits["physicochemical"]["溶解性"] = pc.solubility
+            edits["physicochemical"]["solubility"] = pc.solubility
 
     # 获取产品数据（用于生成 doc_key）
     product_data = {}
     if request.product_name:
         product_data = msds_gen_svc.get_product_data(request.product_name) or {}
 
-    # 生成 MSDS
-    content, doc_key = msds_gen_svc.generate_msds(
-        msds_file_path=request.msds_file_path,
-        product_data=product_data,
-        edits=edits
-    )
+    # 根据语言选择生成方法
+    if language == "en":
+        # 英文 MSDS：基于英文模板填充用户编辑的字段
+        parsed_data = {}
+        if request.msds_file_path:
+            try:
+                parsed_data = msds_gen_svc.parse_msds_file(request.msds_file_path)
+            except Exception:
+                pass
+        content, doc_key = msds_gen_svc.generate_msds_english_from_template(
+            msds_file_path=request.msds_file_path,
+            parsed_data=parsed_data,
+            edits=edits
+        )
+    else:
+        # 中文 MSDS：使用原有逻辑
+        content, doc_key = msds_gen_svc.generate_msds(
+            msds_file_path=request.msds_file_path,
+            product_data=product_data,
+            edits=edits
+        )
 
     # 保存并创建 OnlyOffice 配置
     token, config, safe_key = oo_svc.create_config(doc_key, "docx")

@@ -284,7 +284,7 @@ async function onOrderChange(orderId: number) {
     currentOrderInfo.value = {
       order_no: data.order_no || '',
       customer_code: data.customer_code || '',
-      consignee: pis[0]?.consignee || '',
+      consignee: pis[0]?.consignee_name || '',
       notify: '',
       port: pis[0]?.destination || '',
       product_cn: data.items?.[0]?.product_cn || '',

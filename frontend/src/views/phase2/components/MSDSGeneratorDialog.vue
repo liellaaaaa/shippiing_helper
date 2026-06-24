@@ -93,7 +93,7 @@
         <el-table :data="compositionRows" border size="small" class="composition-table">
           <el-table-column label="成分(中文)" prop="component_cn">
             <template #default="{ row }">
-              <el-input v-model="row.component_cn" size="small" />
+              <el-input v-model="row.component_cn" size="small" @change="onComponentNameChange(row)" />
             </template>
           </el-table-column>
           <el-table-column label="CAS NO." prop="cas" width="140">
@@ -130,6 +130,24 @@
           <el-button size="small" @click="onAddCompositionRow">+ 添加一行</el-button>
         </div>
         <div class="table-tip">已核对的成分表示在对照表中找到匹配</div>
+      </div>
+
+      <!-- 粘贴解析成分 -->
+      <div class="form-section">
+        <div class="form-section-title">📋 粘贴成分信息（自动解析）</div>
+        <div class="paste-row">
+          <el-input
+            v-model="pastedText"
+            type="textarea"
+            :rows="2"
+            placeholder="粘贴成分信息，如：聚二甲基硅氧烷（硅油）48% 9016-00-6，非离子乳化剂9% 68213-23-0，水43% 7732-18-5"
+            style="flex: 1"
+          />
+          <el-button type="primary" size="small" @click="onParsePasted" :disabled="!pastedText.trim()" style="margin-left: 8px; align-self: flex-end;">
+            解析
+          </el-button>
+        </div>
+        <div class="paste-tip">提示：粘贴后自动填入上方成分表格</div>
       </div>
 
       <!-- 理化特性 -->
@@ -216,6 +234,7 @@ const searchKeyword = ref('')
 const msdsFiles = ref<MSDSFile[]>([])
 const selectedFile = ref<MSDSFile | null>(null)
 const language = ref<'cn' | 'en'>('cn')
+const pastedText = ref('')
 
 const dialogTitle = computed(() => language.value === 'en' ? 'Generate MSDS (English)' : '生成 MSDS')
 
@@ -248,6 +267,7 @@ watch(() => props.modelValue, (v) => {
     searchKeyword.value = ''
     msdsFiles.value = []
     selectedFile.value = null
+    pastedText.value = ''
     compositionRows.value = []
     formData.value = {
       msds_number: '',
@@ -294,6 +314,134 @@ function onSearchInput() {
 function onSearchClear() {
   msdsFiles.value = []
   selectedFile.value = null
+}
+
+/**
+ * 解析粘贴的成分信息
+ * 规律：名字 + CAS号(X-X-X格式) + 百分比
+ * CAS号格式：数字-数字-数字（如 9012-54-8）
+ * 解析后自动去后端查表补充缺失的 CAS 号
+ */
+async function onParsePasted() {
+  const text = pastedText.value.trim()
+  if (!text) return
+
+  // 预处理：统一分隔符
+  let normalized = text
+    .replace(/[：:]/g, ' ')
+    .replace(/；/g, ' ')
+    .replace(/[％%]/g, '%')
+    .replace(/\+/g, ' ')
+    .replace(/[,，]/g, ' ')
+    .replace(/　/g, ' ')
+    .replace(/、/g, ' ')
+
+  // 去掉多余空格
+  normalized = normalized.replace(/\s+/g, ' ').trim()
+
+  const composition: CompositionItem[] = []
+  const seen = new Set<string>()
+
+  // 找所有 CAS号的位置
+  const casRegex = /\d{2,7}-\d{1,2}-\d{1,2}/g
+  const casMatches: { cas: string; start: number; end: number }[] = []
+  let match
+  while ((match = casRegex.exec(normalized)) !== null) {
+    casMatches.push({
+      cas: match[0],
+      start: match.index,
+      end: match.index + match[0].length,
+    })
+  }
+
+  // 解析每个有CAS号的成分
+  for (let i = 0; i < casMatches.length; i++) {
+    const cur = casMatches[i]
+    let name = ''
+    if (i === 0) {
+      name = normalized.slice(0, cur.start).trim()
+    } else {
+      const prevEnd = casMatches[i - 1].end
+      name = normalized.slice(prevEnd, cur.start).trim()
+    }
+
+    let nextStart = cur.end
+    let nextEnd = i < casMatches.length - 1 ? casMatches[i + 1].start : normalized.length
+    let suffix = normalized.slice(nextStart, nextEnd).trim()
+
+    const percentMatch = suffix.match(/^(\d+(?:\.\d+)?)\s*%/)
+    let percentage = percentMatch ? percentMatch[1] + '%' : ''
+
+    if (!name || !percentage) continue
+
+    name = name.replace(/\d+$/, '').replace(/\s+/g, ' ').trim()
+    if (!name || /^\d+$/.test(name) || /^\d{2,7}-\d{1,2}-\d{1,2}$/.test(name)) continue
+
+    const key = `${name}|${cur.cas}`
+    if (!seen.has(key)) {
+      seen.add(key)
+      composition.push({
+        component_cn: name,
+        cas: cur.cas,
+        percentage: percentage,
+        verified: false,
+      })
+    }
+  }
+
+  // 处理没有CAS号的成分（如 "水 70%"）
+  if (casMatches.length > 0) {
+    const lastCas = casMatches[casMatches.length - 1]
+    const lastPart = normalized.slice(lastCas.end).trim()
+
+    const percentMatch = lastPart.match(/^(\d+(?:\.\d+)?)\s*%/)
+    if (percentMatch) {
+      const percentage = percentMatch[1] + '%'
+      const percentIdx = lastPart.indexOf('%')
+      let name = lastPart.slice(0, percentIdx).trim()
+      name = name.replace(/\d+$/, '').replace(/\s+/g, ' ').trim()
+
+      if (name && !/^\d{2,7}-\d{1,2}-\d{1,2}$/.test(name)) {
+        const key = `${name}|`
+        if (!seen.has(key)) {
+          seen.add(key)
+          composition.push({
+            component_cn: name,
+            cas: '',
+            percentage: percentage,
+            verified: false,
+          })
+        }
+      }
+    }
+  }
+
+  if (composition.length === 0) {
+    ElMessage.warning('未能解析出成分，请检查格式是否正确')
+    return
+  }
+
+  // 查表补充缺失的 CAS 号
+  const missingCasItems = composition.filter(item => !item.cas)
+  if (missingCasItems.length > 0) {
+    try {
+      const names = missingCasItems.map(item => item.component_cn)
+      const res = await msdsGeneratorApi.lookupCas(names)
+      const casMap = new Map(res.data.results.map(r => [r.name, r.cas]))
+
+      for (const item of composition) {
+        if (!item.cas && casMap.has(item.component_cn)) {
+          item.cas = casMap.get(item.component_cn) || ''
+        }
+      }
+    } catch (e) {
+      // 查表失败不影响解析结果
+    }
+  }
+
+  // 只更新成分表格，不修改其他字段
+  compositionRows.value = composition
+  ElMessage.success(`解析成功：${composition.length} 个成分`)
 }
 
 async function onSelectFile(file: MSDSFile) {
@@ -346,6 +494,32 @@ function onDeleteCompositionRow(index: number) {
   compositionRows.value.splice(index, 1)
 }
 
+/**
+ * 成分名称变更时，自动查表补充 CAS 号
+ */
+async function onComponentNameChange(row: CompositionItem) {
+  if (!row.component_cn || row.component_cn.trim() === '') {
+    return
+  }
+  if (row.cas) {
+    // 已经有 CAS 号了，不需要查
+    return
+  }
+
+  try {
+    const res = await msdsGeneratorApi.lookupCas([row.component_cn])
+    if (res.data.results && res.data.results.length > 0) {
+      const cas = res.data.results[0].cas
+      if (cas) {
+        row.cas = cas
+        row.verified = true
+      }
+    }
+  } catch (e) {
+    // 查表失败不影响使用
+  }
+}
+
 function onBack() {
   selectedFile.value = null
 }
@@ -354,6 +528,7 @@ function onClosed() {
   searchKeyword.value = ''
   msdsFiles.value = []
   selectedFile.value = null
+  pastedText.value = ''
 }
 
 async function onGenerate() {
@@ -410,7 +585,29 @@ async function onGenerate() {
 }
 
 .search-section {
-  margin-bottom: 16px;
+  margin-bottom: 12px;
+}
+
+.paste-section {
+  margin-bottom: 12px;
+  padding: 12px;
+  background: #f5f7fa;
+  border-radius: 4px;
+}
+
+.paste-section .section-title-row {
+  margin-bottom: 8px;
+}
+
+.paste-tip {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 6px;
+}
+
+.paste-row {
+  display: flex;
+  align-items: flex-start;
 }
 
 .file-list {

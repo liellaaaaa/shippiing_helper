@@ -555,6 +555,18 @@ class MSDSGeneratorService:
                 return True
         return False
 
+    def get_cas_by_ingredient_name(self, ingredient_cn: str) -> Optional[str]:
+        """通过成分名查找 CAS 号"""
+        if not ingredient_cn or not self._ingredient_map:
+            return None
+
+        for item in self._ingredient_map:
+            if ingredient_cn in item.get("cn_names", []):
+                cas_numbers = item.get("cas_numbers", [])
+                if cas_numbers:
+                    return cas_numbers[0]
+        return None
+
     def translate_ingredient(self, ingredient_cn: str) -> Optional[str]:
         """翻译成分名为英文"""
         for item in self._ingredient_map:

@@ -399,7 +399,7 @@ async function onOrderChange(orderId: number): Promise<void> {
     // 多产品时用 / 连接
     const productCnAll = items.map(it => it.product_cn).filter(Boolean).join(' / ')
     const hsCodeAll = items.map(it => it.order?.hs_code).filter(Boolean).join(' / ')
-    const productEnAll = items.map(it => it.order?.product_en).filter(Boolean).join(' / ')
+    const productEnAll = items.map(it => (it as any).product_en).filter(Boolean).join(' / ')
     // 收货人 = 名称 + 地址（用换行连接）
     const piConsigneeName = (pis[0] as any)?.consignee_name || ''
     const piConsigneeAddr = (pis[0] as any)?.consignee_address || ''
@@ -407,6 +407,7 @@ async function onOrderChange(orderId: number): Promise<void> {
     currentOrderInfo.value = {
       order_no: data.order_no || '',
       customer_code: data.customer_code || '',
+      shipper: '',
       consignee: consigneeFull,
       notify: 'SAME AS CONSIGNEE',
       port: (pis[0] as any)?.destination || '',

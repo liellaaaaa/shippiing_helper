@@ -48,7 +48,7 @@
       </div>
       <div
         v-for="(report, idx) in linkedReports"
-        :key="report.link_id"
+        :key="report.id"
         class="linked-report-card"
       >
         <div class="linked-report-header">

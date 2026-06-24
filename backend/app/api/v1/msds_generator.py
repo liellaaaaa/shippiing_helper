@@ -80,6 +80,18 @@ async def search_products(keyword: str = Query(..., min_length=1)):
     return {"products": products}
 
 
+@router.post("/lookup-cas")
+async def lookup_cas(ingredient_names: list[str] = Body(...)):
+    """
+    通过成分名列表批量查询 CAS 号。
+    """
+    results = []
+    for name in ingredient_names:
+        cas = msds_gen_svc.get_cas_by_ingredient_name(name)
+        results.append({"name": name, "cas": cas})
+    return {"results": results}
+
+
 @router.post("/product-data")
 async def get_product_data(product_name: str = Body(..., embed=True)):
     """

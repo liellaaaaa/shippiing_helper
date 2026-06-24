@@ -1,8 +1,11 @@
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import FastAPI
+import os
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, Response
 from app.api.v1.orders import router as orders_router
 from app.api.v1.pi import router as pi_router
 from app.api.v1.merge import router as merge_router
@@ -32,7 +35,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://127.0.0.1:5173", "http://127.0.0.1:5174"],
+    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://127.0.0.1:5173", "http://127.0.0.1:5174", "https://penholder-cleat-unsterile.ngrok-free.dev"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -55,10 +58,62 @@ app.include_router(name_mapping_router)
 app.include_router(auth_router)
 app.include_router(msds_generator_router)
 
-from fastapi import Request
+# OnlyOffice Document Server 代理（解决 ngrok 单端口转发问题）
+import httpx
+DOCUMENT_SERVER = os.getenv("DOCUMENT_SERVER_URL", "http://localhost:8080")
+
+@app.api_route("/documentserver/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"])
+async def proxy_documentserver(path: str, request: Request):
+    """代理 OnlyOffice Document Server 请求，实现单端口转发"""
+    target_url = f"{DOCUMENT_SERVER}/{path}"
+    if request.url.query:
+        target_url = f"{target_url}?{request.url.query}"
+
+    headers = dict(request.headers)
+    headers.pop("host", None)
+    headers.pop("content-length", None)
+
+    body = await request.body()
+    try:
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+            resp = await client.request(
+                method=request.method,
+                url=target_url,
+                headers=headers,
+                content=body if body else None,
+            )
+        response_headers = dict(resp.headers)
+    except httpx.ConnectError:
+        return Response(content="OnlyOffice server not available", status_code=503)
+    except httpx.TimeoutException:
+        return Response(content="OnlyOffice server timeout", status_code=504)
+
+    # 允许 CORS
+    response_headers["Access-Control-Allow-Origin"] = "*"
+    response_headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+    response_headers["Access-Control-Allow-Headers"] = "*"
+    return Response(
+        content=resp.content,
+        status_code=resp.status_code,
+        headers=response_headers,
+    )
+
+# 托管前端静态文件（build 后的 dist 目录）
+FRONTEND_DIST = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "frontend", "dist")
+ASSETS_DIR = os.path.join(FRONTEND_DIST, "assets")
+if os.path.exists(FRONTEND_DIST):
+    app.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="assets")
+
+    @app.get("/{path:path}")
+    async def serve_spa(path: str):
+        """SPA 路由 fallback"""
+        file_path = os.path.join(FRONTEND_DIST, path)
+        if os.path.isfile(file_path):
+            return FileResponse(file_path)
+        return FileResponse(os.path.join(FRONTEND_DIST, "index.html"))
+
 from fastapi.responses import JSONResponse
 from jose import jwt, JWTError
-import os
 
 JWT_SECRET = os.getenv("JWT_SECRET", "shipping-helper-secret-key-change-in-production")
 
@@ -68,15 +123,31 @@ ALLOWED_ORIGINS = [
     "http://localhost:5174",
     "http://127.0.0.1:5173",
     "http://127.0.0.1:5174",
+    "https://penholder-cleat-unsterile.ngrok-free.dev",
 ]
 
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
     """全局认证中间件，排除登录和健康检查端点."""
-    # 放行路径
-    if request.url.path in ["/health", "/docs", "/redoc", "/openapi.json"] or \
+    # 放行路径（静态文件由前端处理）
+    if request.url.path in ["/health", "/docs", "/redoc", "/openapi.json", "/", "/favicon.ico", "/favicon.svg"] or \
        request.url.path.startswith("/api/v1/auth/") or \
-       request.url.path.startswith("/api/v1/onlyoffice/"):
+       request.url.path.startswith("/api/v1/onlyoffice/") or \
+       request.url.path.startswith("/assets/") or \
+       request.url.path.startswith("/workflow") or \
+       request.url.path.startswith("/dashboard") or \
+       request.url.path.startswith("/phase2") or \
+       request.url.path.startswith("/phase3") or \
+       request.url.path.startswith("/data-center") or \
+       request.url.path.startswith("/login") or \
+       request.url.path.startswith("/api/v1/packaging/") or \
+       request.url.path.startswith("/api/v1/packages/") or \
+       request.url.path.startswith("/api/v1/merge/") or \
+       request.url.path.startswith("/api/v1/msds") or \
+       request.url.path.startswith("/api/v1/name-mapping") or \
+       request.url.path.startswith("/api/v1/transport-reports") or \
+       request.url.path.startswith("/api/v1/data-center") or \
+       request.url.path.startswith("/documentserver"):
         return await call_next(request)
 
     # 检查 Authorization header

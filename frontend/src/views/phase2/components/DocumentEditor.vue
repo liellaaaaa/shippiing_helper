@@ -65,6 +65,7 @@ function loadOnlyOfficeAPI(): Promise<void> {
       return
     }
     const script = document.createElement('script')
+    // 直接使用传入的 documentServerUrl
     script.src = `${props.documentServerUrl}/web-apps/apps/api/documents/api.js`
     script.onload = () => resolve()
     script.onerror = () => reject(new Error('OnlyOffice API 加载失败'))

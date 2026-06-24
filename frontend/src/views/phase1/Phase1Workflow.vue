@@ -461,7 +461,7 @@ function handleReset() {
   piFileName.value = ''
   packagingResult.value = null
   orderForm.value = { order_no: '', customer_code: '', items: [] }
-  piForm.value = { pi_no: '', customer_code: '', pi_date: '', internal_code: '', quantity: 0, unit_price: 0, total_amount: 0, hs_code: '', customs_name: '' }
+  piForm.value = { pi_no: '', customer_code: '', pi_date: '', internal_code: '', quantity: 0, unit_price: 0, total_amount: 0, hs_code: '', customs_name: '', consignee_name: '', consignee_address: '', destination: '', loading_port: '', price_term: '', invoice_to: '' }
 }
 </script>
 

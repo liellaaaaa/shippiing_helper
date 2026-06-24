@@ -52,15 +52,22 @@ export const msdsGeneratorApi = {
   /**
    * 搜索旧 MSDS 文件
    */
-  searchMSDS(keyword: string): Promise<{ files: MSDSFile[] }> {
-    return apiClient.get('/msds-generator/search', { params: { keyword } })
+  searchMSDS(keyword: string) {
+    return apiClient.get<{ files: MSDSFile[] }>('/msds-generator/search', { params: { keyword } })
   },
 
   /**
    * 解析旧 MSDS 文件，提取产品信息、成分、理化特性
    */
-  parseMSDS(filePath: string): Promise<MSDSParseResult> {
-    return apiClient.post('/msds-generator/parse', { filePath })
+  parseMSDS(filePath: string) {
+    return apiClient.post<MSDSParseResult & { error?: string }>('/msds-generator/parse', { filePath })
+  },
+
+  /**
+   * 批量查询成分的 CAS 号
+   */
+  lookupCas(ingredientNames: string[]) {
+    return apiClient.post<{ results: { name: string; cas: string }[] }>('/msds-generator/lookup-cas', ingredientNames)
   },
 
   /**

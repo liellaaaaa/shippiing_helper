@@ -1019,6 +1019,11 @@ class MSDSGeneratorService:
         self._fill_english_product_name(doc, product_name_en)
         self._fill_english_composition_table(doc, composition_en)
         self._fill_english_physicochemical(doc, edits.get("physicochemical", {}))
+        self._fill_english_header(
+            doc,
+            edits.get("msds_number", ""),
+            edits.get("revision_date", "")
+        )
         self._fill_english_section16(
             doc,
             edits.get("msds_number", ""),
@@ -1282,6 +1287,35 @@ class MSDSGeneratorService:
 
             if new_text != text:
                 self._replace_para_text(para, new_text)
+
+    def _fill_english_header(self, doc: Document, msds_number: str, revision_date: str):
+        """更新页眉中的 MSDS No. 和 Revision time"""
+        for section in doc.sections:
+            for para in section.header.paragraphs:
+                text = para.text
+                if not text:
+                    continue
+                new_text = text
+
+                # 模板格式: "MSDS No.：HHJS-2633     Revision time：2026/01/01"
+                # 全角冒号 "：" 分割
+                msds_label = "MSDS No.："
+                rev_label = "Revision time："
+
+                # 替换 MSDS No. 值
+                if msds_label in new_text:
+                    msds_idx = new_text.index(msds_label) + len(msds_label)
+                    rev_start = new_text.index(rev_label)
+                    old_msds_val = new_text[msds_idx:rev_start].strip()
+                    new_text = new_text.replace(msds_label + old_msds_val, msds_label + msds_number, 1)
+
+                # 替换 Revision time 值
+                if rev_label in new_text:
+                    old_rev_val = new_text[new_text.index(rev_label) + len(rev_label):].strip()
+                    new_text = new_text.replace(rev_label + old_rev_val, rev_label + revision_date, 1)
+
+                if new_text != text:
+                    self._replace_para_text(para, new_text)
 
     def _fill_english_section16(self, doc: Document, msds_number: str, revision_date: str):
         """更新 Section 16 的 Revision 和 Update Date"""

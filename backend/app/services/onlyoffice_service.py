@@ -29,11 +29,13 @@ class OnlyOfficeService:
         """Generate JWT using original doc_key as document.key (for callback compatibility)."""
         encoded_key = quote(document_key, safe="")
         now = datetime.utcnow()
+        doc_url = f"{_callback_base()}/api/v1/onlyoffice/download/{encoded_key}"
         payload = {
             "document": {
                 "key": document_key,  # Use original key so callback works
                 "title": document_key,
                 "fileType": file_type,
+                "url": doc_url,  # OnlyOffice 7.1+ requires this
                 "callbackUrl": f"{_callback_base()}/api/v1/onlyoffice/callback?doc_key={encoded_key}",
             },
             "user": {"name": "admin", "id": "1"},
@@ -57,20 +59,24 @@ class OnlyOfficeService:
             "docType": doc_type,
         }
 
-    def create_config(self, document_key: str, file_type: str) -> tuple[str, dict, str]:
+    def create_config(self, document_key: str, file_type: str, document_url: str = None) -> tuple[str, dict, str]:
         """
         Generate both JWT token and editor config with the SAME safe key.
         Returns (token, config, safe_key) tuple.
         Ensures documentKey in config and document.key in JWT match.
         safe_key is returned so caller can store document under UUID in DB.
+        document_url: URL OnlyOffice uses to download the document (for JWT payload).
         """
         safe_key = self._safe_key(document_key)
         now = datetime.utcnow()
+        # document.url in JWT must match what OnlyOffice uses to fetch the file
+        doc_url = document_url or f"{_callback_base()}/api/v1/onlyoffice/download/{safe_key}"
         payload = {
             "document": {
                 "key": safe_key,  # Use safe key for OnlyOffice routing
                 "title": document_key,
                 "fileType": file_type,
+                "url": doc_url,  # OnlyOffice 7.1+ requires this in JWT
                 "callbackUrl": f"{_callback_base()}/api/v1/onlyoffice/callback?doc_key={safe_key}",
             },
             "user": {"name": "admin", "id": "1"},

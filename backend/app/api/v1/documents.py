@@ -68,6 +68,7 @@ async def generate_booking(fields: BookingFields = Body(...)):
         **config,
         "url": f"{callback_base}/api/v1/onlyoffice/download/{safe_key}",
         "downloadUrl": f"{api_base}/api/v1/onlyoffice/download/{safe_key}",
+        "callbackUrl": f"{callback_base}/api/v1/onlyoffice/callback?doc_key={safe_key}",
     }
 
 
@@ -83,6 +84,7 @@ async def generate_loi(order_no: str = Query(...), pi_no: str = Query(...)):
         **config,
         "url": f"{callback_base}/api/v1/onlyoffice/download/{safe_key}",
         "downloadUrl": f"{api_base}/api/v1/onlyoffice/download/{safe_key}",
+        "callbackUrl": f"{callback_base}/api/v1/onlyoffice/callback?doc_key={safe_key}",
     }
 
 
@@ -98,6 +100,7 @@ async def generate_msds(product: str = Query(...)):
         **config,
         "url": f"{callback_base}/api/v1/onlyoffice/download/{safe_key}",
         "downloadUrl": f"{api_base}/api/v1/onlyoffice/download/{safe_key}",
+        "callbackUrl": f"{callback_base}/api/v1/onlyoffice/callback?doc_key={safe_key}",
     }
 
 
@@ -145,6 +148,7 @@ async def generate_customs(order_id: int | None = Query(None)):
         **config,
         "url": f"{callback_base}/api/v1/onlyoffice/download/{safe_key}",
         "downloadUrl": f"{api_base}/api/v1/onlyoffice/download/{safe_key}",
+        "callbackUrl": f"{callback_base}/api/v1/onlyoffice/callback?doc_key={safe_key}",
     }
 
 
@@ -228,6 +232,7 @@ async def list_my_templates():
             "created_at": d.created_at.isoformat() if d.created_at else None,
             "url": f"{callback_base}/api/v1/onlyoffice/download/{quote(d.doc_key, safe='')}",
             "downloadUrl": f"{api_base}/api/v1/onlyoffice/download/{quote(d.doc_key, safe='')}",
+            "callbackUrl": f"{callback_base}/api/v1/onlyoffice/callback?doc_key={quote(d.doc_key, safe='')}",
             "docType": "xlsx" if d.doc_type == "booking" else "docx",
         } for d in docs]
     finally:

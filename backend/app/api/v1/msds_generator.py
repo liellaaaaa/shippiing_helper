@@ -207,6 +207,7 @@ async def generate_msds(request: GenerateRequest):
         **config,
         "url": f"{callback_base}/api/v1/onlyoffice/download/{safe_key}",
         "downloadUrl": f"{api_base}/api/v1/onlyoffice/download/{safe_key}",
+        "callbackUrl": f"{callback_base}/api/v1/onlyoffice/callback?doc_key={safe_key}",
     }
 
 

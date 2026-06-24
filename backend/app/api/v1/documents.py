@@ -122,7 +122,6 @@ async def load_msds(msds_id: int):
         callback_base = os.getenv("ONLYOFFICE_CALLBACK_BASE_URL", "http://host.docker.internal:8000")
         return {
             **config,
-            "documentServerUrl": "/documentserver",
             "url": f"{callback_base}/api/v1/onlyoffice/download/{safe_key}",
             "downloadUrl": f"{api_base}/api/v1/onlyoffice/download/{safe_key}",
         }
@@ -177,7 +176,6 @@ async def open_blank_template(template_type: str):
         callback_base = os.getenv("ONLYOFFICE_CALLBACK_BASE_URL", "http://host.docker.internal:8000")
         return {
             **config,
-            "documentServerUrl": "/documentserver",
             "url": f"{callback_base}/api/v1/onlyoffice/download/{safe_key}",
             "downloadUrl": f"{api_base}/api/v1/onlyoffice/download/{safe_key}",
         }

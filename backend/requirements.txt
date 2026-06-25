@@ -12,3 +12,8 @@ Pillow>=10.0.0
 pytest==8.0.0
 python-jose[cryptography]
 argostranslate
+chardet
+python-docx
+python-dotenv
+httpx
+lxml

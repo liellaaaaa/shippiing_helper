@@ -75,7 +75,11 @@ async def proxy_documentserver(path: str, request: Request):
 
     body = await request.body()
     try:
-        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+        # 移除 Accept-Encoding 避免 httpx 自动解压，同时告诉目标服务器我们不接收压缩
+        headers.pop("accept-encoding", None)
+        headers.pop("Accept-Encoding", None)
+        headers["Accept-Encoding"] = "identity"
+        async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
             resp = await client.request(
                 method=request.method,
                 url=target_url,

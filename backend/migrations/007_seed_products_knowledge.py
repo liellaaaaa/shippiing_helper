@@ -10,6 +10,7 @@ import openpyxl
 import zipfile
 import re
 import os
+from pathlib import Path
 from app.database import engine, SessionLocal
 from app.models.order import ProductKnowledge
 
@@ -63,8 +64,8 @@ def load_products_from_excel(xlsx_path):
 
 def upgrade():
     """加载 Excel 数据到 products_knowledge 表"""
-    # Use absolute path - assumes running from project root
-    xlsx_path = 'C:/Users/windows/Desktop/shippiing_helper/references/2024.12.5 最新出口商品编码及报关成分.xlsx'
+    # Use environment variable or default to references directory relative to project root
+    xlsx_path = os.getenv("EXPORT_CODES_FILE", str(Path(__file__).parent.parent.parent / "references" / "2024.12.5 最新出口商品编码及报关成分.xlsx"))
     print(f'Reading: {xlsx_path}')
 
     products = load_products_from_excel(xlsx_path)

@@ -518,7 +518,7 @@ def _read_xls_bytes(content: bytes) -> list[list[str]]:
 
 def _extract_text_from_pdf_bytes(content: bytes) -> str:
     """通过 OCR 从 PDF 内容提取纯文本（图片型扫描 PDF）"""
-    pytesseract.pytesseract.tesseract_cmd = r"C:/Program Files/Tesseract-OCR/tesseract.exe"
+    pytesseract.pytesseract.tesseract_cmd = os.getenv("TESSERACT_CMD", "/usr/bin/tesseract")
     doc = pymupdf.open(stream=content, filetype="pdf")
     texts = []
     for page in doc:
@@ -596,7 +596,7 @@ def parse_proforma_invoice_from_text(text: str, filename: str = "") -> PiContrac
         scan_next_line(r"PI\s+NO\s*[:;.]?") or
         scan_next_line(r"'\s*PI\s+NO\s*;?") or
         # 最后一搏：扫描文本中第一个 HT 格式的订单号（支持8位或10位日期）
-    (re.search(r"HT\d{8,10}[A-Z0-9]*", text) or None) and (lambda m: m.group(0)) or None
+    (m.group(0) if (m := re.search(r"HT\d{8,10}[A-Z0-9]*", text)) else None)
     )
     # PDF文件从文件名提取PI号作为最终兜底
     if not pi_no and filename:

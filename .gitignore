@@ -21,7 +21,6 @@ package-lock.json
 
 # Frontend
 frontend/node_modules/
-frontend/dist/
 frontend/package-lock.json
 frontend/*.local.js
 

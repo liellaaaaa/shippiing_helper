@@ -219,14 +219,15 @@ def health():
         checks["onlyoffice"] = {"status": "error", "message": str(e)}
 
     # 3. SQLite 数据库
+    db = SessionLocal()
     try:
-        db = SessionLocal()
         db.execute(text("SELECT 1"))
         db.commit()
-        db.close()
         checks["database"] = {"status": "ok", "message": "正常"}
     except Exception as e:
         checks["database"] = {"status": "error", "message": str(e)}
+    finally:
+        db.close()
 
     # 4. Tesseract OCR
     try:

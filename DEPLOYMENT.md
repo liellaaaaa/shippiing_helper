@@ -227,6 +227,44 @@ ssh user@你的服务器 'cp /path/to/server/shipping-helper/backend/data/shippi
 - 局域网：`http://你的服务器IP`
 - OnlyOffice 代理：`http://你的服务器IP/documentserver`
 
+**防火墙开放端口：**
+```bash
+ufw allow 80/tcp
+ufw allow 8000/tcp
+ufw allow 8080/tcp
+ufw reload
+```
+
+---
+
+### 初始 GitHub 同步设置
+
+**从 GitHub clone 到服务器（首次设置）：**
+
+```bash
+# 创建项目目录
+sudo mkdir -p /path/to/server/shipping-helper
+cd /path/to/server/shipping-helper
+
+# 初始化 git（如果目录非空）
+sudo git init
+sudo git remote add origin https://github.com/你的用户名/你的仓库名.git
+sudo git config --global --add safe.directory /path/to/server/shipping-helper
+sudo git pull origin main
+
+# 备份并恢复 data 和 references（如果已有）
+sudo cp -r /tmp/data_backup /path/to/server/shipping-helper/data
+sudo cp -r /tmp/references_backup /path/to/server/shipping-helper/references
+sudo chown -R www-data:www-data /path/to/server/shipping-helper/data /path/to/server/shipping-helper/references
+```
+
+**日常代码更新（从 GitHub 拉取）：**
+```bash
+cd /path/to/server/shipping-helper
+sudo git pull origin main
+sudo systemctl restart shipping-helper
+```
+
 ---
 
 ## 九、用户账号
@@ -280,6 +318,49 @@ chmod -R u+w /path/to/server/shipping-helper/backend/data
 ### 5. 前端 500 错误
 ```bash
 journalctl -u shipping-helper -n 50 --no-pager
+```
+
+### 6. venv 被删除后重建
+如果虚拟环境损坏或丢失：
+```bash
+# 重新创建 venv
+sudo python3 -m venv /path/to/server/shipping-helper/venv
+
+# 安装依赖
+sudo /path/to/server/shipping-helper/venv/bin/pip install --upgrade pip
+sudo /path/to/server/shipping-helper/venv/bin/pip install -i https://pypi.tuna.tsinghua.edu.cn/simple -r /path/to/server/shipping-helper/backend/requirements.txt
+
+# 重启服务
+sudo systemctl restart shipping-helper
+```
+
+### 7. GitHub 拉取代码（服务器已配置 Git）
+```bash
+cd /path/to/server/shipping-helper
+git pull origin main
+sudo systemctl restart shipping-helper
+```
+
+### 8. .env 文件损坏或丢失
+如果 .env 文件丢失或损坏，需要重新创建：
+```bash
+# 删除并重建
+sudo rm /path/to/server/shipping-helper/backend/.env
+sudo touch /path/to/server/shipping-helper/backend/.env
+sudo chmod 666 /path/to/server/shipping-helper/backend/.env
+
+# 逐行写入（注意每行单独 echo）
+echo "ONLYOFFICE_SECRET_KEY=your-secret-key-here" | sudo tee -a /path/to/server/shipping-helper/backend/.env
+echo "DOCUMENT_SERVER_URL=http://你的服务器IP/documentserver" | sudo tee -a /path/to/server/shipping-helper/backend/.env
+echo "API_BASE_URL=http://你的服务器IP:8000" | sudo tee -a /path/to/server/shipping-helper/backend/.env
+echo "ONLYOFFICE_CALLBACK_BASE_URL=http://你的服务器IP:8000" | sudo tee -a /path/to/server/shipping-helper/backend/.env
+echo "TESSERACT_CMD=/usr/bin/tesseract" | sudo tee -a /path/to/server/shipping-helper/backend/.env
+
+# 验证
+cat /path/to/server/shipping-helper/backend/.env
+
+# 重启服务
+sudo systemctl restart shipping-helper
 ```
 
 ---
@@ -346,3 +427,77 @@ curl -I http://127.0.0.1:8080
    ```
 3. 重启 OnlyOffice：`docker restart onlyoffice`
 4. 重启后端：`systemctl restart shipping-helper`
+
+---
+
+## 十二、配置文件位置
+
+| 文件 | 路径 | 说明 |
+|------|------|------|
+| systemd 服务 | `/etc/systemd/system/shipping-helper.service` | 后端服务配置 |
+| Nginx 配置 | `/etc/nginx/sites-available/shipping-helper` | 网站代理配置 |
+| 环境变量 | `/path/to/server/shipping-helper/backend/.env` | 后端配置 |
+| 项目代码 | `/path/to/server/shipping-helper/` | 代码根目录 |
+
+### systemd 服务文件内容
+```ini
+[Unit]
+Description=ShippingHelper FastAPI Backend
+After=network.target
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/path/to/server/shipping-helper/backend
+EnvironmentFile=/path/to/server/shipping-helper/backend/.env
+Environment="PATH=/path/to/server/shipping-helper/venv/bin"
+ExecStart=/path/to/server/shipping-helper/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### Nginx 配置文件内容
+```nginx
+server {
+    listen 80;
+    server_name 你的服务器IP;
+    client_max_body_size 100M;
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    location /api {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    location /documentserver/ {
+        proxy_pass http://127.0.0.1:8080/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    location /cache/ {
+        proxy_pass http://127.0.0.1:8080/cache/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}
+```

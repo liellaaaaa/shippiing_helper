@@ -2,6 +2,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import os
+import subprocess
+import httpx
+from sqlalchemy import text
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -184,7 +187,74 @@ async def auth_middleware(request: Request, call_next):
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    """
+    系统连通性检测：
+    - api:         直接返回 ok
+    - onlyoffice:  httpx.get(DOCUMENT_SERVER_URL + "/health")
+    - database:    SQLAlchemy SELECT 1
+    - tesseract:   subprocess.run(["tesseract", "--version"])
+    """
+    DOCUMENT_SERVER_URL = os.getenv("DOCUMENT_SERVER_URL", "http://localhost:8080")
+    TESSERACT_CMD = os.getenv("TESSERACT_CMD", "/usr/bin/tesseract")
+
+    checks = {
+        "api":        {"status": "ok", "message": "正常运行"},
+        "onlyoffice": {"status": "error", "message": ""},
+        "database":   {"status": "error", "message": ""},
+        "tesseract":  {"status": "error", "message": ""},
+    }
+
+    # 2. OnlyOffice
+    try:
+        resp = httpx.get(DOCUMENT_SERVER_URL + "/health", timeout=5.0)
+        if resp.status_code == 200:
+            checks["onlyoffice"] = {"status": "ok", "message": "Connected"}
+        else:
+            checks["onlyoffice"] = {"status": "error", "message": f"HTTP {resp.status_code}"}
+    except httpx.ConnectError:
+        checks["onlyoffice"] = {"status": "error", "message": "连接失败"}
+    except httpx.TimeoutException:
+        checks["onlyoffice"] = {"status": "error", "message": "响应超时"}
+    except Exception as e:
+        checks["onlyoffice"] = {"status": "error", "message": str(e)}
+
+    # 3. SQLite 数据库
+    try:
+        db = SessionLocal()
+        db.execute(text("SELECT 1"))
+        db.commit()
+        db.close()
+        checks["database"] = {"status": "ok", "message": "正常"}
+    except Exception as e:
+        checks["database"] = {"status": "error", "message": str(e)}
+
+    # 4. Tesseract OCR
+    try:
+        result = subprocess.run(
+            [TESSERACT_CMD, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode == 0:
+            first_line = result.stdout.strip().split("\n")[0]
+            checks["tesseract"] = {"status": "ok", "message": first_line}
+        else:
+            checks["tesseract"] = {"status": "error", "message": "命令执行失败"}
+    except FileNotFoundError:
+        checks["tesseract"] = {"status": "error", "message": f"命令不存在: {TESSERACT_CMD}"}
+    except subprocess.TimeoutExpired:
+        checks["tesseract"] = {"status": "error", "message": "执行超时"}
+    except Exception as e:
+        checks["tesseract"] = {"status": "error", "message": str(e)}
+
+    # 整体状态
+    overall_status = "ok" if all(c["status"] == "ok" for c in checks.values()) else "degraded"
+
+    return {
+        "status": overall_status,
+        "checks": checks,
+    }
 
 
 @app.on_event("startup")

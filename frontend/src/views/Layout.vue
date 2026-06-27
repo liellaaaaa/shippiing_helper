@@ -68,6 +68,41 @@
 
         <div class="nav-actions">
           <div class="nav-divider"></div>
+          <el-popover
+            placement="bottom"
+            :width="320"
+            trigger="click"
+            v-model:visible="healthPopoverVisible">
+            <template #reference>
+              <el-button class="health-btn" :loading="healthLoading" circle title="系统检测">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="12" y1="8" x2="12" y2="12"/>
+                  <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+              </el-button>
+            </template>
+            <div v-if="healthLoading">检查中...</div>
+            <div v-else-if="healthData">
+              <div class="health-header" style="margin-bottom:12px">
+                <span :class="['health-badge', healthData.status]">
+                  {{ healthData.status === 'ok' ? '✅ 全部正常' : '⚠️ 部分异常' }}
+                </span>
+              </div>
+              <div class="health-row" v-for="(val, key) in healthData.checks" :key="key"
+                   style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+                <span>{{ getCheckIcon(val.status) }}</span>
+                <span style="font-weight:500;width:80px">{{ key === 'api' ? 'API' :
+                  key === 'onlyoffice' ? 'OnlyOffice' :
+                  key === 'database' ? '数据库' : 'Tesseract' }}</span>
+                <span style="color:var(--text-secondary);font-size:12px">{{ val.message }}</span>
+              </div>
+              <el-button size="small" style="margin-top:10px;width:100%" @click="checkHealth">
+                重新检测
+              </el-button>
+            </div>
+            <div v-else style="color:var(--text-secondary)">检测失败</div>
+          </el-popover>
           <el-dropdown trigger="click" @command="handleCommand">
             <div class="user-badge">
               <el-icon><User /></el-icon>
@@ -92,13 +127,35 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { User, ArrowDown, SwitchButton } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
+import { healthApi, type HealthResponse } from '@/api/health'
 
 const router = useRouter()
 const authStore = useAuthStore()
+
+const healthPopoverVisible = ref(false)
+const healthData = ref<HealthResponse | null>(null)
+const healthLoading = ref(false)
+
+async function checkHealth() {
+  healthLoading.value = true
+  healthPopoverVisible.value = true
+  try {
+    healthData.value = await healthApi.check()
+  } catch {
+    healthData.value = null
+  } finally {
+    healthLoading.value = false
+  }
+}
+
+function getCheckIcon(s: 'ok' | 'error') {
+  return s === 'ok' ? '✅' : '❌'
+}
 
 function handleCommand(command: string) {
   if (command === 'logout') {
@@ -141,5 +198,19 @@ function handleCommand(command: string) {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.health-btn {
+  border: none !important;
+  background: transparent !important;
+}
+.health-btn:hover {
+  background: var(--bg-hover) !important;
+}
+.health-badge.ok {
+  color: #67c23a;
+}
+.health-badge.degraded {
+  color: #e6a23c;
 }
 </style>

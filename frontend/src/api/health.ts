@@ -1,5 +1,3 @@
-import { apiClient } from './axios'
-
 export interface HealthCheckItem {
   status: 'ok' | 'error'
   message: string
@@ -16,8 +14,8 @@ export interface HealthResponse {
 }
 
 export const healthApi = {
-  /** 调用 GET /api/v1/health */
+  /** 调用 GET /health（无需认证，走 nginx 代理到后端） */
   check(): Promise<HealthResponse> {
-    return apiClient.get<HealthResponse>('/health').then(r => r.data)
+    return fetch('/health').then(r => r.json())
   },
 }

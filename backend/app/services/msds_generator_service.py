@@ -456,9 +456,11 @@ class MSDSGeneratorService:
 
         for f in msds_path.iterdir():
             if f.is_file() and keyword_lower in f.name.lower():
-                # 跳过临时文件和 test 文件
+                # 跳过临时文件、test 文件和 PDF 文件（仅支持 docx/doc）
                 name_lower = f.name.lower()
                 if name_lower.startswith('~$') or name_lower.startswith('test'):
+                    continue
+                if f.suffix.lower() == '.pdf':
                     continue
                 results.append({
                     "name": f.name,

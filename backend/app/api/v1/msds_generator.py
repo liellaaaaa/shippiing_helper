@@ -174,27 +174,34 @@ async def generate_msds(request: GenerateRequest):
     if request.product_name:
         product_data = msds_gen_svc.get_product_data(request.product_name) or {}
 
-    # 根据语言选择生成方法
-    if language == "en":
-        # 英文 MSDS：基于英文模板填充用户编辑的字段
-        parsed_data = {}
-        if request.msds_file_path:
-            try:
-                parsed_data = msds_gen_svc.parse_msds_file(request.msds_file_path)
-            except Exception:
-                pass
-        content, doc_key = msds_gen_svc.generate_msds_english_from_template(
-            msds_file_path=request.msds_file_path,
-            parsed_data=parsed_data,
-            edits=edits
-        )
-    else:
-        # 中文 MSDS：使用原有逻辑
-        content, doc_key = msds_gen_svc.generate_msds(
-            msds_file_path=request.msds_file_path,
-            product_data=product_data,
-            edits=edits
-        )
+    try:
+        # 根据语言选择生成方法
+        if language == "en":
+            # 英文 MSDS：基于英文模板填充用户编辑的字段
+            parsed_data = {}
+            if request.msds_file_path:
+                try:
+                    parsed_data = msds_gen_svc.parse_msds_file(request.msds_file_path)
+                except Exception:
+                    pass
+            content, doc_key = msds_gen_svc.generate_msds_english_from_template(
+                msds_file_path=request.msds_file_path,
+                parsed_data=parsed_data,
+                edits=edits
+            )
+        else:
+            # 中文 MSDS：使用原有逻辑
+            content, doc_key = msds_gen_svc.generate_msds(
+                msds_file_path=request.msds_file_path,
+                product_data=product_data,
+                edits=edits
+            )
+    except FileNotFoundError as e:
+        return {"error": f"文件未找到，请重新选择 MSDS 文件: {str(e)}"}, 400
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"error": f"生成 MSDS 失败: {str(e)}"}, 500
 
     # 保存并创建 OnlyOffice 配置
     token, config, safe_key = oo_svc.create_config(doc_key, "docx")

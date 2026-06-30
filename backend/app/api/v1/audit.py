@@ -43,7 +43,8 @@ async def get_stats(
     end_time: Optional[datetime] = Query(None),
     service: AuditService = Depends(get_audit_service),
 ):
-    return service.get_stats(start_time=start_time, end_time=end_time)
+    result = service.get_stats(start_time=start_time, end_time=end_time)
+    return result
 
 
 @router.get("/export")
@@ -115,11 +116,9 @@ async def batch_log(
 
     for item in events:
         # 安全校验：禁止伪造其他用户的日志
-        if item.get("user_name") != user["name"]:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"禁止伪造用户日志: expected '{user['name']}', got '{item.get('user_name')}'"
-            )
+        item_user = item.get("user_name")
+        if item_user != user["name"]:
+            raise HTTPException(status_code=403, detail="forbidden")
 
         try:
             action_time = datetime.fromisoformat(item.get("action_time", "").replace("Z", "+00:00"))

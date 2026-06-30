@@ -11,6 +11,7 @@
             size="small"
             :disabled="!canMerge"
             :loading="saving"
+            v-track="{ event: 'save_to_database', module: 'phase1' }"
             @click="handleConfirmSave"
           >
             确认入库

@@ -131,6 +131,7 @@ import { ElMessage } from 'element-plus'
 import { User, ArrowDown, SwitchButton } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { healthApi, type HealthResponse } from '@/api/health'
+import { trackEvent } from '@/plugins/track'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -139,7 +140,17 @@ const healthPopoverVisible = ref(false)
 const healthData = ref<HealthResponse | null>(null)
 const healthLoading = ref(false)
 
+function getCurrentModule(): string {
+  const path = router.currentRoute.value.path
+  if (path.startsWith('/phase2')) return 'phase2'
+  if (path.startsWith('/phase3')) return 'phase3'
+  if (path.startsWith('/dashboard')) return 'dashboard'
+  if (path.startsWith('/data-center')) return 'data-center'
+  return 'phase1'
+}
+
 async function checkHealth() {
+  trackEvent({ event: 'system_health_check', module: getCurrentModule() })
   healthLoading.value = true
   healthPopoverVisible.value = true
   try {

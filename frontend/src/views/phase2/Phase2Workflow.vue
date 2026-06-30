@@ -58,6 +58,7 @@
           type="primary"
           size="small"
           :disabled="!selectedOrderId"
+          v-track="{ event: 'generate_document', module: 'phase2', detail: { doc_type: 'booking' } }"
           @click="showBookingDialog = true"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px">
@@ -69,6 +70,7 @@
           type="primary"
           size="small"
           :disabled="!selectedOrderId || !selectedPiNo"
+          v-track="{ event: 'generate_document', module: 'phase2', detail: { doc_type: 'loi' } }"
           @click="openDocument('loi')"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px">
@@ -76,7 +78,7 @@
           </svg>
           LOI保函
         </el-button>
-        <el-button size="small" @click="showMsdsDialog = true">
+        <el-button size="small" v-track="{ event: 'generate_document', module: 'phase2', detail: { doc_type: 'msds' } }" @click="showMsdsDialog = true">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px">
             <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M8 13h8M8 17h8M8 9h2"/>
           </svg>

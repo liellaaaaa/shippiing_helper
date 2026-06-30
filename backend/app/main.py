@@ -23,6 +23,7 @@ from app.api.v1.data_center import router as data_center_router
 from app.api.v1.transport_reports import router as transport_reports_router
 from app.api.v1.name_mapping import router as name_mapping_router
 from app.api.v1.auth import router as auth_router
+from app.api.v1.audit import router as audit_router
 from app.core.config import MSDS_DIR, TRANSPORT_REPORTS_DIR, CUSTOMS_CODES_JSON
 from app.database import SessionLocal
 from app.services.data_center_service import DataCenterService
@@ -61,6 +62,7 @@ app.include_router(data_center_router)
 app.include_router(transport_reports_router)
 app.include_router(name_mapping_router)
 app.include_router(auth_router)
+app.include_router(audit_router)
 app.include_router(msds_generator_router)
 
 # OnlyOffice Document Server 代理（解决 ngrok 单端口转发问题）

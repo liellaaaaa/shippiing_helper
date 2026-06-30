@@ -35,6 +35,12 @@ def get_save_service() -> SaveService:
     return SaveService(SessionLocal())
 
 
+def get_audit_service():
+    """审计日志服务依赖注入"""
+    from app.services.audit_service import AuditService
+    return AuditService(SessionLocal())
+
+
 """JWT authentication dependency."""
 from fastapi import Header, HTTPException, status
 from jose import jwt, JWTError

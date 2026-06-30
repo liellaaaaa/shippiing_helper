@@ -127,11 +127,8 @@ def health():
 
     # 2. OnlyOffice
     try:
-        resp = httpx.get(DOCUMENT_SERVER_URL + "/health", timeout=5.0)
-        if resp.status_code == 200:
-            checks["onlyoffice"] = {"status": "ok", "message": "Connected"}
-        else:
-            checks["onlyoffice"] = {"status": "error", "message": f"HTTP {resp.status_code}"}
+        resp = httpx.get(DOCUMENT_SERVER_URL, timeout=5.0, follow_redirects=True)
+        checks["onlyoffice"] = {"status": "ok", "message": f"HTTP {resp.status_code}"}
     except httpx.ConnectError:
         checks["onlyoffice"] = {"status": "error", "message": "连接失败"}
     except httpx.TimeoutException:

@@ -71,8 +71,7 @@
           <el-popover
             placement="bottom"
             :width="320"
-            trigger="click"
-            v-model:visible="healthPopoverVisible">
+            trigger="click">
             <template #reference>
               <el-button class="health-btn" :loading="healthLoading" circle title="系统检测" @click="checkHealth">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

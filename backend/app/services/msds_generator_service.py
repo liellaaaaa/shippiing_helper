@@ -174,22 +174,16 @@ class MSDSGeneratorService:
             pass
 
     def _translate_with_argos(self, text_cn: str) -> str:
-        """使用 argostranslate 翻译中文→英文（第三层 fallback）"""
+        """使用 translatepy 翻译中文→英文（第三层 fallback）"""
         try:
-            from argostranslate import translate as t
-            tr = t.get_translation_from_codes('zh', 'en')
-            if tr is None:
-                return text_cn
-            # 按标点分割：先按句子结束符分割，再按冒号/逗号分割标签与数值
-            # 这样 'Update Date:2026年03月' 会先被分成 ['Update Date', '2026年03月']
-            parts = re.split(r'(?<=[：:,])', text_cn)
-            results = []
-            for part in parts:
-                part = part.strip()
-                if part:
-                    result = tr.translate(part)
-                    results.append(result)
-            return ''.join(results) if results else text_cn
+            from translatepy import Translator
+            t = Translator()
+            result = t.translate(text_cn, "English", "Chinese")
+            if result and hasattr(result, 'result'):
+                return result.result
+            elif isinstance(result, str):
+                return result
+            return text_cn
         except Exception:
             return text_cn
 

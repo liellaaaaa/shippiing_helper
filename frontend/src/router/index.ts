@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { trackEvent, flush } from '@/plugins/track'
 import Layout from '@/views/Layout.vue'
 import Phase1Workflow from '@/views/phase1/Phase1Workflow.vue'
 import Phase2Workflow from '@/views/phase2/Phase2Workflow.vue'
@@ -59,27 +60,56 @@ const router = createRouter({
   ]
 })
 
-router.beforeEach((to, _from, next) => {
-  document.title = (to.meta.title as string || 'ShippingHelper') + ' - ShippingHelper'
+// 当前所在模块（用于检测模块切换）
+let currentModule: string | null = null
 
+// 使用 RegExp 精确匹配，避免 /phase10 误匹配 /phase1
+const moduleMap: Record<string, RegExp[]> = {
+  'phase1': [/^\/workflow$/, /^\/$/],
+  'phase2': [/^\/phase2/],
+  'phase3': [/^\/phase3/],
+  'dashboard': [/^\/dashboard/],
+  'data-center': [/^\/data-center/],
+}
+
+function getModuleFromPath(path: string): string | null {
+  for (const [module, patterns] of Object.entries(moduleMap)) {
+    if (patterns.some(re => re.test(path))) return module
+  }
+  return null
+}
+
+router.beforeEach(async (to, _from, next) => {
+  document.title = (to.meta.title as string || 'ShippingHelper') + ' - ShippingHelper'
   const authStore = useAuthStore()
 
-  // 允许访问登录页
   if (to.path === '/login') {
     if (authStore.isLoggedIn) {
       next('/workflow')
     } else {
+      if (currentModule) {
+        trackEvent({ event: 'exit_module', module: currentModule })
+        currentModule = null
+      }
+      await flush()
       next()
     }
     return
   }
 
-  // 其他页面需要登录
   if (!authStore.isLoggedIn) {
     next('/login')
-  } else {
-    next()
+    return
   }
+
+  const toModule = getModuleFromPath(to.path)
+  if (toModule && toModule !== currentModule) {
+    if (currentModule) trackEvent({ event: 'exit_module', module: currentModule })
+    trackEvent({ event: 'enter_module', module: toModule })
+    currentModule = toModule
+  }
+
+  next()
 })
 
 export default router

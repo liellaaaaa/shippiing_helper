@@ -15,7 +15,9 @@ export interface HealthResponse {
 
 export const healthApi = {
   /** 调用 GET /health（无需认证，走 nginx 代理到后端） */
-  check(): Promise<HealthResponse> {
-    return fetch('/health').then(r => r.json())
+  async check(): Promise<HealthResponse> {
+    const r = await fetch('/health')
+    if (!r.ok) throw new Error(`HTTP ${r.status}`)
+    return r.json()
   },
 }

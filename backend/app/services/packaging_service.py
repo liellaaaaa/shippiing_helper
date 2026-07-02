@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 
-PACKAGING_DATA_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "references", "packaging_data.json")
+PACKAGING_DATA_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "..", "references", "packaging_data.json")
 
 
 @dataclass

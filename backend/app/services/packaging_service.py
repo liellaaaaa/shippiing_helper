@@ -487,15 +487,15 @@ def calculate_remainder_contribution(
     remainder_drums: int,
     packaging_name: str,
     pallet_spec: str,
-    mode: str,  # "full_pallet" | "actual_stacked" | "loose"
+    mode: str,  # "full_pallet_merge" | "full_pallet_independent" | "no_pallet"
 ) -> tuple:
     """
     计算余数桶对总体积/总重量的贡献。
 
     mode:
-      - full_pallet:      余数凑整板，算一整卡板体积+重量
-      - actual_stacked:    只加余数桶自身（体积+皮重），不加卡板自身
-      - loose:             只加余数桶净体积，不加任何皮重
+      - full_pallet_merge:       所有余数合并到1块共享余数板（体积=1块板CBM，重量=板重+各行余数桶皮重）
+      - full_pallet_independent: 每个有余数的行各自开1块余数板
+      - no_pallet:               无托盘装载，只加余数桶自身体积和毛重
     """
     if remainder_drums <= 0:
         return 0.0, 0.0
@@ -506,14 +506,11 @@ def calculate_remainder_contribution(
 
     pallet = find_pallet(pallet_spec) if pallet_spec else None
 
-    if mode == "full_pallet":
+    if mode in ("full_pallet_merge", "full_pallet_independent"):
         extra_volume = pallet.cbm if pallet else 0.0
         extra_weight = (remainder_drums * pkg.tare_kg) + (pallet.weight_kg if pallet else 0.0)
-    elif mode == "actual_stacked":
+    else:  # no_pallet
         extra_volume = remainder_drums * pkg.cbm
-        extra_weight = remainder_drums * pkg.tare_kg
-    else:  # loose
-        extra_volume = remainder_drums * pkg.cbm
-        extra_weight = remainder_drums * pkg.net_kg
+        extra_weight = remainder_drums * pkg.gross_kg  # 毛重，不再是净重
 
     return round(extra_volume, 4), round(extra_weight, 1)

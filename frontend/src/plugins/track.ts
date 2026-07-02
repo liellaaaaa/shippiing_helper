@@ -58,7 +58,7 @@ function enqueueEvent(options: TrackOptions) {
 
 export const trackDirective: Directive = {
   mounted(el: HTMLElement & { _trackHandler?: (e: Event) => void }, binding: { value?: TrackOptions }) {
-    const options = binding.value || {}
+    const options = binding.value || { event: 'click' }
     const handler = () => enqueueEvent(options)
     el._trackHandler = handler
     el.addEventListener('click', handler)

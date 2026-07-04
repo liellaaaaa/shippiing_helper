@@ -3,6 +3,7 @@ import openpyxl
 import xlrd
 from typing import Tuple, Optional
 import os, time, base64, uuid
+from datetime import datetime
 from io import BytesIO
 from docx import Document
 from docx.shared import Pt, RGBColor
@@ -26,6 +27,18 @@ _XML_ILLEGALChars = re.compile(
 def _sanitize_for_xml(text: str) -> str:
     """Remove XML-illegal control characters from text."""
     return _XML_ILLEGALChars.sub("", text)
+
+
+def _parse_date(value: str):
+    """将多种格式的日期字符串转为 Python datetime，失败时返回原字符串。"""
+    if not value:
+        return value
+    for fmt in ("%Y-%m-%d", "%Y-%m-%d %H:%M:%S", "%Y年%m月%d日"):
+        try:
+            return datetime.strptime(value[:len("2026-12-31")], fmt)
+        except Exception:
+            pass
+    return value
 
 
 def convert_doc_to_docx(doc_path: str) -> bytes:
@@ -228,34 +241,59 @@ class DocumentService:
         return content_xlsx, doc_key, base64.b64encode(content_xlsx).decode()
 
     def generate_loi(self, order_no: str, pi_no: str) -> Tuple[bytes, str, str]:
+        """生成 LOI 保函：5 个字段来自运输鉴定报告 + 申报要素"""
+        from app.models.transport_report import TransportReport
+        from app.services.customs_declaration_service import CustomsDeclarationService
+
         template_path = TEMPLATES["loi"]
         if not os.path.exists(template_path):
             raise FileNotFoundError(f"LOI template not found: {template_path}")
         db = SessionLocal()
         try:
-            # Query OrderPiRecord by order_no (Phase 1 merged data store)
             records = db.query(OrderPiRecord).filter(OrderPiRecord.order_no == order_no).all()
             if not records:
                 raise ValueError(f"Order not found: {order_no}")
 
-            pi = db.query(PiContract).filter_by(pi_no=pi_no).first() if pi_no else None
+            first = records[0]
+            product_cn = first.product_cn or ""
 
+            # 从所有产品中找第一个非空 HS Code（LOI 是整单文档）
+            hs_code = ""
+            for r in records:
+                if r.hs_code:
+                    hs_code = r.hs_code
+                    break
+
+            # 1. 从运输鉴定报告获取前 4 个字段
+            transport_fields = {}
+            if product_cn:
+                # 模糊匹配运输鉴定报告（取最匹配的一条）
+                report = db.query(TransportReport).filter(
+                    TransportReport.product_name_cn.ilike(f"%{product_cn}%")
+                ).first()
+                if report:
+                    transport_fields = {
+                        "report_no": report.report_no or "",
+                        "product_name_en": report.product_name_en or "",
+                        "sample_desc_cn": report.sample_desc_cn or "",
+                        "product_name_cn": report.product_name_cn or product_cn,
+                    }
+
+            # 2. 从申报要素获取产品用途
+            product_usage = ""
+            if hs_code:
+                decl_svc = CustomsDeclarationService.get_instance()
+                elements = decl_svc.get_elements(hs_code)
+                product_usage = elements.get("用途", "")
+
+            # 3. 填充模板
             doc = Document(template_path)
-
-            # 汇总多产品信息
-            total_gw = sum(it.gross_weight_kg or 0 for it in records)
-            total_vol = sum(it.volume_cbm or 0 for it in records)
-            product_names = " / ".join([it.product_cn or "" for it in records if it.product_cn])
             replacements = {
-                "{{shipper}}": "HONGHAO CHEMICAL CO., LTD.",
-                "{{consignee}}": (pi.consignee_name or "") if pi else "",
-                "{{consignee_address}}": (pi.consignee_address or "") if pi else "",
-                "{{port_of_discharge}}": (pi.destination or "") if pi else "",
-                "{{product_name_cn}}": product_names,
-                "{{product_name_en}}": (records[0].product_en or "") if records else "",
-                "{{hs_code}}": (records[0].hs_code or "") if records else "",
-                "{{gross_weight}}": str(round(total_gw, 1)),
-                "{{volume}}": str(round(total_vol, 3)),
+                "{{product_name_cn}}": transport_fields.get("product_name_cn", product_cn),
+                "{{product_name_en}}": transport_fields.get("product_name_en", ""),
+                "{{report_no}}": transport_fields.get("report_no", ""),
+                "{{sample_desc}}": transport_fields.get("sample_desc_cn", ""),
+                "{{product_usage}}": product_usage,
                 "{{date}}": time.strftime("%Y 年 %m 月 %d 日"),
             }
             for para in doc.paragraphs:
@@ -269,8 +307,7 @@ class DocumentService:
             content = buf.getvalue()
         finally:
             db.close()
-        first_record = records[0]
-        doc_key = f"loi_{first_record.id}_{int(time.time())}"
+        doc_key = f"loi_{first.id}_{int(time.time())}"
         return content, doc_key, base64.b64encode(content).decode()
 
     def generate_msds(self, product_name: str) -> Tuple[bytes, str, str]:
@@ -500,18 +537,434 @@ class DocumentService:
         doc.save(buf)
         return buf.getvalue()
 
-    def generate_customs(self, order_id: int | None = None) -> Tuple[bytes, str, str]:
+    def generate_customs(
+        self,
+        order_id: int | None = None,
+        ledger_record_id: int | None = None,
+        order_no: str | None = None,
+    ) -> Tuple[bytes, str, str]:
         """
-        生成报关资料工作簿（整本 xlsx，5个 sheet）。
-        第一期仅返回原始模板，不做数据填充（为后续自动填充留扩展口）。
+        生成报关资料工作簿（整本 xlsx，5个 sheet），自动填充模板字段。
+
+        数据来源优先级：
+        1. ledger_record_id（台账记录，含三源完整数据）
+        2. order_id（回退到 OrderPiRecord 查询）
+        3. order_no（直接用于台账查询）
+
+        填充规则（各 Sheet 独立填充同一批产品数据）：
+        - 报关单：填写第一产品行（R20），多产品继续填 R38/R41/...；
+          汇总数据（件数/毛重/净重）来自 DrumCount/Sum 或首产品
+        - 发票/箱单/合同：填写第一产品行（R8/R10/R19），其余行留空
+        - 委托书：填写主要货物名称 + HS Code + 总价 + 日期
         """
+        import openpyxl
+        from app.services.ledger_service import LedgerService
+        from app.services.customs_declaration_service import CustomsDeclarationService
+
         template_path = TEMPLATES["customs"]
         if not os.path.exists(template_path):
             raise FileNotFoundError(f"Customs template not found: {template_path}")
 
-        with open(template_path, "rb") as f:
-            content = f.read()
+        # ── 读取台账数据 ────────────────────────────────────────────────
+        if ledger_record_id:
+            ledger_svc = LedgerService()
+            record = ledger_svc.get_ledger_record(ledger_record_id)
+        elif order_no:
+            ledger_svc = LedgerService()
+            resp = ledger_svc.list_ledger(search=order_no, page_size=1)
+            record = resp.records[0] if resp.records else None
+        elif order_id:
+            db = SessionLocal()
+            try:
+                rows = db.query(OrderPiRecord).filter_by(id=order_id).all()
+                if not rows:
+                    record = None
+                else:
+                    from app.schemas.ledger import LedgerRecordResponse, LedgerItemSchema
+                    first = rows[0]
+                    record = LedgerRecordResponse(
+                        id=first.id,
+                        order_no=first.order_no,
+                        customer_code=first.customer_code,
+                        sales_person=first.sales_person,
+                        consignee_name=first.consignee_name,
+                        consignee_address=first.consignee_address,
+                        destination=first.destination,
+                        loading_port=first.loading_port,
+                        price_term=first.price_term,
+                        payment_terms=first.payment_terms,
+                        pi_date=first.pi_date,
+                        items=[
+                            LedgerItemSchema(
+                                internal_code=r.internal_code,
+                                product_cn=r.product_cn,
+                                spec_kg=r.spec_kg,
+                                quantity_kg=r.quantity_kg,
+                                unit_price=r.unit_price,
+                                total_amount=r.total_amount,
+                                hs_code=r.hs_code,
+                                customs_name=r.customs_name,
+                                customs_ingredients=r.components,
+                                gross_weight_kg=r.gross_weight_kg,
+                                net_weight_kg=r.net_weight_kg,
+                                drum_count=r.drum_count,
+                                pallet_count=r.pallet_count,
+                            )
+                            for r in rows
+                        ],
+                    )
+            finally:
+                db.close()
+        else:
+            record = None
 
+        # ── 加载工作簿 ────────────────────────────────────────────────
+        wb = openpyxl.load_workbook(template_path)
+        ws_customs = wb["报关单"]
+        ws_invoice = wb["发票"]
+        ws_packing = wb["箱单"]
+        ws_contract = wb["合同"]
+        ws_proxy = wb["委托书"]
+
+        decl_svc = CustomsDeclarationService.get_instance()
+
+        # ── 通用辅助函数 ──────────────────────────────────────────────
+        def cn_port(dest: str) -> str:
+            """将英文港口/国家名翻译为中文海关常用名"""
+            mapping = {
+                # 国家
+                "thailand": "泰国",
+                "singapore": "新加坡",
+                "shanghai": "上海",
+                "guangzhou": "广州",
+                "shenzhen": "深圳",
+                "hong kong": "香港",
+                "hkg": "香港",
+                "malaysia": "马来西亚",
+                "indonesia": "印度尼西亚",
+                "jakarta": "雅加达",
+                "indian": "印度",
+                "india": "印度",
+                "ahmedabad": "艾哈迈达巴德",
+                "vietnam": "越南",
+                "ho chi minh": "胡志明市",
+                "hcmc": "胡志明市",
+                "bangladesh": "孟加拉国",
+                "philippines": "菲律宾",
+                "manila": "马尼拉",
+                "korea": "韩国",
+                "busan": "釜山",
+                "japan": "日本",
+                "tokyo": "东京",
+                "taiwan": "台湾",
+                "taipei": "台北",
+                "usa": "美国",
+                "united states": "美国",
+                "uk": "英国",
+                "germany": "德国",
+                "france": "法国",
+                "netherlands": "荷兰",
+                "italy": "意大利",
+                "spain": "西班牙",
+                "australia": "澳大利亚",
+                # 港口
+                "lat krabang": "拉格拉邦",
+                "laem chabang": "拉格拉邦",
+                "bangkok": "曼谷",
+                "tangkok": "曼谷",
+                "singapore port": "新加坡",
+                "port of singapore": "新加坡",
+                "shanghai port": "上海",
+                "guangzhou port": "广州",
+                "yantian": "盐田",
+                "shekou": "蛇口",
+                "chiwan": "赤湾",
+                "ningbo": "宁波",
+                "qingdao": "青岛",
+                "tianjin": "天津",
+                "dalian": "大连",
+                "xiamen": "厦门",
+            }
+            if not dest:
+                return ""
+            lower = dest.lower().strip()
+            # 先精确匹配，再包含匹配
+            if lower in mapping:
+                return mapping[lower]
+            # 包含匹配（取第一个匹配）
+            for key, val in mapping.items():
+                if key in lower or lower in key:
+                    return val
+            # 未知原样返回
+            return dest
+
+        def fmt_amt(v: float | None) -> str:
+            if v is None:
+                return ""
+            return f"{v:.2f}"
+
+        # ── 无数据：返回未填充模板 ──────────────────────────────────
+        if not record:
+            buf = BytesIO()
+            wb.save(buf)
+            content = buf.getvalue()
+            doc_key = f"customs_{uuid.uuid4().hex}"
+            return content, doc_key, base64.b64encode(content).decode()
+
+        items = record.items or []
+        first = items[0] if items else None
+
+        # ── 基本信息 ────────────────────────────────────────────────
+        pi_no = record.order_no or ""
+        consignee = record.consignee_name or ""
+        dest_raw = record.destination or ""
+        dest_cn = cn_port(dest_raw)          # 运抵国（中文）
+        dest_port = dest_raw                   # 指运港（保留原文本）
+        price_term = record.price_term or ""
+        payment_terms = record.payment_terms or ""
+        pi_date = record.pi_date or ""
+        hs_code = first.hs_code if first else ""
+        customs_name = first.customs_name if first else ""
+        qty_kg = first.quantity_kg if first else None
+        unit_price = first.unit_price if first else None
+        total_amount = first.total_amount if first else None
+        gross_weight = first.gross_weight_kg if first else None
+        net_weight = first.net_weight_kg if first else None
+        drum_count = first.drum_count if first else 0
+        pallet_count = first.pallet_count if first else 0
+        order_requirement = ""  # 来自台账或后续扩展
+
+        # 申报要素（从 JSON 知识库查询）
+        decl_elements = decl_svc.get_elements(hs_code)
+        usage = decl_elements.get("用途", "")
+        composition = decl_elements.get("成分", "")
+        soluble = decl_elements.get("是否溶于水", "")
+        appearance = decl_elements.get("外观", "")
+        export_benefit = decl_elements.get("出口享惠情况", "不确定")
+        base_source = decl_elements.get("底料来源", "")
+
+        # 构造申报要素格式字符串
+        decl_parts = []
+        if usage:
+            decl_parts.append(f"用途：{usage}")
+        if composition:
+            decl_parts.append(f"成分：{composition}")
+        if soluble:
+            decl_parts.append(f"是否溶于水：{soluble}")
+        if appearance:
+            decl_parts.append(f"外观：{appearance}")
+        if export_benefit:
+            decl_parts.append(f"出口享惠情况：{export_benefit}")
+        if base_source:
+            decl_parts.append(f"底料来源：{base_source}")
+        decl_str = "|".join(decl_parts)
+
+        # ── 填充 报关单 ──────────────────────────────────────────
+        ws = ws_customs
+        ws["A4"] = "广东宏昊化工有限公司"  # 境内发货人（固定）
+        if price_term:
+            ws["V4"] = price_term  # 成交方式
+        ws["A6"] = consignee                              # 境外收货人名称
+        ws["A8"] = "广东宏昊化工有限公司"                  # 生产销售单位（固定）
+        if pi_no:
+            ws["A10"] = pi_no                             # 合同协议号
+        if dest_cn:
+            ws["E10"] = dest_cn                           # 运抵国
+            ws["G10"] = dest_cn                           # 运抵国（重复）
+        if dest_port:
+            ws["K10"] = dest_port                          # 指运港
+        # 件数/毛重/净重（来自包装计算）
+        if pallet_count:
+            ws["E12"] = pallet_count                       # 件数
+        if gross_weight:
+            ws["F12"] = round(gross_weight, 1)            # 毛重
+        if net_weight:
+            ws["G12"] = round(net_weight, 1)              # 净重
+        if price_term:
+            ws["I12"] = price_term                         # 成交方式
+        # 备注
+        if order_requirement:
+            ws["B16"] = order_requirement
+        # 产品行（第1行从R20开始）
+        if items:
+            for idx, item in enumerate(items):
+                item_row = 20 + idx * 18  # 间隔18行一个产品槽位（模板结构）
+                if item_row > ws.max_row:
+                    break
+                ws.cell(item_row, 1, idx + 1)  # 项号
+                if item.hs_code:
+                    ws.cell(item_row, 2, item.hs_code)  # 商品编号
+                if item.customs_name:
+                    ws.cell(item_row, 4, item.customs_name)  # 商品名称
+                qty = item.quantity_kg
+                if qty:
+                    ws.cell(item_row, 7, qty)   # 数量
+                ws.cell(item_row, 8, "千克")      # 单位
+                up = item.unit_price
+                if up:
+                    ws.cell(item_row, 9, up)     # 单价
+                ws.cell(item_row, 11, "中国")     # 原产国
+                if dest_cn:
+                    ws.cell(item_row, 13, dest_cn)  # 最终目的国
+                ws.cell(item_row, 16, "肇庆")      # 境内货源地（固定）
+                ws.cell(item_row, 19, "照章征税")  # 征免（固定）
+
+                # 申报要素（合并到第2行）
+                elem_row = item_row + 1
+                elem_parts = []
+                if usage:
+                    elem_parts.append(f"用途：{usage}")
+                if item.customs_ingredients:
+                    elem_parts.append(f"成分：{item.customs_ingredients}")
+                elif composition:
+                    elem_parts.append(f"成分：{composition}")
+                if soluble:
+                    elem_parts.append(f"是否溶于水：{soluble}")
+                if appearance:
+                    elem_parts.append(f"外观：{appearance}")
+                if export_benefit:
+                    elem_parts.append(f"出口享惠情况：{export_benefit}")
+                elem_str = "|".join(elem_parts)
+                if elem_str:
+                    ws.cell(elem_row, 4, elem_str)
+                ta = item.total_amount
+                if ta:
+                    ws.cell(item_row, 9, ta)    # 总价（填单价列，同行）
+
+        # ── 填充 发票 ────────────────────────────────────────────
+        ws = ws_invoice
+        if pi_no:
+            ws["G2"] = f"IN{pi_no}"              # 发票编号
+        if consignee:
+            ws["C3"] = consignee                 # 买方
+        if pi_date:
+            ws["G3"] = _parse_date(pi_date)                  # 日期
+        if price_term:
+            ws["G6"] = price_term                 # 成交方式
+        if dest_port:
+            ws["H6"] = dest_port                   # 目的港
+        if items:
+            for idx, item in enumerate(items):
+                item_row = 8 + idx
+                if item.customs_name:
+                    ws.cell(item_row, 3, item.customs_name)  # 货物名称
+                qty = item.quantity_kg
+                if qty:
+                    ws.cell(item_row, 4, qty)
+                ws.cell(item_row, 5, "千克")       # 单位
+                up = item.unit_price
+                if up:
+                    ws.cell(item_row, 6, up)       # 单价
+                ws.cell(item_row, 7, "人民币")       # 币制
+                ta = item.total_amount
+                if ta:
+                    ws.cell(item_row, 8, ta)        # 金额
+            # TOTAL 汇总行
+            total_amt = sum((i.total_amount or 0) for i in items)
+            if total_amt:
+                ws["H24"] = round(total_amt, 2)
+                ws["G24"] = "人民币"
+            # 重算 G 列总价
+            for idx, item in enumerate(items):
+                item_row = 8 + idx
+                ta = item.total_amount
+                if ta:
+                    ws.cell(item_row, 8, ta)
+
+        # ── 填充 箱单 ────────────────────────────────────────────
+        ws = ws_packing
+        if pi_date:
+            ws["H3"] = _parse_date(pi_date)
+        if pi_no:
+            ws["H4"] = f"IN{pi_no}"               # 发票编号
+        if consignee:
+            ws["B5"] = consignee                   # 客户
+        if pi_no:
+            ws["H5"] = pi_no                       # 合同号
+        if dest_cn:
+            ws["E7"] = dest_cn                     # 目的国
+        if payment_terms:
+            ws["H7"] = payment_terms              # 付款条件
+        if items:
+            for idx, item in enumerate(items):
+                item_row = 10 + idx
+                ws.cell(item_row, 1, "N/M")        # 唛头
+                if item.customs_name:
+                    ws.cell(item_row, 2, item.customs_name)  # 货物名称
+                pc = item.pallet_count
+                if pc:
+                    ws.cell(item_row, 3, pc)        # 件数（托）
+                    ws.cell(item_row, 4, "托")       # 单位
+                dc = item.drum_count
+                if dc:
+                    ws.cell(item_row, 5, dc)         # 数量（桶）
+                    ws.cell(item_row, 6, "桶")
+                gw = item.gross_weight_kg
+                if gw:
+                    ws.cell(item_row, 7, round(gw, 1))  # 毛重
+                nw = item.net_weight_kg
+                if nw:
+                    ws.cell(item_row, 8, round(nw, 1))  # 净重
+
+        # ── 填充 合同 ────────────────────────────────────────────
+        ws = ws_contract
+        if pi_no:
+            ws["G4"] = pi_no                       # 合同号码
+        if pi_date:
+            ws["G7"] = _parse_date(pi_date)
+        if consignee:
+            ws["C8"] = consignee                    # 买方
+        if price_term:
+            ws["G13"] = price_term                 # 成交方式
+        if dest_port:
+            ws["H13"] = dest_port                  # 目的港
+        if items:
+            for idx, item in enumerate(items):
+                item_row = 19 + idx
+                if item.customs_name:
+                    ws.cell(item_row, 2, item.customs_name)  # 货物名称
+                qty = item.quantity_kg
+                if qty:
+                    ws.cell(item_row, 4, qty)
+                ws.cell(item_row, 5, "千克")         # 单位
+                up = item.unit_price
+                if up:
+                    ws.cell(item_row, 6, up)        # 单价
+                ws.cell(item_row, 7, "人民币")        # 币制
+                ta = item.total_amount
+                if ta:
+                    ws.cell(item_row, 8, ta)        # 金额
+            # 总金额
+            total_amt = sum((i.total_amount or 0) for i in items)
+            if total_amt:
+                ws["H31"] = round(total_amt, 2)
+                ws["G31"] = "人民币"
+
+        # ── 填充 委托书 ──────────────────────────────────────────
+        ws = ws_proxy
+        if consignee:
+            ws["C21"] = "广东宏昊化工有限公司"      # 委托方
+        # 汇总所有产品的货物名称和 HS Code
+        all_names = [i.customs_name for i in items if i.customs_name]
+        all_hs_codes = [i.hs_code for i in items if i.hs_code]
+        name_summary = " / ".join(dict.fromkeys(all_names))  # 去重拼接
+        hs_summary = " / ".join(dict.fromkeys(all_hs_codes))
+        if name_summary:
+            ws["C22"] = name_summary           # 主要货物名称（多产品拼接）
+        if hs_summary:
+            ws["C23"] = hs_summary            # HS编码（多产品拼接）
+        total_amt = sum((i.total_amount or 0) for i in items)
+        if total_amt:
+            ws["D24"] = round(total_amt, 2)
+        if pi_date:
+            d = _parse_date(pi_date)
+            ws["H23"] = d
+            ws["H25"] = d
+
+        # ── 保存 ────────────────────────────────────────────────
+        buf = BytesIO()
+        wb.save(buf)
+        content = buf.getvalue()
         doc_key = f"customs_{uuid.uuid4().hex}"
         return content, doc_key, base64.b64encode(content).decode()
 

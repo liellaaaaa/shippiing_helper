@@ -1,468 +1,477 @@
 <template>
   <div class="phase1-workflow">
+    <!-- 页头 -->
     <div class="page-header">
       <h1 class="page-title">外贸订单处理工作流</h1>
       <div class="page-header-row">
-        <span class="page-subtitle">粘贴订单 → 上传 PI → 预览合并数据 → 确认入库</span>
+        <span class="page-subtitle">PI合同表 + 销售订单表（粘贴）→ PI合同文件（上传）→ 预览合并 → 确认入库</span>
         <div class="header-actions">
           <el-button size="small" @click="handleReset">重置</el-button>
+          <el-button type="primary" size="small" :disabled="!canPreview" :loading="previewing" @click="handlePreview">
+            预览合并
+          </el-button>
           <el-button
-            type="primary"
+            type="success"
             size="small"
-            :disabled="!canMerge"
+            :disabled="!canSave"
             :loading="saving"
-            v-track="{ event: 'save_to_database', module: 'phase1' }"
-            @click="handleConfirmSave"
+            v-track="{ event: 'save_to_ledger', module: 'phase1' }"
+            @click="handleSaveLedger"
           >
             确认入库
           </el-button>
           <el-button
-            v-if="savedOrderId"
+            v-if="savedRecordId"
             type="primary"
             size="small"
-            @click="$router.push({ path: '/phase2', query: { orderId: savedOrderId } })"
+            @click="$router.push({ path: '/dashboard' })"
           >
-            进入文档编辑 →
+            进入台账 →
           </el-button>
         </div>
       </div>
     </div>
 
-    <div class="workflow-layout">
-      <!-- 左侧输入区 -->
-      <div class="input-panel" :style="{ width: leftWidth + 'px' }">
+    <!-- 三列输入区 -->
+    <div class="three-col-layout">
+      <!-- 第一列：PI合同表 -->
+      <div class="input-col">
         <el-card class="input-card">
           <template #header>
             <div class="card-header">
-              <span>订单数据</span>
-              <el-tag v-if="orderParsed" type="success" size="small">已解析</el-tag>
+              <span>PI合同表</span>
+              <el-tag v-if="piContractParsed" type="success" size="small">已解析</el-tag>
             </div>
           </template>
           <PasteTextarea
-            v-model="orderText"
-            @parse="handleOrderParse"
-            @clear="handleOrderClear"
+            v-model="piContractText"
+            @parse="handlePiContractParse"
+            @clear="piContractText = ''; piContractParsed = false; piContractOrders = []"
           />
+          <div v-if="piContractOrders.length > 0" class="parse-summary">
+            <span>订单号：{{ piContractOrders[0]?.order_no }}</span>
+            <span>，产品 {{ piContractOrders[0]?.items?.length || 0 }} 种</span>
+          </div>
         </el-card>
+      </div>
 
-        <el-card class="input-card" style="margin-top: 16px;">
+      <!-- 第二列：销售订单表 -->
+      <div class="input-col">
+        <el-card class="input-card">
           <template #header>
             <div class="card-header">
-              <span>PI 合同</span>
-              <el-tag v-if="piParsed" type="success" size="small">已解析</el-tag>
+              <span>销售订单表</span>
+              <el-tag v-if="salesOrderParsed" type="success" size="small">已解析</el-tag>
+            </div>
+          </template>
+          <PasteTextarea
+            v-model="salesOrderText"
+            @parse="handleSalesOrderParse"
+            @clear="salesOrderText = ''; salesOrderParsed = false; salesOrderOrders = []"
+          />
+          <div v-if="salesOrderOrders.length > 0" class="parse-summary">
+            <span>订单号：{{ salesOrderOrders[0]?.order_no }}</span>
+            <span>，产品 {{ salesOrderOrders[0]?.items?.length || 0 }} 种</span>
+          </div>
+        </el-card>
+      </div>
+
+      <!-- 第三列：PI合同文件上传 -->
+      <div class="input-col">
+        <el-card class="input-card">
+          <template #header>
+            <div class="card-header">
+              <span>PI合同文件</span>
+              <el-tag v-if="piFileUploaded" type="success" size="small">已上传</el-tag>
             </div>
           </template>
           <PiUploadDragger
-            v-if="!piParsed"
+            v-if="!piFileUploaded"
             @fileSelected="handlePiFileSelected"
           />
           <div v-else class="pi-file-info">
             <el-icon><document /></el-icon>
             <span class="pi-file-name">{{ piFileName }}</span>
-            <el-button text size="small" @click="piParsed = false; piFileName = ''">重新上传</el-button>
+            <el-button text size="small" @click="piFileUploaded = false; piFileName = ''; piFileData = null">
+              重新上传
+            </el-button>
           </div>
-        </el-card>
-      </div>
-
-      <!-- 分隔条 -->
-      <div class="resizer" @mousedown="startResize"></div>
-
-      <!-- 右侧预览区 -->
-      <div class="preview-panel">
-        <!-- 订单+产品+PI 合并为一个卡片 -->
-        <el-card class="preview-card">
-          <template #header>
-            <div class="card-header">
-              <span>订单预览</span>
-              <el-tag v-if="orderParsed && piParsed" type="success" size="small">已完整</el-tag>
-              <el-tag v-else-if="orderParsed || piParsed" type="warning" size="small">待完善</el-tag>
-            </div>
-          </template>
-
-          <!-- 订单信息（折叠显示） -->
-          <el-collapse v-model="collapseActiveNames">
-            <el-collapse-item name="order">
-              <template #title>
-                <span>订单信息</span>
-                <el-tag v-if="orderParsed" type="success" size="small" style="margin-left:8px">已解析</el-tag>
-              </template>
-              <div class="order-header-info">
-                <div class="info-row">
-                  <span class="info-label">订单号</span>
-                  <el-input v-model="orderForm.order_no" size="small" class="info-input" placeholder="待录入" />
-                </div>
-                <div class="info-row">
-                  <span class="info-label">客户编码</span>
-                  <el-input v-model="orderForm.customer_code" size="small" class="info-input" placeholder="待录入" />
-                </div>
-              </div>
-            </el-collapse-item>
-
-            <!-- 产品明细 -->
-            <el-collapse-item name="items">
-              <template #title>
-                <span>产品明细（共 {{ orderForm.items.length }} 种）</span>
-              </template>
-              <el-table :data="orderForm.items" border stripe size="small" max-height="250" style="width:100%">
-                <el-table-column prop="internal_code" label="内部编码" width="110" />
-                <el-table-column prop="product_cn" label="产品中文名" min-width="120" show-overflow-tooltip />
-                <el-table-column prop="customs_name" label="报关名称" width="130">
-                  <template #default="{ row }">
-                    <el-input v-model="row.customs_name" size="small" />
-                  </template>
-                </el-table-column>
-                <el-table-column prop="spec_kg" label="规格(kg)" width="90" align="center" />
-                <el-table-column prop="quantity_kg" label="数量" width="110">
-                  <template #default="{ row }">
-                    <el-input-number v-model="row.quantity_kg" size="small" :min="0" controls-position="right" class="qty-input" />
-                  </template>
-                </el-table-column>
-                <el-table-column prop="hs_code" label="H.S.Code" width="120">
-                  <template #default="{ row }">
-                    <el-input v-model="row.hs_code" size="small" />
-                  </template>
-                </el-table-column>
-              </el-table>
-            </el-collapse-item>
-
-            <!-- PI 合并数据 -->
-            <el-collapse-item name="pi">
-              <template #title>
-                <span>PI 合并数据</span>
-                <el-tag v-if="piParsed" type="success" size="small" style="margin-left:8px">已上传</el-tag>
-                <el-tag v-else type="info" size="small" style="margin-left:8px">待上传</el-tag>
-              </template>
-              <div class="pi-merge-info" v-if="piParsed">
-                <div class="info-row">
-                  <span class="info-label">PI号</span>
-                  <el-input v-model="piForm.pi_no" size="small" class="info-input" />
-                </div>
-                <div class="info-row">
-                  <span class="info-label">PI日期</span>
-                  <el-input v-model="piForm.pi_date" size="small" class="info-input" />
-                </div>
-                <div class="info-row">
-                  <span class="info-label">客户编码</span>
-                  <el-input v-model="piForm.customer_code" size="small" class="info-input" />
-                </div>
-                <div class="info-row">
-                  <span class="info-label">H.S.Code</span>
-                  <el-input v-model="piForm.hs_code" size="small" class="info-input" />
-                </div>
-                <div class="info-row">
-                  <span class="info-label">报关品名</span>
-                  <el-input v-model="piForm.customs_name" size="small" class="info-input" />
-                </div>
-                <!-- PI Header 字段（取到了什么数据就展示什么） -->
-                <div class="info-row" v-if="piForm.consignee_name">
-                  <span class="info-label">收货人</span>
-                  <el-input v-model="piForm.consignee_name" size="small" class="info-input" />
-                </div>
-                <div class="info-row" v-if="piForm.consignee_address">
-                  <span class="info-label">收货人地址</span>
-                  <el-input v-model="piForm.consignee_address" size="small" class="info-input" />
-                </div>
-                <div class="info-row" v-if="piForm.destination">
-                  <span class="info-label">目的港</span>
-                  <el-input v-model="piForm.destination" size="small" class="info-input" />
-                </div>
-                <div class="info-row" v-if="piForm.price_term">
-                  <span class="info-label">价格条款</span>
-                  <el-input v-model="piForm.price_term" size="small" class="info-input" />
-                </div>
-                <div class="info-row" v-if="piForm.loading_port">
-                  <span class="info-label">装货港</span>
-                  <el-input v-model="piForm.loading_port" size="small" class="info-input" />
-                </div>
-                <div class="info-row" v-if="piForm.invoice_to">
-                  <span class="info-label">发票抬头</span>
-                  <el-input v-model="piForm.invoice_to" size="small" class="info-input" />
-                </div>
-              </div>
-              <div v-else class="empty-placeholder">
-                <span>请上传 PI 合同文件（.xls/.xlsx/.pdf）</span>
-              </div>
-            </el-collapse-item>
-          </el-collapse>
-        </el-card>
-
-        <el-card class="preview-card" style="margin-top: 12px;">
-          <template #header>
-            <div class="card-header">
-              <span>包装计算</span>
-            </div>
-          </template>
-          <PackagingCalculator
-            ref="calcRef"
-          />
+          <!-- PI文件解析结果显示 -->
+          <div v-if="piFileData" class="pi-file-summary">
+            <div class="summary-row"><span class="label">PI号：</span>{{ piFileData.pi_no }}</div>
+            <div class="summary-row"><span class="label">目的港：</span>{{ piFileData.destination || '-' }}</div>
+            <div class="summary-row"><span class="label">收货人：</span>{{ piFileData.consignee_name || '-' }}</div>
+            <div class="summary-row"><span class="label">价格条款：</span>{{ piFileData.price_term || '-' }}</div>
+          </div>
         </el-card>
       </div>
     </div>
 
+    <!-- 合并预览区 -->
+    <div v-if="mergePreviewData" class="merge-preview-panel">
+      <!-- 校验警告 -->
+      <el-alert
+        v-if="mergePreviewData.validation_status === 'warning'"
+        type="warning"
+        :closable="true"
+        style="margin-bottom: 12px"
+      >
+        <template #title>
+          存在数据不一致，请核对后再入库
+        </template>
+        <div v-for="w in mergePreviewData.validation_warnings" :key="w.field + w.internal_code" class="validation-warn">
+          <strong>{{ w.internal_code }}</strong>：{{ w.message }}
+        </div>
+      </el-alert>
+
+      <el-card>
+        <template #header>
+          <div class="card-header">
+            <span>合并预览</span>
+            <el-tag :type="mergePreviewData.validation_status === 'ok' ? 'success' : 'warning'" size="small">
+              {{ mergePreviewData.validation_status === 'ok' ? '校验通过' : '存在不一致' }}
+            </el-tag>
+          </div>
+        </template>
+
+        <!-- 头部信息 -->
+        <div class="preview-header">
+          <div class="preview-section">
+            <h4 class="section-title">PI合同表信息</h4>
+            <div class="field-grid">
+              <div class="field-item"><span class="label">订单号</span><span class="value">{{ mergePreviewData.order_no }}</span></div>
+              <div class="field-item"><span class="label">客户编码</span><span class="value">{{ mergePreviewData.customer_code || '-' }}</span></div>
+              <div class="field-item"><span class="label">业务员</span><span class="value">{{ mergePreviewData.sales_person || '-' }}</span></div>
+              <div class="field-item"><span class="label">PI日期</span><span class="value">{{ mergePreviewData.pi_date || '-' }}</span></div>
+            </div>
+          </div>
+
+          <div class="preview-section">
+            <h4 class="section-title">销售订单表信息</h4>
+            <div class="field-grid">
+              <div class="field-item"><span class="label">出货抬头</span><span class="value">{{ mergePreviewData.shipment_title || '-' }}</span></div>
+              <div class="field-item"><span class="label">跟单员</span><span class="value">{{ mergePreviewData.merchandiser || '-' }}</span></div>
+              <div class="field-item"><span class="label">交货日期</span><span class="value">{{ mergePreviewData.delivery_date || '-' }}</span></div>
+              <div class="field-item"><span class="label">运输方式</span><span class="value">{{ mergePreviewData.shipment_method || '-' }}</span></div>
+            </div>
+          </div>
+
+          <div class="preview-section">
+            <h4 class="section-title">PI合同文件信息</h4>
+            <div class="field-grid">
+              <div class="field-item"><span class="label">收货人</span><span class="value">{{ mergePreviewData.consignee_name || '-' }}</span></div>
+              <div class="field-item"><span class="label">收货地址</span><span class="value">{{ mergePreviewData.consignee_address || '-' }}</span></div>
+              <div class="field-item"><span class="label">电话</span><span class="value">{{ mergePreviewData.consignee_tel || '-' }}</span></div>
+              <div class="field-item"><span class="label">目的港</span><span class="value">{{ mergePreviewData.destination || '-' }}</span></div>
+              <div class="field-item"><span class="label">装货港</span><span class="value">{{ mergePreviewData.loading_port || '-' }}</span></div>
+              <div class="field-item"><span class="label">价格条款</span><span class="value">{{ mergePreviewData.price_term || '-' }}</span></div>
+              <div class="field-item"><span class="label">付款方式</span><span class="value">{{ mergePreviewData.payment_terms || '-' }}</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 产品明细表 -->
+        <el-table :data="mergePreviewData.items" border stripe size="small" max-height="350" style="margin-top: 16px">
+          <el-table-column prop="internal_code" label="内部编码" width="110" fixed />
+          <el-table-column prop="product_cn" label="产品名称" min-width="130" show-overflow-tooltip />
+          <el-table-column prop="spec_kg" label="规格kg" width="80" align="center">
+            <template #default="{ row }">{{ row.spec_kg ?? '-' }}</template>
+          </el-table-column>
+          <el-table-column prop="quantity_kg" label="数量(kg)" width="90" align="center" />
+          <el-table-column prop="unit_price" label="单价" width="80" align="center">
+            <template #default="{ row }">{{ row.unit_price ?? '-' }}</template>
+          </el-table-column>
+          <el-table-column prop="total_amount" label="金额" width="90" align="center">
+            <template #default="{ row }">{{ row.total_amount ?? '-' }}</template>
+          </el-table-column>
+          <el-table-column prop="hs_code" label="H.S.Code" width="110">
+            <template #default="{ row }">
+              <span :class="{ 'text-warning': !row.hs_code }">{{ row.hs_code || '待填充' }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="customs_name" label="报关品名" min-width="130" show-overflow-tooltip>
+            <template #default="{ row }">
+              <span :class="{ 'text-warning': !row.customs_name }">{{ row.customs_name || '待填充' }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="customs_ingredients" label="报关成分" min-width="150" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.customs_ingredients || '-' }}</template>
+          </el-table-column>
+          <el-table-column prop="product_appearance" label="产品外观" min-width="100" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.product_appearance || '-' }}</template>
+          </el-table-column>
+          <el-table-column label="来源" width="150" align="center">
+            <template #default="{ row }">
+              <el-tag v-if="row.source_pi_contract" size="small" type="success" style="margin-right:2px">PI合同表</el-tag>
+              <el-tag v-if="row.source_sales_order" size="small" type="warning" style="margin-right:2px">订单表</el-tag>
+              <el-tag v-if="row.source_pi_file" size="small" type="info">PI文件</el-tag>
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-card>
+    </div>
+
+    <!-- 包装计算（入库前可选） -->
+    <div v-if="mergePreviewData" class="packaging-section">
+      <el-card>
+        <template #header>
+          <div class="card-header">
+            <span>包装计算</span>
+          </div>
+        </template>
+        <PackagingCalculator ref="calcRef" />
+      </el-card>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Document } from '@element-plus/icons-vue'
 import PasteTextarea from '@/components/phase1/PasteTextarea.vue'
 import PiUploadDragger from '@/components/phase1/PiUploadDragger.vue'
-import { ordersApi, type ParsedOrderSchema } from '@/api/orders'
-import { uploadPiFile, type PiUploadResponse } from '@/api/pi'
-import { saveOrderPiRecord, type PackagingResult } from '@/api/phase1'
 import PackagingCalculator from '@/components/phase1/PackagingCalculator.vue'
+import {
+  ordersApi,
+  type ParsedOrderSchema,
+  type MergePreviewResponse,
+  type LedgerWriteRequest,
+} from '@/api/orders'
+import { uploadPiFile, type PiUploadResponse } from '@/api/pi'
 
-// State
-const orderText = ref('')
-const orderParsed = ref(false)
-const orderParsedData = ref<ParsedOrderSchema | null>(null)
-const piParsed = ref(false)
-const piParsedData = ref<PiUploadResponse | null>(null)
+// ── State ────────────────────────────────────────────────────────────────────
+
+// PI合同表
+const piContractText = ref('')
+const piContractParsed = ref(false)
+const piContractOrders = ref<ParsedOrderSchema[]>([])
+
+// 销售订单表
+const salesOrderText = ref('')
+const salesOrderParsed = ref(false)
+const salesOrderOrders = ref<ParsedOrderSchema[]>([])
+
+// PI合同文件
+const piFileUploaded = ref(false)
 const piFileName = ref('')
+const piFileData = ref<PiUploadResponse | null>(null)
+const piFileForUpload = ref<File | null>(null)
+
+// 合并预览
+const mergePreviewData = ref<MergePreviewResponse | null>(null)
+const previewing = ref(false)
+
+// 保存
 const saving = ref(false)
-const savedOrderId = ref<number | null>(null)
-const packagingResult = ref<PackagingResult | null>(null)
-const collapseActiveNames = ref<string[]>(['order', 'items', 'pi'])
+const savedRecordId = ref<number | null>(null)
+
+// 包装计算
 const calcRef = ref<InstanceType<typeof PackagingCalculator>>()
 
-// 可拖拽分割条
-const leftWidth = ref(400)
-const isResizing = ref(false)
+// ── Computed ─────────────────────────────────────────────────────────────────
 
-function startResize(e: MouseEvent) {
-  isResizing.value = true
-  const startX = e.clientX
-  const startWidth = leftWidth.value
-  const workflowEl = document.querySelector('.workflow-layout') as HTMLElement
+const canPreview = computed(() =>
+  (piContractParsed.value && piContractOrders.value.length > 0) ||
+  (salesOrderParsed.value && salesOrderOrders.value.length > 0)
+)
 
-  function onMouseMove(ev: MouseEvent) {
-    if (!isResizing.value) return
-    const dx = ev.clientX - startX
-    const containerWidth = workflowEl?.offsetWidth || window.innerWidth
-    const newWidth = startWidth + dx
-    const minW = containerWidth * 0.15
-    const maxW = containerWidth * 0.75
-    leftWidth.value = Math.min(maxW, Math.max(minW, newWidth))
+const canSave = computed(() => mergePreviewData.value !== null)
+
+// ── Handlers ─────────────────────────────────────────────────────────────────
+
+async function handlePiContractParse(text: string) {
+  if (!text.trim()) {
+    ElMessage.warning('PI合同表文本不能为空')
+    return
   }
-  function onMouseUp() {
-    isResizing.value = false
-    document.removeEventListener('mousemove', onMouseMove)
-    document.removeEventListener('mouseup', onMouseUp)
-  }
-  document.addEventListener('mousemove', onMouseMove)
-  document.addEventListener('mouseup', onMouseUp)
-}
-
-// Order Form
-const orderForm = ref({
-  order_no: '',
-  customer_code: '',
-  items: [] as Array<{
-    internal_code: string
-    product_cn: string
-    spec_kg: number
-    quantity_kg: number
-    unit_price: number
-    total_amount: number
-    hs_code: string
-    customs_name: string
-    order_requirement: string
-  }>,
-})
-
-// PI Form
-const piForm = ref({
-  pi_no: '',
-  customer_code: '',
-  pi_date: '',
-  internal_code: '',
-  quantity: 0,
-  unit_price: 0,
-  total_amount: 0,
-  hs_code: '',
-  customs_name: '',
-  // PI Header 字段（后端已支持展示）
-  consignee_name: '',
-  consignee_address: '',
-  destination: '',
-  loading_port: '',
-  price_term: '',
-  invoice_to: '',
-})
-
-// Computed
-const canMerge = computed(() => orderParsed.value && orderForm.value.items.length > 0)
-
-function syncCalculatorFromOrder() {
-  if (!calcRef.value) return
-  calcRef.value.clearRows()
-  for (const item of orderForm.value.items) {
-    calcRef.value.addRow(item.internal_code || '', item.product_cn || '', item.quantity_kg || 0)
-  }
-}
-
-// Handlers
-async function handleOrderParse(text: string) {
   try {
-    const result = await ordersApi.parsePaste(text)
+    const result = await ordersApi.parsePiContractTable(text)
     if (result.orders.length === 0) {
-      ElMessage.warning('未解析到订单数据')
+      ElMessage.warning('PI合同表未解析到数据')
       return
     }
-    const first = result.orders[0]
-    orderParsedData.value = first
-
-    // 解析所有产品（支持一单多品）
-    orderForm.value = {
-      order_no: first.order_no || '',
-      customer_code: first.customer_code || '',
-      items: (first.items || []).map((item: any) => ({
-        internal_code: item.internal_code || '',
-        product_cn: item.product_cn || '',
-        spec_kg: item.spec_kg || 0,
-        quantity_kg: item.quantity_kg || 0,
-        unit_price: item.unit_price || 0,
-        total_amount: item.total_amount || 0,
-        hs_code: item.hs_code || '',
-        customs_name: item.customs_name || '',
-        order_requirement: item.order_requirement || '',
-      })),
-    }
-    orderParsed.value = true
-
-    // 更新计算器
-    syncCalculatorFromOrder()
-
-    ElMessage.success(`订单解析成功，共 ${orderForm.value.items.length} 个产品`)
+    piContractOrders.value = result.orders
+    piContractParsed.value = true
+    ElMessage.success(`PI合同表解析成功：${result.orders[0].order_no}，${result.orders[0].items.length} 种产品`)
   } catch (err: any) {
-    ElMessage.error(err.response?.data?.detail || '解析失败')
+    ElMessage.error(err.response?.data?.detail || 'PI合同表解析失败')
+  }
+}
+
+async function handleSalesOrderParse(text: string) {
+  if (!text.trim()) {
+    ElMessage.warning('销售订单表文本不能为空')
+    return
+  }
+  try {
+    const result = await ordersApi.parseSalesOrderTable(text)
+    if (result.orders.length === 0) {
+      ElMessage.warning('销售订单表未解析到数据')
+      return
+    }
+    salesOrderOrders.value = result.orders
+    salesOrderParsed.value = true
+    ElMessage.success(`销售订单表解析成功：${result.orders[0].order_no}，${result.orders[0].items.length} 种产品`)
+  } catch (err: any) {
+    ElMessage.error(err.response?.data?.detail || '销售订单表解析失败')
   }
 }
 
 async function handlePiFileSelected(file: File) {
   piFileName.value = file.name
+  piFileForUpload.value = file
   try {
     const result = await uploadPiFile(file)
-    piParsedData.value = result
-
-    const firstItem = result.items[0] || {}
-    piForm.value = {
-      pi_no: result.pi_no || '',
-      customer_code: result.customer_code || '',
-      pi_date: result.pi_date || '',
-      internal_code: firstItem.internal_code || '',
-      quantity: firstItem.quantity ?? 0,
-      unit_price: firstItem.unit_price ?? 0,
-      total_amount: firstItem.total_amount ?? 0,
-      hs_code: firstItem.hs_code || '',
-      customs_name: firstItem.customs_name || '',
-      // PI Header 字段
-      consignee_name: result.consignee_name || '',
-      consignee_address: result.consignee_address || '',
-      destination: result.destination || '',
-      loading_port: result.loading_port || '',
-      price_term: result.price_term || '',
-      invoice_to: result.invoice_to || '',
-    }
-    piParsed.value = true
-    ElMessage.success(`PI 文件 "${file.name}" 解析成功`)
+    piFileData.value = result
+    piFileUploaded.value = true
+    ElMessage.success(`PI文件 "${file.name}" 解析成功`)
   } catch (err: any) {
-    ElMessage.error(err.response?.data?.detail || 'PI 解析失败')
+    ElMessage.error(err.response?.data?.detail || 'PI文件解析失败')
+    piFileUploaded.value = false
+    piFileForUpload.value = null
   }
 }
 
-function handleOrderClear() {
-  orderParsed.value = false
-  orderParsedData.value = null
-  orderForm.value = { order_no: '', customer_code: '', items: [] }
-  packagingResult.value = null
+async function handlePreview() {
+  previewing.value = true
+  try {
+    const formData = new FormData()
+    if (piContractText.value.trim()) {
+      formData.append('pi_contract_table_text', piContractText.value)
+    }
+    if (salesOrderText.value.trim()) {
+      formData.append('sales_order_table_text', salesOrderText.value)
+    }
+    if (piFileForUpload.value) {
+      formData.append('pi_file', piFileForUpload.value)
+    }
+
+    const result = await ordersApi.mergePreview(formData)
+    mergePreviewData.value = result
+
+    // 等待 DOM 更新后同步到包装计算器（v-if="mergePreviewData" 导致组件延迟挂载）
+    await nextTick()
+    if (calcRef.value && result.items.length > 0) {
+      calcRef.value.clearRows()
+      for (const item of result.items) {
+        calcRef.value.addRow(item.internal_code, item.product_cn || '', item.quantity_kg || 0)
+      }
+    }
+
+    if (result.validation_status === 'ok') {
+      ElMessage.success('三源合并完成，校验通过')
+    } else {
+      ElMessage.warning('存在数据不一致，请核对后入库')
+    }
+  } catch (err: any) {
+    ElMessage.error(err.response?.data?.detail || '合并预览失败')
+  } finally {
+    previewing.value = false
+  }
 }
 
-// Confirm Save
-async function handleConfirmSave() {
-  if (!canMerge.value) {
-    ElMessage.warning('请确保订单已解析')
+async function handleSaveLedger() {
+  if (!mergePreviewData.value) {
+    ElMessage.warning('请先执行预览合并')
     return
   }
-
   saving.value = true
   try {
-    // 构建多产品 items 数组
-    const items = orderForm.value.items.map(item => ({
-      internal_code: item.internal_code,
-      product_cn: item.product_cn,
-      spec_kg: item.spec_kg,
-      quantity_kg: item.quantity_kg,
-      unit_price: item.unit_price,
-      total_amount: item.total_amount,
-      hs_code: item.hs_code,
-      customs_name: item.customs_name,
-      order_requirement: item.order_requirement,
-    }))
+    const preview = mergePreviewData.value
+    // 从计算器获取包装数据
+    const calcSummary = calcRef.value?.getSummary()
+    const calcRows = calcRef.value?.getRows() || []
 
-    const orderData = {
-      order_no: orderForm.value.order_no,
-      customer_code: orderForm.value.customer_code,
+    const items = preview.items.map((item, idx) => {
+      const rowCalc = calcRows[idx] || {}
+      return {
+        internal_code: item.internal_code,
+        product_cn: item.product_cn,
+        spec_kg: rowCalc.spec_kg || null,
+        quantity_kg: item.quantity_kg,
+        unit_price: item.unit_price,
+        total_amount: item.total_amount,
+        hs_code: item.hs_code,
+        customs_name: item.customs_name,
+        customs_ingredients: item.customs_ingredients,
+        product_appearance: item.product_appearance,
+        drum_count: rowCalc.drum_count || null,
+        pallet_count: rowCalc.pallet_count || null,
+        net_weight_kg: rowCalc.net_weight_kg || null,
+        gross_weight_kg: rowCalc.gross_weight_kg || null,
+        volume_cbm: rowCalc.volume_cbm || null,
+        fits_20gp: rowCalc.fits_20gp ? '适合' : '超出',
+        packaging_type_id: rowCalc.packaging_type_id || null,
+        pallet_spec: rowCalc.pallet_spec || null,
+        drums_per_pallet: rowCalc.drums_per_pallet || null,
+      }
+    })
+
+    const request: LedgerWriteRequest = {
+      order_no: preview.order_no,
+      customer_code: preview.customer_code,
+      sales_person: preview.sales_person,
+      pi_date: preview.pi_date,
+      // PI合同文件字段
+      consignee_name: preview.consignee_name,
+      consignee_address: preview.consignee_address,
+      destination: preview.destination,
+      loading_port: preview.loading_port,
+      price_term: preview.price_term,
+      payment_terms: preview.payment_terms,
+      bank_info: preview.bank_info,
+      // 从销售订单表补充（取第一条订单的数据）
+      ...buildSalesOrderFields(),
       items,
     }
 
-    const piData = piParsed.value ? {
-      pi_no: piForm.value.pi_no,
-      customer_code: piForm.value.customer_code,
-      pi_date: piForm.value.pi_date,
-      internal_code: piForm.value.internal_code,
-      quantity: piForm.value.quantity,
-      unit_price: piForm.value.unit_price,
-      total_amount: piForm.value.total_amount,
-      hs_code: piForm.value.hs_code,
-      customs_name: piForm.value.customs_name,
-    } : undefined
-
-    // 从计算器获取汇总，并转换为 PackagingResult 格式
-    const summary = calcRef.value?.getSummary()
-    const packaging_result = summary ? {
-      packaging_type: '混合包装',
-      drums: summary.total_drums,
-      pallets: summary.total_pallets,
-      drums_per_pallet: 0,
-      net_weight_kg: 0,
-      gross_weight_kg: summary.total_weight_kg,
-      volume_cbm: summary.total_cbm,
-      fits_20gp: summary.fits_20gp ? '适合' : '超出',
-      no_pallet: false,
-    } : undefined
-
-    // 获取每产品各自的包装计算结果
-    const packaging_items = calcRef.value?.getRows() || []
-
-    const resp = await saveOrderPiRecord({
-      order_data: orderData,
-      pi_data: piData,
-      packaging_result,
-      packaging_items,
-    })
-
-    savedOrderId.value = resp.record_id
-    ElMessage.success('数据已成功落库！')
-    handleReset()
+    const resp = await ordersApi.writeLedger(request)
+    savedRecordId.value = resp.record_id
+    ElMessage.success(`成功写入台账：${resp.items_count} 条产品记录`)
   } catch (err: any) {
-    ElMessage.error(err.response?.data?.detail || '落库失败')
+    ElMessage.error(err.response?.data?.detail || '写入台账失败')
   } finally {
     saving.value = false
   }
 }
 
+function buildSalesOrderFields(): Partial<LedgerWriteRequest> {
+  if (!salesOrderOrders.value.length) return {}
+  const first = salesOrderOrders.value[0]
+  const firstItem = first.items[0]
+  return {
+    sales_order_no: first.order_no,
+    order_date: firstItem?.order_date || undefined,
+    delivery_date: firstItem?.order_date || undefined,
+    shipment_channel: firstItem?.shipment_channel || undefined,
+    shipment_method: firstItem?.shipment_method || undefined,
+    review_status: firstItem?.review_status || undefined,
+    spec_abnormal: firstItem?.spec_abnormal || undefined,
+    has_sample: firstItem?.has_sample || undefined,
+    price_adjusted: firstItem?.price_adjusted || undefined,
+    order_confirmed: firstItem?.order_confirmed || undefined,
+    production_deadline: firstItem?.production_deadline || undefined,
+    shipment_title: firstItem?.shipment_title || undefined,
+    document_type: firstItem?.document_type || undefined,
+    merchandiser: firstItem?.merchandiser || undefined,
+  }
+}
+
 function handleReset() {
-  orderText.value = ''
-  orderParsed.value = false
-  orderParsedData.value = null
-  piParsed.value = false
-  piParsedData.value = null
+  piContractText.value = ''
+  piContractParsed.value = false
+  piContractOrders.value = []
+  salesOrderText.value = ''
+  salesOrderParsed.value = false
+  salesOrderOrders.value = []
+  piFileUploaded.value = false
   piFileName.value = ''
-  packagingResult.value = null
-  orderForm.value = { order_no: '', customer_code: '', items: [] }
-  piForm.value = { pi_no: '', customer_code: '', pi_date: '', internal_code: '', quantity: 0, unit_price: 0, total_amount: 0, hs_code: '', customs_name: '', consignee_name: '', consignee_address: '', destination: '', loading_port: '', price_term: '', invoice_to: '' }
+  piFileData.value = null
+  piFileForUpload.value = null
+  mergePreviewData.value = null
+  savedRecordId.value = null
+  calcRef.value?.clearRows()
 }
 </script>
 
@@ -474,78 +483,39 @@ function handleReset() {
 .page-subtitle { font-size: 14px; color: #909399; margin: 0; }
 .header-actions { display: flex; gap: 8px; }
 
-.workflow-layout { display: flex; gap: 0; align-items: stretch; overflow: hidden; }
-.input-panel { width: 200px; flex-shrink: 0; display: flex; flex-direction: column; min-width: 0; }
-.preview-panel { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+/* 三列布局 */
+.three-col-layout { display: flex; gap: 16px; }
+.input-col { flex: 1; min-width: 0; }
 
-.resizer {
-  width: 6px;
-  background: var(--el-border-color-extra-light);
-  cursor: col-resize;
-  flex-shrink: 0;
-  transition: background 0.15s;
-  margin: 0 8px;
-}
-.resizer:hover { background: var(--el-color-primary); }
-
-.input-card, .preview-card { border-radius: 12px; }
+/* 卡片 */
+.input-card { border-radius: 12px; }
 .card-header { font-weight: 600; font-size: 15px; display: flex; justify-content: space-between; align-items: center; }
 
-.pkg-placeholder { text-align: center; color: #909399; padding: 20px; }
-.pkg-result { padding: 4px 0; }
-.packing-scheme { margin-top: 12px; padding: 10px; background: #f5f7fa; border-radius: 6px; font-size: 13px; color: #606266; }
+/* 解析摘要 */
+.parse-summary { margin-top: 8px; font-size: 13px; color: #67c23a; }
 
-.action-bar { position: sticky; bottom: 0; display: flex; justify-content: flex-end; gap: 12px; padding: 16px 24px; background: white; border-top: 1px solid #e8e8e8; margin-top: 20px; box-shadow: 0 -2px 12px rgba(0,0,0,0.05); }
-
+/* PI文件信息 */
 .pi-file-info { display: flex; align-items: center; gap: 8px; padding: 12px 16px; background: #f0f9eb; border-radius: 8px; color: #67c23a; }
 .pi-file-name { flex: 1; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* Order header info */
-.order-header-info { display: flex; flex-direction: column; gap: 8px; }
-.info-row { display: flex; align-items: center; gap: 12px; }
-.info-label { width: 80px; font-size: 13px; color: #606266; }
-.info-input { flex: 1; }
+.pi-file-summary { margin-top: 12px; display: flex; flex-direction: column; gap: 4px; }
+.summary-row { font-size: 13px; color: #606266; }
+.summary-row .label { color: #909399; }
 
-/* Product table inputs */
-.qty-input, .price-input { width: 100%; }
+/* 合并预览 */
+.merge-preview-panel { margin-top: 20px; }
+.preview-header { display: flex; gap: 24px; }
+.preview-section { flex: 1; }
+.section-title { font-size: 14px; font-weight: 600; margin: 0 0 12px 0; color: #303133; }
+.field-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.field-item { display: flex; gap: 8px; font-size: 13px; }
+.field-item .label { color: #909399; min-width: 60px; }
+.field-item .value { color: #303133; }
 
-/* PI merge info */
-.pi-merge-info { display: flex; flex-direction: column; gap: 8px; }
+/* 包装区 */
+.packaging-section { margin-top: 16px; }
 
-/* Empty state placeholder */
-.empty-placeholder {
-  text-align: center;
-  padding: 12px;
-  color: #c0c4cc;
-  font-size: 13px;
-}
-
-/* Product item rows */
-.product-item-card {
-  border: 1px solid var(--el-border-color-extra-light);
-  border-radius: 8px;
-  padding: 12px 16px;
-  margin-bottom: 8px;
-  background: var(--el-fill-color-light);
-}
-.product-item-header {
-  font-weight: 600;
-  font-size: 14px;
-  margin-bottom: 8px;
-  color: var(--el-text-color-primary);
-}
-.product-item-fields {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-}
-.product-item-field {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.product-item-field label {
-  font-size: 11px;
-  color: var(--el-text-color-secondary);
-}
+/* 警告文字 */
+.text-warning { color: #e6a23c; font-style: italic; }
+.validation-warn { font-size: 13px; margin-top: 4px; }
 </style>

@@ -1,15 +1,15 @@
 <template>
   <div class="dashboard-page">
     <div class="page-header">
-      <h1 class="page-title">数据看板</h1>
-      <p class="page-subtitle">订单与 PI 合并数据汇总 — 确认数据无误后进入文档编辑</p>
+      <h1 class="page-title">台账列表</h1>
+      <p class="page-subtitle">三源合并后的完整订单记录 — 选择一条记录进入文档编辑</p>
     </div>
 
     <el-card class="dashboard-card">
       <template #header>
         <div class="card-header">
-          <span>订单列表</span>
-          <span class="card-hint">共 {{ total }} 条订单</span>
+          <span>订单台账</span>
+          <span class="card-hint">共 {{ total }} 条记录</span>
         </div>
       </template>
 
@@ -18,7 +18,7 @@
         <div class="toolbar-left">
           <el-input
             v-model="searchText"
-            placeholder="搜索订单号 / 客户编码"
+            placeholder="搜索订单号 / 客户编码 / 业务员"
             clearable
             class="search-input"
             @keyup.enter="handleSearch"
@@ -28,8 +28,10 @@
             </template>
           </el-input>
         </div>
-
         <div class="toolbar-right">
+          <el-button type="primary" icon="Plus" @click="$router.push('/workflow')">
+            新录入
+          </el-button>
           <el-button type="primary" icon="Download" @click="handleExportExcel">
             导出 Excel
           </el-button>
@@ -41,9 +43,9 @@
 
       <!-- 数据表格 -->
       <el-table
-        :data="orderList"
+        :data="recordList"
         v-loading="loading"
-        row-key="order_id"
+        row-key="id"
         class="data-table"
         :expand-row-keys="expandedRows"
         @expand-change="onExpandChange"
@@ -53,57 +55,62 @@
             <div class="product-expand">
               <div class="expand-header">
                 <span class="expand-col">内部编码</span>
-                <span class="expand-col">产品中文名</span>
-                <span class="expand-col">报关名称</span>
+                <span class="expand-col">产品名称</span>
                 <span class="expand-col">规格kg</span>
                 <span class="expand-col">数量kg</span>
                 <span class="expand-col">单价</span>
                 <span class="expand-col">金额</span>
                 <span class="expand-col">H.S.Code</span>
-                <span class="expand-col">桶数</span>
-                <span class="expand-col">托数</span>
-                <span class="expand-col">毛重kg</span>
-                <span class="expand-col">体积CBM</span>
-                <span class="expand-col">20GP</span>
+                <span class="expand-col">报关品名</span>
+                <span class="expand-col">目的港</span>
+                <span class="expand-col">价格条款</span>
               </div>
               <div
-                v-for="p in row.products"
-                :key="p.id"
+                v-for="p in row.items"
+                :key="p.internal_code"
                 class="expand-row"
               >
                 <span class="expand-col mono">{{ p.internal_code }}</span>
-                <span class="expand-col">{{ p.product_cn }}</span>
-                <span class="expand-col">{{ p.customs_name || '-' }}</span>
+                <span class="expand-col">{{ p.product_cn || '-' }}</span>
                 <span class="expand-col">{{ p.spec_kg ?? '-' }}</span>
                 <span class="expand-col">{{ p.quantity_kg ?? '-' }}</span>
                 <span class="expand-col">{{ p.unit_price != null ? p.unit_price.toFixed(2) : '-' }}</span>
                 <span class="expand-col">{{ p.total_amount != null ? p.total_amount.toFixed(2) : '-' }}</span>
                 <span class="expand-col mono">{{ p.hs_code || '-' }}</span>
-                <span class="expand-col">{{ p.drum_count ?? '-' }}</span>
-                <span class="expand-col">{{ p.pallet_count ?? '-' }}</span>
-                <span class="expand-col">{{ p.gross_weight_kg != null ? p.gross_weight_kg.toFixed(1) : '-' }}</span>
-                <span class="expand-col">{{ p.volume_cbm != null ? p.volume_cbm.toFixed(3) : '-' }}</span>
-                <span class="expand-col">
-                  <el-tag v-if="p.fits_20gp" :type="p.fits_20gp === '适合' ? 'success' : 'danger'" size="small">
-                    {{ p.fits_20gp }}
-                  </el-tag>
-                  <span v-else>-</span>
-                </span>
+                <span class="expand-col">{{ p.customs_name || '-' }}</span>
+                <span class="expand-col">{{ row.destination || '-' }}</span>
+                <span class="expand-col">{{ row.price_term || '-' }}</span>
               </div>
             </div>
           </template>
         </el-table-column>
 
-        <el-table-column prop="order_no" label="订单号" min-width="140" />
+        <el-table-column prop="order_no" label="订单号/PI号" min-width="140" />
         <el-table-column prop="customer_code" label="客户编码" min-width="120" />
-        <el-table-column prop="salesperson" label="业务员" min-width="100" />
-        <el-table-column prop="product_count" label="产品数" width="80" align="center">
+        <el-table-column prop="sales_person" label="业务员" min-width="100" />
+        <el-table-column prop="consignee_name" label="收货人" min-width="140" show-overflow-tooltip />
+        <el-table-column prop="destination" label="目的港" min-width="100" />
+        <el-table-column prop="items.length" label="产品数" width="80" align="center">
           <template #default="{ row }">
-            <el-tag type="info" size="small">{{ row.product_count }}</el-tag>
+            <el-tag type="info" size="small">{{ row.items?.length || 0 }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作">
+        <el-table-column prop="created_at" label="录入时间" min-width="160">
           <template #default="{ row }">
+            {{ row.created_at ? formatDate(row.created_at) : '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="200" fixed="right">
+          <template #default="{ row }">
+            <el-button
+              type="primary"
+              link
+              size="small"
+              icon="Document"
+              @click.stop="handleEdit(row)"
+            >
+              进入文档编辑
+            </el-button>
             <el-button
               type="danger"
               link
@@ -117,7 +124,7 @@
         </el-table-column>
       </el-table>
 
-      <!-- 分页 + 每页条数 -->
+      <!-- 分页 -->
       <div class="pagination-wrapper no-print">
         <el-pagination
           v-model:current-page="currentPage"
@@ -135,11 +142,14 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getDashboardOrders, deleteDashboardOrder, type DashboardOrder } from '@/api/dashboard'
+import { ordersApi, type LedgerRecord } from '@/api/orders'
+
+const router = useRouter()
 
 const searchText = ref('')
-const orderList = ref<DashboardOrder[]>([])
+const recordList = ref<LedgerRecord[]>([])
 const loading = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(20)
@@ -149,15 +159,15 @@ const expandedRows = ref<number[]>([])
 const loadData = async () => {
   loading.value = true
   try {
-    const response = await getDashboardOrders({
+    const response = await ordersApi.listLedger({
       search: searchText.value || undefined,
       page: currentPage.value,
       page_size: pageSize.value,
     })
-    orderList.value = response.orders
+    recordList.value = response.records
     total.value = response.total
   } catch (error) {
-    ElMessage.error('加载数据失败')
+    ElMessage.error('加载台账失败')
   } finally {
     loading.value = false
   }
@@ -175,32 +185,43 @@ const handleSizeChange = () => {
   loadData()
 }
 
-const onExpandChange = (row: DashboardOrder, expanded: boolean[]) => {
-  expandedRows.value = expanded.length
-    ? [row.order_id]
-    : []
+const onExpandChange = (row: LedgerRecord, expanded: boolean[]) => {
+  expandedRows.value = expanded.length ? [row.id] : []
 }
 
-const handleDelete = (row: DashboardOrder) => {
+const handleEdit = (row: LedgerRecord) => {
+  // 导航到 Phase2，传入台账记录ID
+  // Phase2 需要改造为从台账ID读取数据
+  router.push({ path: '/phase2', query: { ledgerId: String(row.id) } })
+}
+
+const handleDelete = (row: LedgerRecord) => {
   ElMessageBox.confirm(
-    `确定删除订单「${row.order_no}」及其所有产品吗？此操作不可撤销。`,
+    `确定删除台账记录「${row.order_no}」吗？此操作不可撤销。`,
     '删除确认',
     { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
   ).then(async () => {
     try {
-      await deleteDashboardOrder(row.order_id)
-      ElMessage.success('删除成功')
-      loadData()
+      // TODO: 添加台账删除API
+      ElMessage.info('删除功能待实现')
     } catch {
       ElMessage.error('删除失败')
     }
   }).catch(() => {})
 }
 
+const formatDate = (dateStr: string) => {
+  if (!dateStr) return '-'
+  try {
+    const d = new Date(dateStr)
+    return d.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })
+  } catch {
+    return dateStr
+  }
+}
+
 const handleExportExcel = () => {
-  const params: any = {}
-  if (searchText.value) params.search = searchText.value
-  window.location.href = `/api/v1/dashboard/export${searchText.value ? '?search=' + encodeURIComponent(searchText.value) : ''}`
+  ElMessage.info('导出功能待实现')
 }
 
 const handlePrintPreview = () => {
@@ -225,18 +246,15 @@ onMounted(() => {
 .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding: 12px 16px; background: #f5f7fa; border-radius: 8px; }
 .toolbar-left { display: flex; gap: 12px; align-items: center; }
 .toolbar-right { display: flex; gap: 8px; }
-.search-input { width: 240px; }
+.search-input { width: 280px; }
 
 .data-table { margin-bottom: 16px; width: 100%; }
 
 /* 可展开产品区域 */
-.product-expand {
-  padding: 8px 0;
-  background: #fafafa;
-}
+.product-expand { padding: 8px 0; background: #fafafa; }
 .expand-header {
   display: grid;
-  grid-template-columns: 100px 1fr 1fr 70px 80px 70px 90px 80px 60px 60px 80px 80px 70px;
+  grid-template-columns: 100px 1fr 70px 80px 70px 90px 80px 1fr 80px 80px;
   gap: 0;
   padding: 6px 12px;
   font-size: 11px;
@@ -247,7 +265,7 @@ onMounted(() => {
 }
 .expand-row {
   display: grid;
-  grid-template-columns: 100px 1fr 1fr 70px 80px 70px 90px 80px 60px 60px 80px 80px 70px;
+  grid-template-columns: 100px 1fr 70px 80px 70px 90px 80px 1fr 80px 80px;
   gap: 0;
   padding: 6px 12px;
   font-size: 12px;

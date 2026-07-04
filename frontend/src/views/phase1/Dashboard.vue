@@ -47,44 +47,8 @@
         v-loading="loading"
         row-key="id"
         class="data-table"
-        :expand-row-keys="expandedRows"
-        @expand-change="onExpandChange"
+        @row-click="handleRowClick"
       >
-        <el-table-column type="expand" width="50">
-          <template #default="{ row }">
-            <div class="product-expand">
-              <div class="expand-header">
-                <span class="expand-col">内部编码</span>
-                <span class="expand-col">产品名称</span>
-                <span class="expand-col">规格kg</span>
-                <span class="expand-col">数量kg</span>
-                <span class="expand-col">单价</span>
-                <span class="expand-col">金额</span>
-                <span class="expand-col">H.S.Code</span>
-                <span class="expand-col">报关品名</span>
-                <span class="expand-col">目的港</span>
-                <span class="expand-col">价格条款</span>
-              </div>
-              <div
-                v-for="p in row.items"
-                :key="p.internal_code"
-                class="expand-row"
-              >
-                <span class="expand-col mono">{{ p.internal_code }}</span>
-                <span class="expand-col">{{ p.product_cn || '-' }}</span>
-                <span class="expand-col">{{ p.spec_kg ?? '-' }}</span>
-                <span class="expand-col">{{ p.quantity_kg ?? '-' }}</span>
-                <span class="expand-col">{{ p.unit_price != null ? p.unit_price.toFixed(2) : '-' }}</span>
-                <span class="expand-col">{{ p.total_amount != null ? p.total_amount.toFixed(2) : '-' }}</span>
-                <span class="expand-col mono">{{ p.hs_code || '-' }}</span>
-                <span class="expand-col">{{ p.customs_name || '-' }}</span>
-                <span class="expand-col">{{ row.destination || '-' }}</span>
-                <span class="expand-col">{{ row.price_term || '-' }}</span>
-              </div>
-            </div>
-          </template>
-        </el-table-column>
-
         <el-table-column prop="order_no" label="订单号/PI号" min-width="140" />
         <el-table-column prop="customer_code" label="客户编码" min-width="120" />
         <el-table-column prop="sales_person" label="业务员" min-width="100" />
@@ -137,6 +101,12 @@
         />
       </div>
     </el-card>
+
+    <LedgerDetailDialog
+      v-model="showDetailDialog"
+      :record="selectedRecord"
+      @edit="handleEdit"
+    />
   </div>
 </template>
 
@@ -145,6 +115,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ordersApi, type LedgerRecord } from '@/api/orders'
+import LedgerDetailDialog from './LedgerDetailDialog.vue'
 
 const router = useRouter()
 
@@ -154,7 +125,8 @@ const loading = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
-const expandedRows = ref<number[]>([])
+const showDetailDialog = ref(false)
+const selectedRecord = ref<LedgerRecord | null>(null)
 
 const loadData = async () => {
   loading.value = true
@@ -175,18 +147,17 @@ const loadData = async () => {
 
 const handleSearch = () => {
   currentPage.value = 1
-  expandedRows.value = []
   loadData()
 }
 
 const handleSizeChange = () => {
   currentPage.value = 1
-  expandedRows.value = []
   loadData()
 }
 
-const onExpandChange = (row: LedgerRecord, expanded: boolean[]) => {
-  expandedRows.value = expanded.length ? [row.id] : []
+const handleRowClick = (row: LedgerRecord) => {
+  selectedRecord.value = row
+  showDetailDialog.value = true
 }
 
 const handleEdit = (row: LedgerRecord) => {
@@ -249,32 +220,6 @@ onMounted(() => {
 .search-input { width: 280px; }
 
 .data-table { margin-bottom: 16px; width: 100%; }
-
-/* 可展开产品区域 */
-.product-expand { padding: 8px 0; background: #fafafa; }
-.expand-header {
-  display: grid;
-  grid-template-columns: 100px 1fr 70px 80px 70px 90px 80px 1fr 80px 80px;
-  gap: 0;
-  padding: 6px 12px;
-  font-size: 11px;
-  font-weight: 600;
-  color: #909399;
-  border-bottom: 1px solid #eee;
-  margin-bottom: 4px;
-}
-.expand-row {
-  display: grid;
-  grid-template-columns: 100px 1fr 70px 80px 70px 90px 80px 1fr 80px 80px;
-  gap: 0;
-  padding: 6px 12px;
-  font-size: 12px;
-  color: #606266;
-  border-bottom: 1px solid #f0f0f0;
-}
-.expand-row:last-child { border-bottom: none; }
-.expand-col { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.expand-col.mono { font-family: 'JetBrains Mono', monospace; font-size: 11px; }
 
 .pagination-wrapper { display: flex; justify-content: flex-end; }
 

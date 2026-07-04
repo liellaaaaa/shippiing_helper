@@ -106,6 +106,10 @@ interface GoodsRow {
 const defaultForm = (): BookingForm => ({
   shipper: '',
   consignee: '',
+  consignee_name: '',
+  consignee_address: '',
+  consignee_tel: '',
+  shipment_title: '',
   notify: 'SAME AS CONSIGNEE',
   cut_off_date: '',
   place_of_receipt: 'NanSha, China',

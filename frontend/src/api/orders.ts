@@ -22,6 +22,20 @@ export interface OrderItemSchema {
   hs_code_warning?: string
   warning?: string
   _selected?: boolean
+  // 销售订单表字段
+  order_date?: string
+  order_date_placed?: string
+  shipment_channel?: string
+  shipment_method?: string
+  review_status?: string
+  spec_abnormal?: string
+  has_sample?: string
+  price_adjusted?: string
+  order_confirmed?: string
+  production_deadline?: string
+  shipment_title?: string
+  document_type?: string
+  merchandiser?: string
 }
 
 export interface ParsedOrderSchema {

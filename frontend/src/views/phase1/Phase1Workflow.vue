@@ -388,7 +388,7 @@ async function handleSaveLedger() {
       return {
         internal_code: item.internal_code,
         product_cn: item.product_cn,
-        spec_kg: rowCalc.spec_kg || null,
+        spec_kg: undefined,
         quantity_kg: item.quantity_kg,
         unit_price: item.unit_price,
         total_amount: item.total_amount,
@@ -396,15 +396,15 @@ async function handleSaveLedger() {
         customs_name: item.customs_name,
         customs_ingredients: item.customs_ingredients,
         product_appearance: item.product_appearance,
-        drum_count: rowCalc.drum_count || null,
-        pallet_count: rowCalc.pallet_count || null,
-        net_weight_kg: rowCalc.net_weight_kg || null,
-        gross_weight_kg: rowCalc.gross_weight_kg || null,
-        volume_cbm: rowCalc.volume_cbm || null,
+        drum_count: rowCalc.drums || undefined,
+        pallet_count: rowCalc.pallets || undefined,
+        net_weight_kg: rowCalc.net_weight_kg || undefined,
+        gross_weight_kg: rowCalc.gross_weight_kg || undefined,
+        volume_cbm: rowCalc.volume_cbm || undefined,
         fits_20gp: rowCalc.fits_20gp ? '适合' : '超出',
-        packaging_type_id: rowCalc.packaging_type_id || null,
-        pallet_spec: rowCalc.pallet_spec || null,
-        drums_per_pallet: rowCalc.drums_per_pallet || null,
+        packaging_type_id: undefined,
+        pallet_spec: rowCalc.pallet_spec || undefined,
+        drums_per_pallet: rowCalc.drums_per_pallet || undefined,
       }
     })
 
@@ -416,6 +416,7 @@ async function handleSaveLedger() {
       // PI合同文件字段
       consignee_name: preview.consignee_name,
       consignee_address: preview.consignee_address,
+      consignee_tel: preview.consignee_tel,
       destination: preview.destination,
       loading_port: preview.loading_port,
       price_term: preview.price_term,
@@ -439,22 +440,23 @@ async function handleSaveLedger() {
 function buildSalesOrderFields(): Partial<LedgerWriteRequest> {
   if (!salesOrderOrders.value.length) return {}
   const first = salesOrderOrders.value[0]
-  const firstItem = first.items[0]
+  const firstItem = first.items?.[0]
+  if (!firstItem) return { sales_order_no: first.order_no }
   return {
     sales_order_no: first.order_no,
-    order_date: firstItem?.order_date || undefined,
-    delivery_date: firstItem?.order_date || undefined,
-    shipment_channel: firstItem?.shipment_channel || undefined,
-    shipment_method: firstItem?.shipment_method || undefined,
-    review_status: firstItem?.review_status || undefined,
-    spec_abnormal: firstItem?.spec_abnormal || undefined,
-    has_sample: firstItem?.has_sample || undefined,
-    price_adjusted: firstItem?.price_adjusted || undefined,
-    order_confirmed: firstItem?.order_confirmed || undefined,
-    production_deadline: firstItem?.production_deadline || undefined,
-    shipment_title: firstItem?.shipment_title || undefined,
-    document_type: firstItem?.document_type || undefined,
-    merchandiser: firstItem?.merchandiser || undefined,
+    order_date: firstItem.order_date_placed || undefined,
+    delivery_date: firstItem.order_date || undefined,
+    shipment_channel: firstItem.shipment_channel || undefined,
+    shipment_method: firstItem.shipment_method || undefined,
+    review_status: firstItem.review_status || undefined,
+    spec_abnormal: firstItem.spec_abnormal || undefined,
+    has_sample: firstItem.has_sample || undefined,
+    price_adjusted: firstItem.price_adjusted || undefined,
+    order_confirmed: firstItem.order_confirmed || undefined,
+    production_deadline: firstItem.production_deadline || undefined,
+    shipment_title: firstItem.shipment_title || undefined,
+    document_type: firstItem.document_type || undefined,
+    merchandiser: firstItem.merchandiser || undefined,
   }
 }
 

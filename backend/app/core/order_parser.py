@@ -5,8 +5,9 @@ from app.schemas.order import ParsedOrderSchema, OrderItemSchema, SkippedRowSche
 
 # Column name aliases mapping internal field names to possible column header names
 COLUMN_MAPPING: dict[str, list[str]] = {
-    "order_no": ["订单号", "Order No", "PO", "PO Number", "PI No"],
-    "customer_code": ["客户编号", "Customer Code", "Client Code"],
+    "order_no": ["订单号", "Order No", "PO", "PO Number", "PI No", "HT"],
+    "order_date_placed": ["下单日期", "Order Date"],
+    "customer_code": ["客户编号", "客户编码", "Customer Code", "Client Code"],
     "internal_code": ["内部编号", "Internal Code", "Product Code", "SKU"],
     "product_cn": ["产品中文名", "Product Name (CN)", "Description"],
     "spec_kg": ["规格kg", "Spec", "Specification"],
@@ -16,11 +17,18 @@ COLUMN_MAPPING: dict[str, list[str]] = {
     "salesperson": ["业务员", "Salesperson", "Sales Rep"],
     "merchandiser": ["跟单员", "Merchandiser", "Merch"],
     "customs_name": ["报关名称", "Customs Name"],
-    "hs_code": ["H.S.Code", "HS Code", "H.S."],
+    "hs_code": ["H.S.Code", "HS Code", "H.S.", "海关编码"],
     "order_requirement": ["订单要求", "Order Requirement", "要求"],
-    "order_date": ["交货日期", "Delivery Date", "交期"],
+    "order_date": ["交货日期", "Delivery Date", "交期", "下单日期", "Order Date"],
     "production_deadline": ["生产交期", "Production Deadline"],
     "shipment_method": ["出货方式", "Shipment Method", "出运方式"],
+    "shipment_channel": ["出货渠道", "Shipment Channel"],
+    "customer_name": ["客户名称", "Customer Name"],
+    "is_ordered": ["是否下单", "Is Ordered"],
+    "shipment_title": ["出货抬头", "Shipment Title"],
+    "document_type": ["单据类型", "Document Type"],
+    "product_color": ["产品颜色", "Color"],
+    "notes": ["备注", "Notes"],
 }
 
 
@@ -36,38 +44,49 @@ def normalize_column_name(col_name: str) -> str | None:
 
 
 # Standard Excel column order (23 fields) — used as positional fallback when no header
-STANDARD_COLUMN_ORDER: list[str] = [
-    "salesperson",       # 0
-    "customer_code",     # 1
-    "internal_code",     # 2
-    "product_cn",        # 3
-    "customs_name",      # 4
-    "spec_kg",          # 5
-    "quantity_kg",      # 6
-    None,               # 7  是否调价 — 不解析
-    None,               # 8  有无样品 — 不解析
-    "order_requirement",# 9
-    "order_date",       # 10
-    None,               # 11 审核 — 不解析
-    None,               # 12 销售区域 — 不解析
-    "order_no",         # 13
-    None,               # 14 出货抬头 — 不解析
-    None,               # 15 单据类型 — 不解析
-    "merchandiser",     # 16
-    None,               # 17 下单日期 — 不解析
-    None,               # 18 确认下单 — 不解析
-    None,               # 19 生产交期 — 不解析
-    None,               # 20 出货渠道 — 不解析
-    "shipment_method",  # 21
-    None,               # 22 规格异常 — 不解析
+STANDARD_COLUMN_ORDER: list[str | None] = [
+    'salesperson',           # 0  业务员
+    'order_no',             # 1  订单号/PI号
+    'shipment_title',       # 2  出货抬头
+    'document_type',        # 3  单据类型
+    'order_date_placed',   # 4  下单日期
+    'merchandiser',         # 5  跟单员
+    'customer_code',        # 6  客户编号
+    'product_cn',           # 7  产品中文名
+    'customs_name',         # 8  报关名称
+    'internal_code',        # 9  内部编号
+    'spec_kg',             # 10 规格kg
+    'quantity_kg',         # 11 订单量kg
+    'price_adjusted',       # 12 是否调价
+    'has_sample',           # 13 有无样品
+    'order_requirement',    # 14 订单要求
+    'order_date',           # 15 交货日期
+    None,                  # 16 审核（不解析）
+    None,                  # 17 销售区域（不解析）
+    None,                  # 18 订单号（重复列）
+    None,                  # 19 出货抬头（重复列）
+    None,                  # 20 单据类型（重复列）
+    None,                  # 21 跟单员（重复列）
+    None,                  # 22 下单日期（重复列）
 ]
 
 
 def detect_delimiter(raw_text: str) -> str:
-    """Return tab if tabs found, else newline."""
+    """检测分隔符：优先 Tab，其次连续空格（8空格），最后换行。"""
     if "\t" in raw_text:
         return "\t"
+    # 企业微信在线表格复制可能产生连续空格（通常8个）
+    import re
+    if re.search(r"  {4,}", raw_text):
+        return "SPACE"
     return "\n"
+
+
+# 空格分隔符的拆分函数
+def split_by_spaces(line: str) -> list[str]:
+    """按连续4+空格拆分一行（兼容企业微信粘贴格式）"""
+    import re
+    return [p.strip() for p in re.split(r"  {4,}", line)]
 
 
 def split_lines(text: str) -> list[str]:
@@ -78,87 +97,105 @@ def split_lines(text: str) -> list[str]:
 
 def merge_quoted_lines(lines: list[str]) -> list[str]:
     """
-    合并被 Excel 引号包围的单元格换行打断的行。
+    合并被 Excel 引号包围或无引号的单元格换行打断的行。
 
-    问题：Excel 引号单元格含换行时，引号 " 在跨行处被切断，
-    形成"引号开头行"、"多行内容"、"引号结尾行"分离的情况。
+    问题：Excel 单元格含换行时，复制粘贴会把一行拆成多行。
 
     逻辑：
-    - 若上一行的"订单要求"列(col9/field 10)以 " 开头但未以 " 结尾 → 引号未关闭，后续行并入
-    - 若本行首字段以 " 结尾 → 引号关闭，本行剩余字段成新行
+    1. 引号模式：若上一行"订单要求"列以 " 开头但未以 " 结尾 → 后续行并入
+    2. 列数模式：若上一行有 >=10 列（完整数据行），当前行只有 1 列（无分隔符） → 并入上一行的订单要求
     """
     if not lines:
         return lines
 
+    # 检测分隔符类型
+    import re
+    has_tab = any("\t" in line for line in lines[:5])
+    use_space = not has_tab and any(re.search(r"  {4,}", line) for line in lines[:5])
+
+    def split_cols(line: str) -> list[str]:
+        if use_space:
+            return split_by_spaces(line)
+        return line.split("\t")
+
+    def join_cols(parts: list[str]) -> str:
+        if use_space:
+            return "        ".join(parts)  # 8空格
+        return "\t".join(parts)
+
     result: list[str] = []
-    # Tracks whether we've opened a quote from a previous line and haven't closed it yet.
-    # Once True after a quote opens, stays True until a closing field resets it.
     in_open_quote = False
-    # Col index of the order_requirement field
-    REQ_COL = 9
+    REQ_COL = 14
+    FULL_ROW_MIN_COLS = 10
 
     i = 0
     while i < len(lines):
         line = lines[i]
-        line_cols = line.split("\t")
+        line_cols = split_cols(line)
 
         if result and in_open_quote:
-            # Open quote from a previous line — merge continuation lines
+            # 引号模式：合并续行
             if len(line_cols) == 1 and not line.endswith('"'):
-                prev_parts = result[-1].split("\t")
+                prev_parts = split_cols(result[-1])
                 if len(prev_parts) > REQ_COL:
                     prev_parts[REQ_COL] = prev_parts[REQ_COL] + "\n" + line.strip()
                 else:
                     prev_parts[-1] = prev_parts[-1] + "\n" + line.strip()
-                result[-1] = "\t".join(prev_parts)
+                result[-1] = join_cols(prev_parts)
                 i += 1
                 continue
             elif line.endswith('"') and not line.startswith('"'):
-                prev_parts = result[-1].split("\t")
+                prev_parts = split_cols(result[-1])
                 if len(prev_parts) > REQ_COL:
                     prev_parts[REQ_COL] = prev_parts[REQ_COL] + "\n" + line.strip()
                 else:
                     prev_parts[-1] = prev_parts[-1] + "\n" + line.strip()
-                result[-1] = "\t".join(prev_parts)
+                result[-1] = join_cols(prev_parts)
                 in_open_quote = False
                 i += 1
                 continue
             elif len(line_cols) > 1 and line_cols[0].endswith('"') and not line_cols[0].startswith('"'):
-                prev_parts = result[-1].split("\t")
+                prev_parts = split_cols(result[-1])
                 if len(prev_parts) > REQ_COL:
                     prev_parts[REQ_COL] = prev_parts[REQ_COL] + "\n" + line_cols[0]
                 else:
                     prev_parts[-1] = prev_parts[-1] + "\n" + line_cols[0]
-                result[-1] = "\t".join(prev_parts)
-                rest = "\t".join(line_cols[1:])
+                result[-1] = join_cols(prev_parts)
+                rest = join_cols(line_cols[1:])
                 if rest.strip():
                     result.append(rest)
                 in_open_quote = False
                 i += 1
                 continue
 
-        # Before appending, check if prev row's "订单要求" col opened a quote.
-        # If so, merge current line into prev row instead of appending.
+        # 列数模式：上一行是完整数据行，当前行只有 1 列（无分隔符） → 续行
         if result:
-            prev_parts = result[-1].split("\t")
+            prev_parts = split_cols(result[-1])
+            if len(line_cols) == 1 and len(prev_parts) >= FULL_ROW_MIN_COLS:
+                continuation = line.strip()
+                if continuation:
+                    if len(prev_parts) > REQ_COL:
+                        prev_parts[REQ_COL] = prev_parts[REQ_COL] + "\n" + continuation
+                    else:
+                        prev_parts[-1] = prev_parts[-1] + "\n" + continuation
+                    result[-1] = join_cols(prev_parts)
+                    i += 1
+                    continue
+
+        # 引号模式检查：若上一行的订单要求列以 " 开头但未以 " 结尾
+        if result:
+            prev_parts = split_cols(result[-1])
             req_field = prev_parts[REQ_COL] if len(prev_parts) > REQ_COL else prev_parts[-1]
             if req_field.startswith('"') and not req_field.endswith('"'):
-                # Prev row opened a quote — merge current line (continuation) into it
+                in_open_quote = True
+                # 当前行也要并入（不 append）
                 if len(prev_parts) > REQ_COL:
                     prev_parts[REQ_COL] = prev_parts[REQ_COL] + "\n" + line.strip()
                 else:
                     prev_parts[-1] = prev_parts[-1] + "\n" + line.strip()
-                result[-1] = "\t".join(prev_parts)
-                # Quote is still open for next lines
+                result[-1] = join_cols(prev_parts)
                 i += 1
                 continue
-
-        # No open quote from prev row — check if CURRENT row's REQ col opens one (for next iteration)
-        if result:
-            prev_parts = result[-1].split("\t")
-            req_field = prev_parts[REQ_COL] if len(prev_parts) > REQ_COL else prev_parts[-1]
-            if req_field.startswith('"') and not req_field.endswith('"'):
-                in_open_quote = True
 
         result.append(line)
         i += 1
@@ -231,11 +268,17 @@ def parse_pasted_data(
 
     delimiter = detect_delimiter(lines[0])
 
+    # 统一拆分函数：Tab 用 split("\t")，空格用 split_by_spaces
+    def split_line(line: str) -> list[str]:
+        if delimiter == "SPACE":
+            return split_by_spaces(line)
+        return line.split(delimiter)
+
     # Parse header — fall back to positional mapping if header yields < 2 mapped fields
     col_map = parse_header(lines[0], delimiter)
     has_header = len(col_map) >= 2
     if not has_header:
-        col_count = len(lines[0].split(delimiter))
+        col_count = len(split_line(lines[0]))
         # Short format (8 cols): order_no | customer_code | internal_code | product | spec_kg | qty_kg | unit_price | total_amount
         # Long format (>=10 cols): full 23-column standard, first row is data
         if col_count == 8:
@@ -253,7 +296,7 @@ def parse_pasted_data(
     data_start = 1 if has_header else 0
 
     for i, line in enumerate(lines[data_start:], start=data_start + 2):
-        parts = [p.strip() for p in line.split(delimiter)]
+        parts = [p.strip() for p in split_line(line)]
         row_data = parse_row(parts, col_map)
 
         order_no = row_data.get("order_no")
@@ -309,9 +352,18 @@ def parse_pasted_data(
             hs_code=item.get("hs_code"),
             order_requirement=item.get("order_requirement"),
             order_date=item.get("order_date"),
+            order_date_placed=item.get("order_date_placed"),
             production_deadline=item.get("production_deadline"),
             shipment_method=item.get("shipment_method"),
+            shipment_channel=item.get("shipment_channel"),
             salesperson=item.get("salesperson"),
+            merchandiser=item.get("merchandiser"),
+            price_adjusted=item.get("price_adjusted"),
+            has_sample=item.get("has_sample"),
+            order_confirmed=item.get("order_confirmed"),
+            spec_abnormal=item.get("spec_abnormal"),
+            shipment_title=item.get("shipment_title"),
+            document_type=item.get("document_type"),
         )
         orders_by_no[order_no].items.append(order_item)
 
@@ -332,7 +384,6 @@ def parse_pasted_data(
 
     for order in orders_by_no.values():
         for item in order.items:
-            print('[DEBUG] internal_code=' + str(item.internal_code))
             json_data = customs_svc.lookup(item.internal_code)
             if json_data is None:
                 item.customs_match_status = "not_found"
@@ -372,3 +423,168 @@ def parse_pasted_data(
                 item.product_appearance = json_data.get("product_appearance")
 
     return list(orders_by_no.values()), skipped_rows, warnings[0] if warnings else None
+
+
+# ── PI合同表解析（17列，企业微信在线表格格式）───────────────────────────────────
+# 实测样本列位置（17列，0-indexed）：
+#  Col  0: 客户编码 (WA231)
+#  Col  1: PI号 (HT260630SZ)
+#  Col  2: 业务员 (邓素珍)
+#  Col  3: 出货抬头 (宏昊)
+#  Col  4: 运输方式 (海运)
+#  Col  5: 数量 (2500)
+#  Col  6: 单价 (1.73)
+#  Col  7: 金额 (4325)
+#  Col  8: 内部编码 (B-40EA)
+#  Col  9: 产品颜色 (棕黑色粘稠液体)
+#  Col 10: 海关编码/HS Code (3402900000)
+#  Col 11: 报关品名 (固色剂)
+#  Col 12: 报关成分 (双酚S：80-09-1；52%...)
+#  Col 13: 日期 (2026年6月30日)
+#  Col 14: 付款方式 (LC0)
+#  Col 15: 订单确认时间 (2026-07-02 21:52)
+#  Col 16: 是否下单 (是/否)
+
+PI_CONTRACT_COL_ORDER: list[str | None] = [
+    "customer_code",          # 0 客户编码
+    "pi_no",                  # 1 PI号
+    "salesperson",             # 2 业务员
+    "shipment_title",          # 3 出货抬头（实测有数据，设计文档标为空）
+    "shipment_method",          # 4 运输方式（实测有数据，设计文档标为空）
+    "quantity_kg",            # 5 数量
+    "unit_price",             # 6 单价
+    "total_amount",           # 7 金额
+    "internal_code",          # 8 内部编码
+    "product_color",          # 9 产品颜色
+    "hs_code",                # 10 海关编码
+    "customs_name",           # 11 报关品名
+    "customs_ingredients",    # 12 报关成分
+    "pi_date",                # 13 日期
+    "payment_terms",          # 14 付款方式（实测有数据LC0）
+    "order_confirm_datetime", # 15 订单确认时间（2026-07-02 21:52）
+    "is_ordered",             # 16 是否下单
+]
+
+
+def parse_pi_contract_table(
+    raw_text: str,
+) -> tuple[list[ParsedOrderSchema], list[SkippedRowSchema], str | None]:
+    """
+    解析 PI 合同表粘贴数据（企业微信在线表格格式，17列）。
+
+    与 parse_pasted_data 共用分隔符检测、引号修复逻辑，
+    仅列映射和字段聚合规则不同。
+    """
+    if not raw_text.strip():
+        return [], [], None
+
+    lines = split_lines(raw_text)
+    lines = merge_quoted_lines(lines)
+    if not lines:
+        return [], [], None
+
+    delimiter = detect_delimiter(lines[0])
+
+    def split_line(line: str) -> list[str]:
+        if delimiter == "SPACE":
+            return split_by_spaces(line)
+        return line.split(delimiter)
+
+    # 尝试按 header 解析（需要 ≥2 个可识别列名）
+    col_map = parse_header(lines[0], delimiter)
+    has_header = len(col_map) >= 2
+
+    # 如果没有可用 header，用位置映射
+    if not has_header:
+        col_count = len(split_line(lines[0]))
+        col_map = _build_pi_contract_positional_map(col_count)
+
+    data_start = 1 if has_header else 0
+    raw_items: list[dict] = []
+    skipped_rows: list[SkippedRowSchema] = []
+
+    for i, line in enumerate(lines[data_start:], start=data_start + 2):
+        parts = [p.strip() for p in split_line(line)]
+        row_data = _parse_pi_contract_row(parts, col_map)
+
+        pi_no = row_data.get("pi_no")
+        internal_code = row_data.get("internal_code")
+
+        if not pi_no or not internal_code:
+            skipped_rows.append(
+                SkippedRowSchema(
+                    line_index=i,
+                    reason="pi_no or internal_code is empty",
+                    raw_data=parts,
+                )
+            )
+        else:
+            raw_items.append(row_data)
+
+    # 批次内去重
+    deduped: dict[tuple[str, str], dict] = {}
+    duplicate_keys: set[tuple[str, str]] = set()
+    warnings: list[str] = []
+    for item in raw_items:
+        key = (str(item["pi_no"]), str(item["internal_code"]))
+        if key in deduped:
+            duplicate_keys.add(key)
+        deduped[key] = item
+    if duplicate_keys:
+        warnings.append(f"批次去重：{len(duplicate_keys)} 个重复项被覆盖")
+
+    # 按 pi_no 聚合
+    orders_by_no: dict[str, ParsedOrderSchema] = {}
+
+    for item in deduped.values():
+        pi_no = str(item["pi_no"])
+        if pi_no not in orders_by_no:
+            orders_by_no[pi_no] = ParsedOrderSchema(
+                order_no=pi_no,
+                customer_code=item.get("customer_code"),
+                salesperson=item.get("salesperson"),
+                items=[],
+            )
+
+        order_item = OrderItemSchema(
+            internal_code=str(item["internal_code"]),
+            product_cn=None,  # 销售订单表提供
+            spec_kg=None,
+            quantity_kg=item.get("quantity_kg"),
+            unit_price=item.get("unit_price"),   # PI合同表 Col 6 有单价
+            total_amount=item.get("total_amount"),
+            customs_name=item.get("customs_name"),
+            hs_code=item.get("hs_code"),
+            customs_ingredients=item.get("customs_ingredients"),
+            product_appearance=item.get("product_color"),  # Col 9
+            shipment_method=item.get("shipment_method"),    # Col 4 运输方式
+        )
+        orders_by_no[pi_no].items.append(order_item)
+
+    return list(orders_by_no.values()), skipped_rows, warnings[0] if warnings else None
+
+
+def _build_pi_contract_positional_map(col_count: int) -> dict[int, str]:
+    """Build column map from PI contract table positional order."""
+    col_map: dict[int, str] = {}
+    for i, field_name in enumerate(PI_CONTRACT_COL_ORDER):
+        if field_name is not None and i < col_count:
+            col_map[i] = field_name
+    return col_map
+
+
+def _parse_pi_contract_row(
+    parts: list[str], col_map: dict[int, str]
+) -> dict[str, str | float | None]:
+    """Parse a single PI contract table row."""
+    row_data: dict[str, str | float | None] = {}
+    for col_idx, field_name in col_map.items():
+        if col_idx < len(parts):
+            value = parts[col_idx].strip()
+            if field_name in ("quantity_kg", "total_amount", "unit_price"):
+                row_data[field_name] = _parse_float(value)
+            else:
+                row_data[field_name] = value if value else None
+        else:
+            row_data[field_name] = None
+    return row_data

@@ -326,51 +326,103 @@ def parse_proforma_invoice(rows: list[list[str]]) -> PiContractUploadResponse:
     # 合并所有行为纯文本，便于正则匹配
     full_text = "\n".join(" | ".join(str(c).strip() for c in row) for row in rows)
 
-    # 使用跨行提取器从行列结构中查找 Label→Value 模式
+    # ── 1. 找到 Consignee 区域起始行 ──────────────────────────────
+    consignee_start = -1
+    for ri, row in enumerate(rows):
+        for cell in row:
+            if re.search(r"Consignee\s*:", str(cell), re.IGNORECASE):
+                consignee_start = ri
+                break
+        if consignee_start >= 0:
+            break
+
+    # ── 2. 从 Consignee 区域提取 Name 和 Address ──────────────────
+    consignee_name = None
+    consignee_address = None
+    if consignee_start >= 0:
+        name_row = -1
+        for ri in range(consignee_start, min(consignee_start + 5, len(rows))):
+            row = rows[ri]
+            for cell in row:
+                cell_str = str(cell).strip()
+                m = re.match(r"(?i)Name\s*:\s*(.+)", cell_str)
+                if m:
+                    consignee_name = m.group(1).strip()
+                    name_row = ri
+                    break
+        # 地址在 Name 行的下一行第 0 列
+        if consignee_name and name_row >= 0 and name_row + 1 < len(rows):
+            next_row = rows[name_row + 1]
+            if next_row:
+                addr = str(next_row[0]).strip()
+                # 过滤掉日期序列号、标签行等
+                if addr and not re.match(r"^\d{4,6}\.\d+$", addr) and not re.match(r"(?i)^(Name|Consignee|Date|PI\s*No|The\s+undersigned)", addr):
+                    consignee_address = addr
+
+    # ── 3. 提取 PI No ──────────────────────────────────────────────
     pi_no = _extract_field_from_rows(rows, [r"PI\s*No"])
-    # customer_code 不从 PI 提取（PI 文件无此字段，客户编号来自订单粘贴数据）
     customer_code = None
 
-    # 提取日期：Date: 2026/3/4（可能是 Excel 序列号 46085 = 2026-03-29）
+    # ── 4. 提取日期 ──────────────────────────────────────────────
     pi_date_raw = _extract_field_from_rows(rows, [r"Date\s*:"])
     pi_date = None
     if pi_date_raw:
         try:
             serial = float(pi_date_raw)
-            # 如果是 Excel 日期序列号（> 40000），转换为日期格式
             if serial > 40000:
                 pi_date = _excel_serial_to_date(serial)
             else:
                 pi_date = str(int(serial))
         except (ValueError, TypeError):
-            pi_date = pi_date_raw  # fallback to raw string
+            pi_date = pi_date_raw
 
-    # 提取 H.S. Code
-    hs_code = _extract_field_from_rows(rows, [r"H\.S\.\s*Code"])
+    # ── 5. 从表格表头提取价格条款（如 "CIF Jakarta(USD/Kg)"） ────
+    price_term = None
+    for row in rows:
+        for cell in row:
+            cell_str = str(cell).strip()
+            m = re.search(r"\b(CIF|FOB|CFR|C\s*&\s*F|EXW|FCA|CPT|CIP|DAP|DPU)\b", cell_str, re.IGNORECASE)
+            if m:
+                price_term = m.group(1).upper()
+                if price_term == "C&F":
+                    price_term = "C&F"
+                break
+        if price_term:
+            break
 
-    # 提取 Beneficiary Bank 信息
-    beneficiary_bank = _extract_field_from_rows(rows, [r"Beneficiary Bank\s*:"])
+    # ── 6. 从 Payment terms and conditions 区域提取字段 ──────────
+    payment_terms = None
+    destination = None
+    hs_code = None
+    beneficiary_bank = None
+    in_payment_section = False
+    for ri, row in enumerate(rows):
+        for cell in row:
+            cell_str = str(cell).strip()
+            if re.search(r"Payment\s+terms\s+and\s+conditions", cell_str, re.IGNORECASE):
+                in_payment_section = True
+            if in_payment_section:
+                # Payment Terms: 100% T/T before shipment
+                m = re.search(r"Payment\s+Terms?\s*:\s*(.+)", cell_str, re.IGNORECASE)
+                if m:
+                    payment_terms = m.group(1).strip()
+                # Destination: Jakarta, Indonesia
+                m = re.search(r"Destination\s*:\s*(.+)", cell_str, re.IGNORECASE)
+                if m:
+                    destination = m.group(1).strip()
+                # H.S. Code: 3402.90.99
+                m = re.search(r"H\.S\.\s*Code\s*:\s*(.+)", cell_str, re.IGNORECASE)
+                if m:
+                    hs_code = m.group(1).strip()
+                # Beneficiary Bank: ...
+                m = re.search(r"Beneficiary\s+Bank\s*:\s*(.+)", cell_str, re.IGNORECASE)
+                if m:
+                    beneficiary_bank = m.group(1).strip()
 
-    # 提取 Payment Terms
-    payment_terms = _extract_field_from_rows(rows, [r"Payment Terms\s*:"])
-
-    # 提取 Destination
-    destination = _extract_field_from_rows(rows, [r"Destination\s*:"])
-
-    # 提取 Port of loading (装货地)
+    # ── 7. 其他字段 ──────────────────────────────────────────────
+    consignee_tel = None  # PI 合同中一般不包含收货人电话
     loading_port = _extract_field_from_rows(rows, [r"Port\s+of\s+loading\s*:", r"Loading\s+Port\s*:"])
-
-    # 提取 Price Term (价格条款)
-    price_term = _extract_field_from_rows(rows, [r"Price\s+Term\s*:"])
-
-    # 提取 Invoice To (发票抬头)
     invoice_to = _extract_field_from_rows(rows, [r"INVOICE\s+TO\s*[:.]?\s*NAME\s*:", r"INVOICE\s+TO\s*:"])
-
-    # 提取收货人信息（Name: 后紧跟公司名）
-    consignee_name = _extract_field_from_rows(rows, [r"Name\s*:"])
-
-    # 收货人地址：Address: 或 Add.:
-    consignee_address = _extract_field_from_rows(rows, [r"Address\s*:", r"Add\.\s*:"])
 
     # 提取 Total Amount
     total_amount_str = _extract_field_from_rows(rows, [r"Total Amount\s*:"])
@@ -465,9 +517,11 @@ def parse_proforma_invoice(rows: list[list[str]]) -> PiContractUploadResponse:
         is_ordered="0",
         consignee_name=consignee_name,
         consignee_address=consignee_address,
+        consignee_tel=consignee_tel,
         destination=destination,
         loading_port=loading_port,
         price_term=price_term,
+        payment_terms=payment_terms,
         invoice_to=invoice_to,
         items=items,
         confidence=confidence,
@@ -485,7 +539,7 @@ def _read_xlsx_rows(file_path: str) -> list[list[str]]:
 
 
 def _read_xls_rows(file_path: str) -> list[list[str]]:
-    wb = xlrd.open_workbook(file_path, encoding_override="utf-8")
+    wb = xlrd.open_workbook(file_path, encoding_override="gbk")
     sheet = wb.sheet_by_index(0)
     rows = []
     for row_idx in range(sheet.nrows):
@@ -506,7 +560,7 @@ def _read_xlsx_bytes(content: bytes) -> list[list[str]]:
 
 
 def _read_xls_bytes(content: bytes) -> list[list[str]]:
-    wb = xlrd.open_workbook(file_contents=content, encoding_override="utf-8")
+    wb = xlrd.open_workbook(file_contents=content, encoding_override="gbk")
     sheet = wb.sheet_by_index(0)
     rows = []
     for row_idx in range(sheet.nrows):
@@ -619,6 +673,9 @@ def parse_proforma_invoice_from_text(text: str, filename: str = "") -> PiContrac
     if consignee_address:
         consignee_address = re.sub(r"\s+\d{4}[-/.]\d{1,2}[-/.]\d{1,2}\s*$", "", consignee_address).strip()
 
+    # 3b) consignee TEL
+    consignee_tel = scan(r"TEL\s*:") or scan(r"Tel\s*:") or scan(r"Telephone\s*:")
+
     # 4) destination
     destination = scan(r"[0-9]\.\s*DEST\s*:") or scan(r"DEST\s*INAT\s*ION\s*:")
 
@@ -719,6 +776,7 @@ def parse_proforma_invoice_from_text(text: str, filename: str = "") -> PiContrac
         is_ordered="0",
         consignee_name=consignee_name,
         consignee_address=consignee_address,
+        consignee_tel=consignee_tel,
         destination=destination,
         loading_port=loading_port,
         price_term=price_term,

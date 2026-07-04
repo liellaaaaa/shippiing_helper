@@ -45,4 +45,28 @@ class OrderPiRecord(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    # --- 来自 PI 合同文件 ---
+    consignee_name = Column(String(200))
+    consignee_address = Column(String(500))
+    consignee_tel = Column(String(100))
+    destination = Column(String(200))
+    loading_port = Column(String(200))
+    price_term = Column(String(50))
+    payment_terms = Column(String(200))
+    bank_info = Column(Text)
+
+    # --- 来自销售订单表 ---
+    sales_order_no = Column(String(100))   # 销售订单号（与 PI 号可能不同）
+    merchandiser = Column(String(100))      # 跟单员
+    shipment_channel = Column(String(50))   # 出货渠道
+    shipment_method = Column(String(50))   # 出货方式
+    review_status = Column(String(50))     # 审核状态
+    spec_abnormal = Column(String(10))      # 规格异常 yes/no
+    has_sample = Column(String(10))        # 有无样品 yes/no
+    price_adjusted = Column(String(10))    # 是否调价 yes/no
+    order_confirmed = Column(String(10))   # 确认下单 yes/no
+    production_deadline = Column(String(20))  # 生产交期
+    shipment_title = Column(String(200))   # 出货抬头
+    document_type = Column(String(50))     # 单据类型
+
     packaging_type = relationship("PackagingType")

@@ -41,9 +41,11 @@ class PiContractUploadResponse(BaseModel):
     # PI Header 信息
     consignee_name: Optional[str] = None
     consignee_address: Optional[str] = None
+    consignee_tel: Optional[str] = None
     destination: Optional[str] = None
     loading_port: Optional[str] = None # 装货地
     price_term: Optional[str] = None          # 价格条款 (FOB/C&F/CIF等)
+    payment_terms: Optional[str] = None       # 付款方式
     invoice_to: Optional[str] = None          # 发票抬头
     items: list[PiContractItemRow] = []
     confidence: ConfidenceInfo
@@ -80,6 +82,7 @@ class PiContractSaveRequest(BaseModel):
     # PI Header 信息
     consignee_name: Optional[str] = None
     consignee_address: Optional[str] = None
+    consignee_tel: Optional[str] = None
     destination: Optional[str] = None
     loading_port: Optional[str] = None # 装货地
     price_term: Optional[str] = None          # 价格条款 (FOB/C&F/CIF等)

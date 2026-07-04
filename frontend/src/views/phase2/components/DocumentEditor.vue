@@ -99,7 +99,7 @@ async function mountEditor() {
     const config = buildConfig()
     docEditor = new DocsAPI.DocEditor(el.id, config)
   } catch (e: any) {
-    ElMessage.error('文档服务器连接失败: ' + e.message)
+    ElMessage.error('文档服务器连接失败，请检查服务状态')
     if (editorRef.value) editorRef.value.style.display = 'none'
   }
 }

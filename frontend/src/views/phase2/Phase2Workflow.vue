@@ -34,7 +34,7 @@
           </el-select>
         </div>
 
-        <div class="toolbar-field" v-if="selectedOrderId">
+        <div class="toolbar-field" v-if="selectedOrderId || selectedLedgerId">
           <label class="toolbar-label">PI合同</label>
           <el-select
             v-model="selectedPiNo"
@@ -84,6 +84,17 @@
           </svg>
           MSDS
         </el-button>
+        <el-button
+          size="small"
+          :disabled="!selectedLedgerId"
+          v-track="{ event: 'generate_document', module: 'phase2', detail: { doc_type: 'customs' } }"
+          @click="openCustomsDocument"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px">
+            <path d="M9 12h6M9 16h6M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 2h5l2 2h5a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2z"/>
+          </svg>
+          报关资料
+        </el-button>
         <el-dropdown @command="(cmd: 'booking' | 'loi' | 'msds') => openBlankTemplate(cmd)" trigger="click">
           <el-button size="small">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px">
@@ -124,7 +135,7 @@
             <div class="info-row">
               <span class="info-label">发货人</span>
               <!-- 编辑状态 -->
-              <div v-if="selectedOrderId && shipperEditing" class="shipper-edit-row">
+              <div v-if="(selectedOrderId || selectedLedgerId) && shipperEditing" class="shipper-edit-row">
                 <el-input
                   v-model="currentOrderInfo.shipper"
                   type="textarea"
@@ -135,7 +146,7 @@
               </div>
               <!-- 选择状态 -->
               <el-select
-                v-else-if="selectedOrderId"
+                v-else-if="selectedOrderId || selectedLedgerId"
                 v-model="shipperSelectValue"
                 placeholder="请选择发货人"
                 size="small"
@@ -149,61 +160,61 @@
             </div>
             <div class="info-row">
               <span class="info-label">收货人</span>
-              <el-input v-if="selectedOrderId" v-model="currentOrderInfo.consignee" type="textarea" :rows="2" size="small" placeholder="公司名称+地址+TEL/传真" />
+              <el-input v-if="selectedOrderId || selectedLedgerId" v-model="currentOrderInfo.consignee" type="textarea" :rows="2" size="small" placeholder="公司名称+地址+TEL/传真" />
               <span v-else class="info-value muted">—</span>
             </div>
             <div class="info-row">
               <span class="info-label">通知人</span>
-              <el-input v-if="selectedOrderId" v-model="currentOrderInfo.notify" type="textarea" :rows="2" size="small" placeholder="公司名称+地址+TEL/传真" />
+              <el-input v-if="selectedOrderId || selectedLedgerId" v-model="currentOrderInfo.notify" type="textarea" :rows="2" size="small" placeholder="公司名称+地址+TEL/传真" />
               <span v-else class="info-value muted">—</span>
             </div>
             <div class="info-row">
               <span class="info-label">卸货港</span>
-              <el-input v-if="selectedOrderId" v-model="currentOrderInfo.port" size="small" placeholder="可编辑" />
+              <el-input v-if="selectedOrderId || selectedLedgerId" v-model="currentOrderInfo.port" size="small" placeholder="可编辑" />
               <span v-else class="info-value muted">—</span>
             </div>
             <div class="info-row">
               <span class="info-label">品名中文</span>
-              <el-input v-if="selectedOrderId" v-model="currentOrderInfo.product_cn" size="small" placeholder="可编辑" />
+              <el-input v-if="selectedOrderId || selectedLedgerId" v-model="currentOrderInfo.product_cn" size="small" placeholder="可编辑" />
               <span v-else class="info-value muted">—</span>
             </div>
             <div class="info-row">
               <span class="info-label">品名英文</span>
-              <el-input v-if="selectedOrderId" v-model="currentOrderInfo.product_en" size="small" placeholder="可编辑" />
+              <el-input v-if="selectedOrderId || selectedLedgerId" v-model="currentOrderInfo.product_en" size="small" placeholder="可编辑" />
               <span v-else class="info-value muted">—</span>
             </div>
             <div class="info-row">
               <span class="info-label">H.S.Code</span>
-              <el-input v-if="selectedOrderId" v-model="currentOrderInfo.hs_code" size="small" placeholder="可编辑" />
+              <el-input v-if="selectedOrderId || selectedLedgerId" v-model="currentOrderInfo.hs_code" size="small" placeholder="可编辑" />
               <span v-else class="info-value muted">—</span>
             </div>
             <div class="info-row">
               <span class="info-label">毛重</span>
-              <el-input v-if="selectedOrderId" v-model="currentOrderInfo.gross_weight_kg" size="small" placeholder="可编辑">
+              <el-input v-if="selectedOrderId || selectedLedgerId" v-model="currentOrderInfo.gross_weight_kg" size="small" placeholder="可编辑">
                 <template #append>kg</template>
               </el-input>
               <span v-else class="info-value muted">— kg</span>
             </div>
             <div class="info-row">
               <span class="info-label">体积(CBM)</span>
-              <el-input v-if="selectedOrderId" v-model="currentOrderInfo.volume_cbm" size="small" placeholder="可编辑">
+              <el-input v-if="selectedOrderId || selectedLedgerId" v-model="currentOrderInfo.volume_cbm" size="small" placeholder="可编辑">
                 <template #append>m³</template>
               </el-input>
               <span v-else class="info-value muted">— m³</span>
             </div>
             <div class="info-row">
               <span class="info-label">桶数</span>
-              <el-input v-if="selectedOrderId" v-model="currentOrderInfo.drum_count" size="small" placeholder="可编辑" />
+              <el-input v-if="selectedOrderId || selectedLedgerId" v-model="currentOrderInfo.drum_count" size="small" placeholder="可编辑" />
               <span v-else class="info-value muted">—</span>
             </div>
             <div class="info-row">
               <span class="info-label">托盘数</span>
-              <el-input v-if="selectedOrderId" v-model="currentOrderInfo.pallet_count" size="small" placeholder="可编辑" />
+              <el-input v-if="selectedOrderId || selectedLedgerId" v-model="currentOrderInfo.pallet_count" size="small" placeholder="可编辑" />
               <span v-else class="info-value muted">—</span>
             </div>
             <div class="info-row">
               <span class="info-label">20GP判断</span>
-              <span v-if="selectedOrderId && currentOrderInfo.fits_20gp" class="info-value" :class="currentOrderInfo.fits_20gp === '适合' ? 'text-success' : 'text-danger'">{{ currentOrderInfo.fits_20gp }}</span>
+              <span v-if="(selectedOrderId || selectedLedgerId) && currentOrderInfo.fits_20gp" class="info-value" :class="currentOrderInfo.fits_20gp === '适合' ? 'text-success' : 'text-danger'">{{ currentOrderInfo.fits_20gp }}</span>
               <span v-else class="info-value muted">—</span>
             </div>
             <!-- 产品明细列表 -->
@@ -299,12 +310,31 @@ import { ArrowDown } from '@element-plus/icons-vue'
 import { phase2Api } from '@/api/phase2'
 import { getOrderList, getOrderComparison, getOrderPiContracts, type OrderListItem } from '@/api/merge'
 import { getDashboardOrders, type DashboardOrder } from '@/api/dashboard'
+import { ordersApi } from '@/api/orders'
 import { nameMappingApi } from '@/api/name_mapping'
 import { SHIPPER_OPTIONS } from '@/constants/shippers'
+
+const SHIPPER_MAP: Record<string, string> = {
+  '宏昊': SHIPPER_OPTIONS[0],
+  '宏昊化工': SHIPPER_OPTIONS[0],
+  '广东宏昊': SHIPPER_OPTIONS[0],
+  '广东宏昊化工': SHIPPER_OPTIONS[0],
+}
+
+function getShipperFromTitle(title?: string | null): string {
+  if (!title) return SHIPPER_OPTIONS[0]
+  const t = title.trim()
+  if (SHIPPER_MAP[t]) return SHIPPER_MAP[t]
+  for (const [key, val] of Object.entries(SHIPPER_MAP)) {
+    if (key.includes(t) || t.includes(key)) return val
+  }
+  return SHIPPER_OPTIONS[0]
+}
 
 const route = useRoute()
 
 const selectedOrderId = ref<number | null>(null)
+const selectedLedgerId = ref<number | null>(null)
 const shipperEditing = ref(false)
 const shipperSelectValue = ref('')
 const selectedPiNo = ref<string>('')
@@ -347,6 +377,10 @@ const currentOrderInfo = ref({
   customer_code: '',
   shipper: '',
   consignee: '',
+  consignee_name: '',
+  consignee_address: '',
+  consignee_tel: '',
+  shipment_title: '',
   notify: 'SAME AS CONSIGNEE',
   port: '',
   product_cn: '',
@@ -361,6 +395,9 @@ const currentOrderInfo = ref({
 
 if (route.query.orderId) {
   selectedOrderId.value = Number(route.query.orderId)
+}
+if (route.query.ledgerId) {
+  selectedLedgerId.value = Number(route.query.ledgerId)
 }
 
 async function loadOrderList() {
@@ -412,6 +449,10 @@ async function onOrderChange(orderId: number): Promise<void> {
       customer_code: data.customer_code || '',
       shipper: '',
       consignee: consigneeFull,
+      consignee_name: piConsigneeName,
+      consignee_address: piConsigneeAddr,
+      consignee_tel: (pis[0] as any)?.consignee_tel || '',
+      shipment_title: '',
       notify: 'SAME AS CONSIGNEE',
       port: (pis[0] as any)?.destination || '',
       product_cn: productCnAll,
@@ -435,7 +476,21 @@ async function openDocument(type: 'booking' | 'loi') {
     currentDocKey.value = res.data.documentKey || res.data.docKey
     currentConfig.value = res.data
   } catch (e: any) {
-    ElMessage.error('文档生成失败: ' + (e.message || ''))
+    ElMessage.error('文档生成失败，请稍后重试')
+  }
+}
+
+async function openCustomsDocument() {
+  if (!selectedLedgerId.value) {
+    ElMessage.warning('请先从台账列表选择一条记录')
+    return
+  }
+  try {
+    const res = await phase2Api.generateCustoms(null, selectedLedgerId.value)
+    currentDocKey.value = res.data.documentKey || res.data.docKey || ''
+    currentConfig.value = res.data || res
+  } catch (e: any) {
+    ElMessage.error('报关资料生成失败，请稍后重试')
   }
 }
 
@@ -444,6 +499,10 @@ const bookingInitialValues = computed(() => {
   return {
     shipper: currentOrderInfo.value.shipper,
     consignee: currentOrderInfo.value.consignee,
+    consignee_name: currentOrderInfo.value.consignee_name,
+    consignee_address: currentOrderInfo.value.consignee_address,
+    consignee_tel: currentOrderInfo.value.consignee_tel,
+    shipment_title: currentOrderInfo.value.shipment_title,
     notify: currentOrderInfo.value.notify,
     port: currentOrderInfo.value.port,
     customs_names: items.map(it => it.customs_name || it.product_cn || ''),
@@ -463,7 +522,7 @@ async function onBookingConfirm(fields: import('./components/BookingConfirmDialo
     currentDocKey.value = res.data.documentKey || res.data.docKey
     currentConfig.value = res.data
   } catch (e: any) {
-    ElMessage.error('订舱单生成失败: ' + (e.message || ''))
+    ElMessage.error('订舱单生成失败，请稍后重试')
   }
 }
 
@@ -478,7 +537,7 @@ async function openBlankTemplate(type: 'booking' | 'loi' | 'msds') {
     currentDocKey.value = res.data.documentKey || res.data.docKey
     currentConfig.value = res.data
   } catch (e: any) {
-    ElMessage.error('模板打开失败: ' + (e.message || ''))
+    ElMessage.error('模板打开失败，请稍后重试')
   }
 }
 
@@ -496,14 +555,62 @@ async function onOpenMyDoc(doc: any) {
       downloadUrl: doc.downloadUrl,  // browser-accessible download URL
     }
   } catch (e: any) {
-    ElMessage.error('文档加载失败: ' + (e.message || ''))
+    ElMessage.error('文档加载失败，请稍后重试')
   }
 }
 
 onMounted(() => {
   loadOrderList()
   if (selectedOrderId.value) onOrderChange(selectedOrderId.value)
+  if (selectedLedgerId.value) loadLedgerRecord(selectedLedgerId.value)
 })
+
+async function loadLedgerRecord(ledgerId: number) {
+  try {
+    const record = await ordersApi.getLedgerRecord(ledgerId)
+    if (!record) return
+    // 用台账数据填充 currentOrderItems
+    const items = record.items || []
+    currentOrderItems.value = items.map((it: any) => ({
+      internal_code: it.internal_code,
+      product_cn: it.product_cn,
+      hs_code: it.hs_code,
+      quantity: it.quantity_kg,
+      gross_weight: it.gross_weight_kg,
+      volume: it.volume_cbm,
+      customs_name: it.customs_name,
+    }))
+    // 汇总多产品的包装数据
+    const totalGw = items.reduce((sum: number, it: any) => sum + (it.gross_weight_kg || 0), 0)
+    const totalVol = items.reduce((sum: number, it: any) => sum + (it.volume_cbm || 0), 0)
+    const totalDrums = items.reduce((sum: number, it: any) => sum + (it.drum_count || 0), 0)
+    const totalPallets = items.reduce((sum: number, it: any) => sum + (it.pallet_count || 0), 0)
+    // 填充 currentOrderInfo
+    currentOrderInfo.value = {
+      order_no: record.order_no || '',
+      customer_code: record.customer_code || '',
+      shipper: getShipperFromTitle(record.shipment_title),
+      consignee: record.consignee_name || '',
+      consignee_name: record.consignee_name || '',
+      consignee_address: record.consignee_address || '',
+      consignee_tel: record.consignee_tel || '',
+      shipment_title: record.shipment_title || '',
+      notify: 'SAME AS CONSIGNEE',
+      port: record.destination || '',
+      product_cn: items[0]?.product_cn || '',
+      product_en: '',
+      hs_code: items[0]?.hs_code || '',
+      gross_weight_kg: totalGw ? String(Math.round(totalGw * 10) / 10) : '',
+      volume_cbm: totalVol ? String(Math.round(totalVol * 1000) / 1000) : '',
+      drum_count: totalDrums ? String(totalDrums) : '',
+      pallet_count: totalPallets ? String(totalPallets) : (items[0]?.pallet_count != null ? String(items[0].pallet_count) : ''),
+      fits_20gp: items[0]?.fits_20gp ?? '',
+    }
+    selectedPiNo.value = record.pi_no || record.order_no || ''
+  } catch (e: any) {
+    ElMessage.error('加载台账记录失败，请稍后重试')
+  }
+}
 </script>
 
 <style scoped>

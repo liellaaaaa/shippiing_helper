@@ -26,7 +26,11 @@
         <el-input v-model="form.place_of_receipt" placeholder="如 GUANGZHOU,CHINA" />
       </el-form-item>
       <el-form-item label="装货港">
-        <el-input v-model="form.pol" placeholder="如 GUANGZHOU,CHINA" />
+        <el-select v-model="form.pol" placeholder="选择装货港" style="width: 100%">
+          <el-option label="NanSha, China (南沙)" value="NanSha, China" />
+          <el-option label="SheKou, China (蛇口)" value="SheKou, China" />
+          <el-option label="GuangZhou, China (广州)" value="GuangZhou, China" />
+        </el-select>
       </el-form-item>
       <el-form-item label="卸货港">
         <el-input v-model="form.pod" placeholder="如 LAT KRABANG,THAILAND" />
@@ -74,6 +78,10 @@ import { ref, watch } from 'vue'
 export interface BookingForm {
   shipper: string
   consignee: string
+  consignee_name: string
+  consignee_address: string
+  consignee_tel: string
+  shipment_title: string
   notify: string
   cut_off_date: string
   place_of_receipt: string
@@ -100,8 +108,8 @@ const defaultForm = (): BookingForm => ({
   consignee: '',
   notify: 'SAME AS CONSIGNEE',
   cut_off_date: '',
-  place_of_receipt: 'GUANGZHOU,CHINA',
-  pol: 'GUANGZHOU,CHINA',
+  place_of_receipt: 'NanSha, China',
+  pol: 'NanSha, China',
   pod: '',
   place_of_delivery: '',
   marks: '',
@@ -136,8 +144,8 @@ watch(() => props.modelValue, (v) => {
       ...initial,
       // 特殊默认值
       notify: initial.notify || 'SAME AS CONSIGNEE',
-      place_of_receipt: initial.place_of_receipt || 'GUANGZHOU,CHINA',
-      pol: initial.pol || 'GUANGZHOU,CHINA',
+      place_of_receipt: initial.place_of_receipt || 'NanSha, China',
+      pol: initial.pol || 'NanSha, China',
     }
     // 卸货港默认值同装货港（如果initialValues有port）
     if (!initial.pod && initial.port) {

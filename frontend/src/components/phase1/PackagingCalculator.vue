@@ -27,7 +27,7 @@
         </el-table-column>
         <el-table-column label="卡板规格" width="140">
           <template #default="{ row }">
-            <el-select v-model="row.pallet_spec" placeholder="选择托盘" size="small" :disabled="!row.packaging_name" @change="() => onRowPackageChange(row, row.packaging_name)">
+            <el-select v-if="isPalletizable(row.packaging_name)" v-model="row.pallet_spec" placeholder="选择托盘" size="small" :disabled="!row.packaging_name" @change="() => onRowPackageChange(row, row.packaging_name)">
               <el-option
                 v-for="p in palletTypes"
                 :key="p.name"
@@ -36,6 +36,7 @@
                 :disabled="isPalletUnsupported(row.packaging_name, p.name)"
               />
             </el-select>
+            <span v-else class="muted" style="font-size:12px;color:#999">不需要卡板</span>
           </template>
         </el-table-column>
         <el-table-column label="数量(kg)" width="120">
@@ -45,14 +46,17 @@
         </el-table-column>
         <el-table-column label="每卡板桶数" width="100">
           <template #default="{ row }">
-            <el-input-number
-              v-model="row.drums_per_pallet"
-              size="small"
-              :min="1"
-              controls-position="right"
-              class="drums-per-pallet-input"
-              @change="() => onRowCapacityChange(row)"
-            />
+            <template v-if="isPalletizable(row.packaging_name)">
+              <el-input-number
+                v-model="row.drums_per_pallet"
+                size="small"
+                :min="1"
+                controls-position="right"
+                class="drums-per-pallet-input"
+                @change="() => onRowCapacityChange(row)"
+              />
+            </template>
+            <span v-else style="color:#999;font-size:12px">—</span>
           </template>
         </el-table-column>
         <el-table-column label="桶数" width="70" align="center">
@@ -60,26 +64,29 @@
         </el-table-column>
         <el-table-column label="板数" width="130" align="center">
           <template #default="{ row }">
-            <div class="pallets-cell">
-              <el-input-number
-                v-model="row.pallets"
-                size="small"
-                :min="0"
-                controls-position="right"
-                class="pallets-input"
-                @change="() => onPalletsChange(row)"
-              />
-              <span v-if="row.is_auto" class="pallets-badge auto">建议</span>
-              <span v-else-if="getPalletsFeedback(row).type === 'surplus'" class="pallets-badge surplus">
-                富余{{ getPalletsFeedback(row).text }}
+            <template v-if="isPalletizable(row.packaging_name)">
+              <div class="pallets-cell">
+                <el-input-number
+                  v-model="row.pallets"
+                  size="small"
+                  :min="0"
+                  controls-position="right"
+                  class="pallets-input"
+                  @change="() => onPalletsChange(row)"
+                />
+                <span v-if="row.is_auto" class="pallets-badge auto">建议</span>
+                <span v-else-if="getPalletsFeedback(row).type === 'surplus'" class="pallets-badge surplus">
+                  富余{{ getPalletsFeedback(row).text }}
               </span>
-              <span v-else-if="getPalletsFeedback(row).type === 'shortfall'" class="pallets-badge shortfall">
-                不足差{{ getPalletsFeedback(row).text }}
-              </span>
-            </div>
-            <div v-if="row.is_auto === false && row.pallets * row.drums_per_pallet < row.drums" class="pallets-warning">
-              ⚠️ 当前板数仅能装 {{ row.pallets * row.drums_per_pallet }} 桶，还有 {{ row.drums - row.pallets * row.drums_per_pallet }} 桶未安排
-            </div>
+                <span v-else-if="getPalletsFeedback(row).type === 'shortfall'" class="pallets-badge shortfall">
+                  不足差{{ getPalletsFeedback(row).text }}
+                </span>
+              </div>
+              <div v-if="row.is_auto === false && row.pallets * row.drums_per_pallet < row.drums" class="pallets-warning">
+                ⚠️ 当前板数仅能装 {{ row.pallets * row.drums_per_pallet }} 桶，还有 {{ row.drums - row.pallets * row.drums_per_pallet }} 桶未安排
+              </div>
+            </template>
+            <span v-else style="color:#999;font-size:12px">—</span>
           </template>
         </el-table-column>
         <el-table-column label="总体积" width="90" align="center">
@@ -366,10 +373,15 @@ async function onRowPackageChange(row: PackingRow, packagingName: string) {
   }
   try {
     const pkg = packageTypes.value.find(p => p.name === packagingName)
+    // 非卡板类产品（如IBC吨桶）强制不使用卡板
+    const usePallet = isPalletizable(packagingName) && !!row.pallet_spec
+    if (!isPalletizable(packagingName)) {
+      row.pallet_spec = ''
+    }
     const schemes = await packagingApi.calculateSchemes({
       packaging_name: packagingName,
       order_qty_kg: row.quantity_kg,
-      use_pallet: !!row.pallet_spec,
+      use_pallet: usePallet,
     })
     const match = schemes.find((s: any) => s.pallet_type === row.pallet_spec) || schemes[0]
     if (match) {
@@ -397,8 +409,16 @@ async function onRowPackageChange(row: PackingRow, packagingName: string) {
   }
 }
 
+function isPalletizable(packagingName: string): boolean {
+  if (!packagingName) return true
+  const pkg = packageTypes.value.find(p => p.name === packagingName)
+  if (!pkg) return true
+  return (pkg as any).is_palletizable !== false
+}
+
 function isPalletUnsupported(packagingName: string, palletName: string): boolean {
   if (!packagingName) return false
+  if (!isPalletizable(packagingName)) return true
   const pkg = packageTypes.value.find(p => p.name === packagingName)
   if (!pkg) return false
   if (palletName.includes('1.0*1.0')) {

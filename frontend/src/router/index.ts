@@ -55,12 +55,6 @@ const router = createRouter({
           component: DataCenter,
           meta: { title: '数据中心' }
         },
-        {
-          path: 'audit',
-          name: 'AuditLogs',
-          component: () => import('@/views/audit/AuditLogs.vue'),
-          meta: { title: '日志查看' }
-        }
       ]
     }
   ]

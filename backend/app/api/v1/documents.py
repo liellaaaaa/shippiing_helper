@@ -16,6 +16,9 @@ oo_svc = OnlyOfficeService()
 class BookingFields(BaseModel):
     shipper: str = ""
     consignee: str = ""
+    consignee_name: str = ""
+    consignee_address: str = ""
+    consignee_tel: str = ""
     notify: str = ""
     cut_off_date: str = ""
     place_of_receipt: str = ""
@@ -29,6 +32,19 @@ class BookingFields(BaseModel):
     measurement: str = ""
     customs_names: list[str] = []
     template_type: str = "xlsx"
+    shipment_title: str = ""
+
+
+def _build_consignee(name: str, address: str, tel: str) -> str:
+    """拼接收货人信息块：名称 + 地址 + 电话"""
+    parts = []
+    if name:
+        parts.append(name.strip())
+    if address:
+        parts.append(address.strip())
+    if tel:
+        parts.append(f"TEL:{tel.strip()}")
+    return "\n".join(parts)
 
 
 @router.post("/booking")
@@ -36,12 +52,27 @@ async def generate_booking(fields: BookingFields = Body(...)):
     """
     生成订舱单，字段通过 JSON body 传入，自动填充到模板。
     """
+    from app.core.shipment_title_mapping import get_shipper
+
     svc = DocumentService()
+
+    # SHIPPER: 优先用前端直接传入的 shipper，其次从 shipment_title 映射
+    shipper_value = fields.shipper
+    if not shipper_value and fields.shipment_title:
+        shipper_value = get_shipper(fields.shipment_title)
+
+    # CONSIGNEE: 优先用前端直接传入的 consignee，其次拼接 name+address+tel
+    consignee_value = fields.consignee
+    if not consignee_value:
+        consignee_value = _build_consignee(
+            fields.consignee_name, fields.consignee_address, fields.consignee_tel
+        )
+
     # 将字段名转为 fill_booking_template 期望的格式（键无花括号）
     fields_dict = {
-        "SHIPPER": fields.shipper,
-        "CONSIGNEE": fields.consignee,
-        "NOTIFY": fields.notify,
+        "SHIPPER": shipper_value,
+        "CONSIGNEE": consignee_value,
+        "NOTIFY": fields.notify or consignee_value,
         "CUT_OFF_DATE": fields.cut_off_date,
         "PLACE_OF_RECEIPT": fields.place_of_receipt,
         "POL": fields.pol,
@@ -133,13 +164,21 @@ async def load_msds(msds_id: int):
 
 
 @router.get("/customs")
-async def generate_customs(order_id: int | None = Query(None)):
+async def generate_customs(
+    order_id: int | None = Query(None),
+    ledger_record_id: int | None = Query(None),
+):
     """
     生成出口报关资料工作簿（5个 sheet 的 xlsx）。
-    order_id 暂不使用，为后续自动数据填充留扩展口。
+
+    优先使用 ledger_record_id（台账记录，含三源完整数据）填充；
+    其次使用 order_id（回退兼容）。
     """
     svc = DocumentService()
-    content, doc_key, _ = svc.generate_customs(order_id=order_id)
+    content, doc_key, _ = svc.generate_customs(
+        order_id=order_id,
+        ledger_record_id=ledger_record_id,
+    )
     token, config, safe_key = oo_svc.create_config(doc_key, "xlsx")
     _save_doc_to_db(doc_key, "customs", content, order_id=order_id, storage_key=safe_key)
     api_base = os.getenv("API_BASE_URL", "http://localhost:8000")
@@ -184,7 +223,11 @@ async def open_blank_template(template_type: str):
             "downloadUrl": f"{api_base}/api/v1/onlyoffice/download/{safe_key}",
         }
     except FileNotFoundError as e:
-        return {"error": str(e)}
+        return {"error": "模板文件未找到"}
+    except ValueError as e:
+        return {"error": "参数错误"}
+    except Exception:
+        return {"error": "文档生成失败"}
 
 
 def _save_doc_to_db(doc_key: str, doc_type: str, content: bytes, order_id: int = None, storage_key: str = None):

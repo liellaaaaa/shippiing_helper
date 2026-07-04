@@ -216,6 +216,7 @@ def calculate(
         pallets = 0
         drums_per_pallet = 0
         pallet_type = None
+        full_pallets = 0
         total_cbm = drums * pkg.cbm
         total_weight = drums * pkg.gross_kg
     else:

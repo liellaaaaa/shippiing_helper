@@ -177,8 +177,8 @@
         <div class="match-summary" v-if="mergePreviewData.total_products">
           <el-tag type="info" size="small">共 {{ mergePreviewData.total_products }} 个产品</el-tag>
           <el-tag type="success" size="small" style="margin-left:8px">匹配 {{ mergePreviewData.matched_count }} 个</el-tag>
-          <el-tag type="warning" size="small" style="margin-left:8px" v-if="mergePreviewData.pi_only_count > 0">仅PI合同表 {{ mergePreviewData.pi_only_count }} 个</el-tag>
-          <el-tag type="danger" size="small" style="margin-left:8px" v-if="mergePreviewData.sales_only_count > 0">仅销售订单表 {{ mergePreviewData.sales_only_count }} 个</el-tag>
+          <el-tag type="warning" size="small" style="margin-left:8px" v-if="(mergePreviewData.pi_only_count ?? 0) > 0">仅PI合同表 {{ mergePreviewData.pi_only_count }} 个</el-tag>
+          <el-tag type="danger" size="small" style="margin-left:8px" v-if="(mergePreviewData.sales_only_count ?? 0) > 0">仅销售订单表 {{ mergePreviewData.sales_only_count }} 个</el-tag>
         </div>
 
         <!-- 产品明细表 -->

@@ -426,7 +426,7 @@ async function onOrderChange(orderId: number): Promise<void> {
     // Populate editable fields — 汇总所有产品的报关名称/英文名/HS Code
     const items = data.items || []
     // 英文名取第一个报关名称的（有值的情况下）
-    const firstCustomsName = items[0]?.customs_name || ''
+    const firstCustomsName = items[0]?.order?.customs_name || items[0]?.pi?.customs_name || ''
     let productEn = ''
     if (firstCustomsName) {
       try {
@@ -437,7 +437,7 @@ async function onOrderChange(orderId: number): Promise<void> {
       }
     }
     // 多产品时用 / 连接（使用报关名称）
-    const customsNameAll = items.map(it => it.customs_name).filter(Boolean).join(' / ')
+    const customsNameAll = items.map(it => it.order?.customs_name || it.pi?.customs_name).filter(Boolean).join(' / ')
     const hsCodeAll = items.map(it => it.order?.hs_code).filter(Boolean).join(' / ')
     const productEnAll = items.map(it => (it as any).product_en).filter(Boolean).join(' / ')
     // 收货人 = 名称 + 地址（用换行连接）
@@ -505,7 +505,7 @@ const bookingInitialValues = computed(() => {
     shipment_title: currentOrderInfo.value.shipment_title,
     notify: currentOrderInfo.value.notify,
     port: currentOrderInfo.value.port,
-    customs_names: items.map(it => it.customs_name || it.product_cn || ''),
+    customs_names: items.map(it => it.order?.customs_name || it.pi?.customs_name || it.product_cn || ''),
     gross_weight: currentOrderInfo.value.gross_weight_kg,
     measurement: currentOrderInfo.value.volume_cbm,
     drum_count: currentOrderInfo.value.drum_count,

@@ -278,6 +278,27 @@ async def write_ledger(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"写入台账失败: {str(e)}")
 
 
+@router.delete(
+    "/ledger/{order_no}",
+    summary="删除台账记录",
+    description="按订单号删除整单台账记录（所有产品行）",
+)
+async def delete_ledger(
+    order_no: str,
+    service: LedgerService = Depends(get_ledger_service),
+):
+    """删除台账记录（按订单号整单删除）"""
+    try:
+        count = service.delete_ledger(order_no)
+        if count == 0:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="台账记录不存在")
+        return {"deleted": count, "message": f"已删除台账记录 {count} 条"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"删除失败: {str(e)}")
+
+
 @router.get(
     "/ledger/{record_id}",
     response_model=LedgerRecordResponse,

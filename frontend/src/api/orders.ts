@@ -250,6 +250,12 @@ export const ordersApi = {
     return resp.data
   },
 
+  /** 删除台账记录（按订单号） */
+  deleteLedger: async (orderNo: string): Promise<{ deleted: number; message: string }> => {
+    const resp = await apiClient.delete(`/orders/ledger/${encodeURIComponent(orderNo)}`)
+    return resp.data
+  },
+
   /** 台账列表 */
   listLedger: async (params?: { search?: string; page?: number; page_size?: number }) => {
     const resp = await apiClient.get(`/orders/ledger`, { params })

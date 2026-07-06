@@ -173,8 +173,9 @@ const handleDelete = (row: LedgerRecord) => {
     { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
   ).then(async () => {
     try {
-      // TODO: 添加台账删除API
-      ElMessage.info('删除功能待实现')
+      await ordersApi.deleteLedger(row.order_no)
+      ElMessage.success(`已删除台账记录「${row.order_no}」`)
+      loadData()
     } catch {
       ElMessage.error('删除失败')
     }

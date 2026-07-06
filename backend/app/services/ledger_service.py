@@ -392,6 +392,16 @@ class LedgerService:
         finally:
             db.close()
 
+    def delete_ledger(self, order_no: str) -> int:
+        """按订单号删除台账记录（整单删除），返回删除行数"""
+        db = SessionLocal()
+        try:
+            count = db.query(OrderPiRecord).filter_by(order_no=order_no).delete()
+            db.commit()
+            return count
+        finally:
+            db.close()
+
     def list_ledger(self, search: Optional[str] = None, page: int = 1, page_size: int = 20) -> LedgerListResponse:
         """台账列表（按 order_no 分组，按时间倒序）"""
         from sqlalchemy import func, distinct

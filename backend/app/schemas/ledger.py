@@ -110,6 +110,7 @@ class MergePreviewItem(BaseModel):
     source_pi_contract: bool = False
     source_sales_order: bool = False
     source_pi_file: bool = False
+    source_note: Optional[str] = None  # 来源说明：如 "仅PI合同表"、"仅销售订单表"、"匹配"
     # 合并后的字段
     product_cn: Optional[str] = None
     spec_kg: Optional[float] = None
@@ -132,11 +133,15 @@ class MergePreviewResponse(BaseModel):
     customer_code: Optional[str] = None
     sales_person: Optional[str] = None
     pi_date: Optional[str] = None
+    # PI合同表提取的头部信息
+    pi_contract_shipment_title: Optional[str] = None   # 出货抬头/公司抬头（来自PI合同表）
+    pi_contract_shipment_method: Optional[str] = None  # 运输方式（来自PI合同表）
     # 销售订单表提取的头部信息
-    shipment_title: Optional[str] = None
+    sales_order_no: Optional[str] = None         # PI号（销售订单表中的订单号，用于交叉对照）
+    shipment_title: Optional[str] = None         # 出货抬头（来自销售订单表）
     merchandiser: Optional[str] = None
     delivery_date: Optional[str] = None
-    shipment_method: Optional[str] = None
+    shipment_method: Optional[str] = None        # 运输方式（来自销售订单表）
     # PI合同文件提取的头部信息
     consignee_name: Optional[str] = None
     consignee_address: Optional[str] = None
@@ -148,6 +153,11 @@ class MergePreviewResponse(BaseModel):
     bank_info: Optional[str] = None
     # 合并后的产品列表
     items: list[MergePreviewItem] = []
+    # 产品匹配统计
+    total_products: int = 0          # 总产品数（去重后）
+    matched_count: int = 0           # 两源匹配的产品数
+    pi_only_count: int = 0           # 仅PI合同表的产品数
+    sales_only_count: int = 0        # 仅销售订单表的产品数
     # 整体校验状态
     validation_status: str = "ok"  # ok | warning | error
     validation_warnings: list[ValidationWarning] = []

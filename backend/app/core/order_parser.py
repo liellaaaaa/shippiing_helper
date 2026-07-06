@@ -543,6 +543,9 @@ def parse_pi_contract_table(
                 order_no=pi_no,
                 customer_code=item.get("customer_code"),
                 salesperson=item.get("salesperson"),
+                pi_date=item.get("pi_date"),
+                shipment_method=item.get("shipment_method"),
+                shipment_title=item.get("shipment_title"),
                 items=[],
             )
 

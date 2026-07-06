@@ -190,11 +190,14 @@ class DocumentService:
                 if r in marker_map:
                     field_key = marker_map[r]
                     value = fields.get(field_key, "")
-                    # 固定单位后缀
+                    # 单位后缀：如果值已包含单位则不追加
                     if field_key == "NO_KIND_PKG" and value:
-                        value = f"{value} PALLETS"
+                        val_upper = str(value).upper()
+                        if not any(unit in val_upper for unit in ["PALLETS", "DRUMS", "DRUM", "CTNS", "PCS", "BUNDLES"]):
+                            value = f"{value} PALLETS"
                     elif field_key == "MEASUREMENT" and value:
-                        value = f"{value} CBM"
+                        if "CBM" not in str(value).upper():
+                            value = f"{value} CBM"
                     # 写回 <v> 元素，并改为内联字符串类型（t="str"）
                     # 原始单元格可能是 t="s"（共享字符串索引），直接改值会导致查表错误
                     v_el = c_el.find(f'{{{NS}}}v')

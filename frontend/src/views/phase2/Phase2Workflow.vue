@@ -57,7 +57,7 @@
         <el-button
           type="primary"
           size="small"
-          :disabled="!selectedOrderId"
+          :disabled="!selectedOrderId && !selectedLedgerId"
           v-track="{ event: 'generate_document', module: 'phase2', detail: { doc_type: 'booking' } }"
           @click="showBookingDialog = true"
         >
@@ -69,7 +69,7 @@
         <el-button
           type="primary"
           size="small"
-          :disabled="!selectedOrderId || !selectedPiNo"
+          :disabled="(!selectedOrderId && !selectedLedgerId) || !selectedPiNo"
           v-track="{ event: 'generate_document', module: 'phase2', detail: { doc_type: 'loi' } }"
           @click="openDocument('loi')"
         >
@@ -174,12 +174,12 @@
               <span v-else class="info-value muted">—</span>
             </div>
             <div class="info-row">
-              <span class="info-label">品名中文</span>
+              <span class="info-label">报关名称</span>
               <el-input v-if="selectedOrderId || selectedLedgerId" v-model="currentOrderInfo.product_cn" size="small" placeholder="可编辑" />
               <span v-else class="info-value muted">—</span>
             </div>
             <div class="info-row">
-              <span class="info-label">品名英文</span>
+              <span class="info-label">英文名称</span>
               <el-input v-if="selectedOrderId || selectedLedgerId" v-model="currentOrderInfo.product_en" size="small" placeholder="可编辑" />
               <span v-else class="info-value muted">—</span>
             </div>
@@ -223,7 +223,7 @@
                 <el-collapse-item title="产品明细" name="products">
                   <el-table :data="currentOrderItems" size="small" stripe>
                     <el-table-column prop="internal_code" label="Internal Code" min-width="100" />
-                    <el-table-column prop="product_cn" label="品名" min-width="120" show-overflow-tooltip />
+                    <el-table-column prop="customs_name" label="报关名称" min-width="120" show-overflow-tooltip />
                     <el-table-column prop="order.hs_code" label="HS Code" min-width="80" />
                     <el-table-column prop="order.quantity" label="数量(kg)" min-width="80" align="right" />
                     <el-table-column prop="order.gross_weight" label="毛重(kg)" min-width="80" align="right" />
@@ -423,21 +423,21 @@ async function onOrderChange(orderId: number): Promise<void> {
     if (pis.length > 0 && !selectedPiNo.value) {
       selectedPiNo.value = pis[0].pi_no
     }
-    // Populate editable fields — 汇总所有产品的品名/英文名/HS Code
+    // Populate editable fields — 汇总所有产品的报关名称/英文名/HS Code
     const items = data.items || []
-    // 英文名取第一个产品的（有值的情况下）
-    const firstCn = items[0]?.product_cn || ''
+    // 英文名取第一个报关名称的（有值的情况下）
+    const firstCustomsName = items[0]?.customs_name || ''
     let productEn = ''
-    if (firstCn) {
+    if (firstCustomsName) {
       try {
-        const res = await nameMappingApi.lookupByCn(firstCn)
+        const res = await nameMappingApi.lookupByCn(firstCustomsName)
         productEn = res.data.en || ''
       } catch {
         productEn = ''
       }
     }
-    // 多产品时用 / 连接
-    const productCnAll = items.map(it => it.product_cn).filter(Boolean).join(' / ')
+    // 多产品时用 / 连接（使用报关名称）
+    const customsNameAll = items.map(it => it.customs_name).filter(Boolean).join(' / ')
     const hsCodeAll = items.map(it => it.order?.hs_code).filter(Boolean).join(' / ')
     const productEnAll = items.map(it => (it as any).product_en).filter(Boolean).join(' / ')
     // 收货人 = 名称 + 地址（用换行连接）
@@ -455,7 +455,7 @@ async function onOrderChange(orderId: number): Promise<void> {
       shipment_title: '',
       notify: 'SAME AS CONSIGNEE',
       port: (pis[0] as any)?.destination || '',
-      product_cn: productCnAll,
+      product_cn: customsNameAll,
       product_en: productEnAll || productEn,
       hs_code: hsCodeAll,
       gross_weight_kg: data.gross_weight_kg ? String(data.gross_weight_kg) : '',
@@ -569,37 +569,58 @@ async function loadLedgerRecord(ledgerId: number) {
   try {
     const record = await ordersApi.getLedgerRecord(ledgerId)
     if (!record) return
-    // 用台账数据填充 currentOrderItems
     const items = record.items || []
-    currentOrderItems.value = items.map((it: any) => ({
-      internal_code: it.internal_code,
-      product_cn: it.product_cn,
-      hs_code: it.hs_code,
-      quantity: it.quantity_kg,
-      gross_weight: it.gross_weight_kg,
-      volume: it.volume_cbm,
-      customs_name: it.customs_name,
-    }))
+
     // 汇总多产品的包装数据
     const totalGw = items.reduce((sum: number, it: any) => sum + (it.gross_weight_kg || 0), 0)
     const totalVol = items.reduce((sum: number, it: any) => sum + (it.volume_cbm || 0), 0)
     const totalDrums = items.reduce((sum: number, it: any) => sum + (it.drum_count || 0), 0)
     const totalPallets = items.reduce((sum: number, it: any) => sum + (it.pallet_count || 0), 0)
-    // 填充 currentOrderInfo
+
+    // 多产品报关名称/HS Code 用 / 拼接（使用报关名称而非产品中文名）
+    const customsNameAll = items.map((it: any) => it.customs_name).filter(Boolean).join(' / ')
+    const hsCodeAll = items.map((it: any) => it.hs_code).filter(Boolean).join(' / ')
+    // 收货人 = 名称 + 地址（与 onOrderChange 保持一致）
+    const consigneeFull = [record.consignee_name, record.consignee_address].filter(Boolean).join('\n')
+
+    // 构造与 onOrderChange 相同结构的 items（表格列引用 order.hs_code 等嵌套字段）
+    currentOrderItems.value = items.map((it: any) => ({
+      internal_code: it.internal_code,
+      customs_name: it.customs_name,
+      order: {
+        hs_code: it.hs_code,
+        quantity: it.quantity_kg,
+        gross_weight: it.gross_weight_kg,
+        volume: it.volume_cbm,
+      },
+    }))
+
+    // 查询英文名（取第一个报关名称做映射）
+    let productEn = ''
+    const firstCustomsName = items[0]?.customs_name || ''
+    if (firstCustomsName) {
+      try {
+        const res = await nameMappingApi.lookupByCn(firstCustomsName)
+        productEn = res.data.en || ''
+      } catch { /* ignore */ }
+    }
+    const productEnAll = items.map((it: any) => it.product_en).filter(Boolean).join(' / ')
+
+    // 填充 currentOrderInfo（使用报关名称）
     currentOrderInfo.value = {
       order_no: record.order_no || '',
       customer_code: record.customer_code || '',
       shipper: getShipperFromTitle(record.shipment_title),
-      consignee: record.consignee_name || '',
+      consignee: consigneeFull,
       consignee_name: record.consignee_name || '',
       consignee_address: record.consignee_address || '',
       consignee_tel: record.consignee_tel || '',
       shipment_title: record.shipment_title || '',
       notify: 'SAME AS CONSIGNEE',
       port: record.destination || '',
-      product_cn: items[0]?.product_cn || '',
-      product_en: '',
-      hs_code: items[0]?.hs_code || '',
+      product_cn: customsNameAll,
+      product_en: productEnAll || productEn,
+      hs_code: hsCodeAll,
       gross_weight_kg: totalGw ? String(Math.round(totalGw * 10) / 10) : '',
       volume_cbm: totalVol ? String(Math.round(totalVol * 1000) / 1000) : '',
       drum_count: totalDrums ? String(totalDrums) : '',
@@ -607,6 +628,16 @@ async function loadLedgerRecord(ledgerId: number) {
       fits_20gp: items[0]?.fits_20gp ?? '',
     }
     selectedPiNo.value = record.pi_no || record.order_no || ''
+    // 设置 selectedOrderId 使顶部按钮可操作
+    selectedOrderId.value = record.id
+    // 同步发货人下拉框选中值
+    const shipperVal = getShipperFromTitle(record.shipment_title)
+    currentOrderInfo.value.shipper = shipperVal
+    shipperSelectValue.value = shipperVal === SHIPPER_OPTIONS[0] ? 'HONGHAO' : (shipperVal ? '__other__' : '')
+    // 填充 PI 下拉列表
+    if (record.pi_no) {
+      piList.value = [{ pi_no: record.pi_no, consignee_name: record.consignee_name || '', consignee_address: record.consignee_address || '', destination: record.destination || '' }]
+    }
   } catch (e: any) {
     ElMessage.error('加载台账记录失败，请稍后重试')
   }

@@ -56,6 +56,9 @@ class ParsedOrderSchema(BaseModel):
     order_no: str
     customer_code: Optional[str] = None
     salesperson: Optional[str] = None
+    pi_date: Optional[str] = None          # PI日期（来自PI合同表）
+    shipment_method: Optional[str] = None  # 运输方式（来自PI合同表）
+    shipment_title: Optional[str] = None   # 出货抬头/公司抬头（来自PI合同表）
     items: list[OrderItemSchema] = []
     header_conflict_warning: Optional[str] = None  # 订单头字段冲突警告
 

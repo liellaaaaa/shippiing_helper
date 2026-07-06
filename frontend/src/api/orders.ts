@@ -103,7 +103,9 @@ export interface MergePreviewItem {
   source_pi_contract: boolean
   source_sales_order: boolean
   source_pi_file: boolean
+  source_note?: string  // "匹配" | "仅PI合同表" | "仅销售订单表"
   product_cn?: string
+  spec_kg?: number
   quantity_kg?: number
   unit_price?: number
   total_amount?: number
@@ -120,10 +122,16 @@ export interface MergePreviewResponse {
   customer_code?: string
   sales_person?: string
   pi_date?: string
+  // PI合同表头部
+  pi_contract_shipment_title?: string
+  pi_contract_shipment_method?: string
+  // 销售订单表头部
+  sales_order_no?: string
   shipment_title?: string
   merchandiser?: string
   delivery_date?: string
   shipment_method?: string
+  // PI合同文件头部
   consignee_name?: string
   consignee_address?: string
   consignee_tel?: string
@@ -132,9 +140,17 @@ export interface MergePreviewResponse {
   price_term?: string
   payment_terms?: string
   bank_info?: string
+  // 产品列表
   items: MergePreviewItem[]
+  // 匹配统计
+  total_products?: number
+  matched_count?: number
+  pi_only_count?: number
+  sales_only_count?: number
+  // 校验
   validation_status: string
   validation_warnings: ValidationWarning[]
+  // 解析结果
   pi_contract_table_parsed?: any
   sales_order_table_parsed?: any
   pi_file_parsed?: any

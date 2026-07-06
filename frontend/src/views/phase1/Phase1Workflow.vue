@@ -143,12 +143,15 @@
               <div class="field-item"><span class="label">客户编码</span><span class="value">{{ mergePreviewData.customer_code || '-' }}</span></div>
               <div class="field-item"><span class="label">业务员</span><span class="value">{{ mergePreviewData.sales_person || '-' }}</span></div>
               <div class="field-item"><span class="label">PI日期</span><span class="value">{{ mergePreviewData.pi_date || '-' }}</span></div>
+              <div class="field-item"><span class="label">出货抬头</span><span class="value">{{ mergePreviewData.pi_contract_shipment_title || '-' }}</span></div>
+              <div class="field-item"><span class="label">运输方式</span><span class="value">{{ mergePreviewData.pi_contract_shipment_method || '-' }}</span></div>
             </div>
           </div>
 
           <div class="preview-section">
             <h4 class="section-title">销售订单表信息</h4>
             <div class="field-grid">
+              <div class="field-item"><span class="label">PI号</span><span class="value">{{ mergePreviewData.sales_order_no || '-' }}</span></div>
               <div class="field-item"><span class="label">出货抬头</span><span class="value">{{ mergePreviewData.shipment_title || '-' }}</span></div>
               <div class="field-item"><span class="label">跟单员</span><span class="value">{{ mergePreviewData.merchandiser || '-' }}</span></div>
               <div class="field-item"><span class="label">交货日期</span><span class="value">{{ mergePreviewData.delivery_date || '-' }}</span></div>
@@ -168,6 +171,14 @@
               <div class="field-item"><span class="label">付款方式</span><span class="value">{{ mergePreviewData.payment_terms || '-' }}</span></div>
             </div>
           </div>
+        </div>
+
+        <!-- 产品匹配统计 -->
+        <div class="match-summary" v-if="mergePreviewData.total_products">
+          <el-tag type="info" size="small">共 {{ mergePreviewData.total_products }} 个产品</el-tag>
+          <el-tag type="success" size="small" style="margin-left:8px">匹配 {{ mergePreviewData.matched_count }} 个</el-tag>
+          <el-tag type="warning" size="small" style="margin-left:8px" v-if="mergePreviewData.pi_only_count > 0">仅PI合同表 {{ mergePreviewData.pi_only_count }} 个</el-tag>
+          <el-tag type="danger" size="small" style="margin-left:8px" v-if="mergePreviewData.sales_only_count > 0">仅销售订单表 {{ mergePreviewData.sales_only_count }} 个</el-tag>
         </div>
 
         <!-- 产品明细表 -->
@@ -200,11 +211,12 @@
           <el-table-column prop="product_appearance" label="产品外观" min-width="100" show-overflow-tooltip>
             <template #default="{ row }">{{ row.product_appearance || '-' }}</template>
           </el-table-column>
-          <el-table-column label="来源" width="150" align="center">
+          <el-table-column label="来源" width="130" align="center">
             <template #default="{ row }">
-              <el-tag v-if="row.source_pi_contract" size="small" type="success" style="margin-right:2px">PI合同表</el-tag>
-              <el-tag v-if="row.source_sales_order" size="small" type="warning" style="margin-right:2px">订单表</el-tag>
-              <el-tag v-if="row.source_pi_file" size="small" type="info">PI文件</el-tag>
+              <el-tag v-if="row.source_note === '匹配'" size="small" type="success">匹配</el-tag>
+              <el-tag v-else-if="row.source_note === '仅PI合同表'" size="small" type="warning">仅PI合同表</el-tag>
+              <el-tag v-else-if="row.source_note === '仅销售订单表'" size="small" type="danger">仅订单表</el-tag>
+              <el-tag v-else-if="row.source_pi_file" size="small" type="info">PI文件</el-tag>
             </template>
           </el-table-column>
         </el-table>
@@ -383,30 +395,46 @@ async function handleSaveLedger() {
     const calcSummary = calcRef.value?.getSummary()
     const calcRows = calcRef.value?.getRows() || []
 
-    const items = preview.items.map((item, idx) => {
-      const rowCalc = calcRows[idx] || {}
-      return {
-        internal_code: item.internal_code,
-        product_cn: item.product_cn,
-        spec_kg: undefined,
-        quantity_kg: item.quantity_kg,
-        unit_price: item.unit_price,
-        total_amount: item.total_amount,
-        hs_code: item.hs_code,
-        customs_name: item.customs_name,
-        customs_ingredients: item.customs_ingredients,
-        product_appearance: item.product_appearance,
-        drum_count: rowCalc.drums || undefined,
-        pallet_count: rowCalc.pallets || undefined,
-        net_weight_kg: rowCalc.net_weight_kg || undefined,
-        gross_weight_kg: rowCalc.gross_weight_kg || undefined,
-        volume_cbm: rowCalc.volume_cbm || undefined,
-        fits_20gp: rowCalc.fits_20gp ? '适合' : '超出',
-        packaging_type_id: undefined,
-        pallet_spec: rowCalc.pallet_spec || undefined,
-        drums_per_pallet: rowCalc.drums_per_pallet || undefined,
-      }
-    })
+    // 构建包装计算结果索引 {internal_code: calcRow}
+    const calcMap: Record<string, any> = {}
+    for (const row of calcRows) {
+      const code = row.internal_code || row.product_name
+      if (code) calcMap[code] = row
+    }
+
+    // 只写入包装计算器中有数据的产品（以包装计算结果为准）
+    const items = preview.items
+      .filter(item => calcMap[item.internal_code])
+      .map(item => {
+        const rowCalc = calcMap[item.internal_code] || {}
+        return {
+          internal_code: item.internal_code,
+          product_cn: item.product_cn,
+          spec_kg: item.spec_kg || undefined,
+          quantity_kg: item.quantity_kg,
+          unit_price: item.unit_price,
+          total_amount: item.total_amount,
+          hs_code: item.hs_code,
+          customs_name: item.customs_name,
+          customs_ingredients: item.customs_ingredients,
+          product_appearance: item.product_appearance,
+          drum_count: rowCalc.drums || undefined,
+          pallet_count: rowCalc.pallets || (rowCalc.drums && rowCalc.drums_per_pallet ? Math.ceil(rowCalc.drums / rowCalc.drums_per_pallet) : undefined),
+          net_weight_kg: rowCalc.net_weight_kg || undefined,
+          gross_weight_kg: rowCalc.gross_weight_kg || undefined,
+          volume_cbm: rowCalc.volume_cbm || undefined,
+          fits_20gp: rowCalc.fits_20gp || undefined,
+          packaging_type_id: undefined,
+          pallet_spec: rowCalc.pallet_spec || undefined,
+          drums_per_pallet: rowCalc.drums_per_pallet || undefined,
+        }
+      })
+
+    // 检查是否有产品被写入
+    if (items.length === 0) {
+      ElMessage.warning('请先在包装计算器中添加产品并完成计算')
+      return
+    }
 
     const request: LedgerWriteRequest = {
       order_no: preview.order_no,
@@ -506,6 +534,7 @@ function handleReset() {
 
 /* 合并预览 */
 .merge-preview-panel { margin-top: 20px; }
+.match-summary { margin: 12px 0; display: flex; align-items: center; }
 .preview-header { display: flex; gap: 24px; }
 .preview-section { flex: 1; }
 .section-title { font-size: 14px; font-weight: 600; margin: 0 0 12px 0; color: #303133; }

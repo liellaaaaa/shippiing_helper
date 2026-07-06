@@ -505,7 +505,7 @@ const bookingInitialValues = computed(() => {
     shipment_title: currentOrderInfo.value.shipment_title,
     notify: currentOrderInfo.value.notify,
     port: currentOrderInfo.value.port,
-    customs_names: items.map(it => it.order?.customs_name || it.pi?.customs_name || it.product_cn || ''),
+    customs_names: items.map(it => it.customs_name || it.product_cn || ''),
     gross_weight: currentOrderInfo.value.gross_weight_kg,
     measurement: currentOrderInfo.value.volume_cbm,
     drum_count: currentOrderInfo.value.drum_count,

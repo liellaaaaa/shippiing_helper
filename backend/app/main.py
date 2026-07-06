@@ -201,6 +201,7 @@ async def auth_middleware(request: Request, call_next):
     if request.url.path in ["/health", "/docs", "/redoc", "/openapi.json", "/", "/favicon.ico", "/favicon.svg"] or \
        request.url.path.startswith("/api/v1/auth/") or \
        request.url.path.startswith("/api/v1/onlyoffice/") or \
+       request.url.path.startswith("/api/v1/documents/") or \
        request.url.path.startswith("/assets/") or \
        request.url.path.startswith("/workflow") or \
        request.url.path.startswith("/dashboard") or \

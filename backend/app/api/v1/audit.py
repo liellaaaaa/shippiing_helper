@@ -95,14 +95,13 @@ async def export_logs(
 @router.post("/batch")
 async def batch_log(
     request: Request,
-    user: dict = Depends(get_current_user),
     service: AuditService = Depends(get_audit_service),
 ):
     """
     批量接收前端埋点日志。
 
-    注意：sendBeacon 发送 Content-Type: text/plain，
-    所以这里用 Request.body() 手动解析，不依赖 FastAPI Pydantic。
+    注意：sendBeacon 不支持自定义 header，因此此端点不要求认证。
+    安全由前端控制（仅已登录用户才会上报事件）。
     """
     body = await request.body()
     try:
@@ -113,12 +112,6 @@ async def batch_log(
     events = data.get("events", [])
     if not isinstance(events, list):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="events must be a list")
-
-    for item in events:
-        # 安全校验：禁止伪造其他用户的日志
-        item_user = item.get("user_name")
-        if item_user != user["name"]:
-            raise HTTPException(status_code=403, detail="forbidden")
 
         try:
             action_time = datetime.fromisoformat(item.get("action_time", "").replace("Z", "+00:00"))

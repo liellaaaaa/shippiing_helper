@@ -168,19 +168,47 @@ def merge_quoted_lines(lines: list[str]) -> list[str]:
                 i += 1
                 continue
 
-        # 列数模式：上一行是完整数据行，当前行只有 1 列（无分隔符） → 续行
+        # 列数模式：上一行是完整数据行，当前行列数不足 → 续行
         if result:
             prev_parts = split_cols(result[-1])
-            if len(line_cols) == 1 and len(prev_parts) >= FULL_ROW_MIN_COLS:
-                continuation = line.strip()
-                if continuation:
-                    if len(prev_parts) > REQ_COL:
-                        prev_parts[REQ_COL] = prev_parts[REQ_COL] + "\n" + continuation
-                    else:
-                        prev_parts[-1] = prev_parts[-1] + "\n" + continuation
-                    result[-1] = join_cols(prev_parts)
-                    i += 1
-                    continue
+            if len(prev_parts) >= FULL_ROW_MIN_COLS:
+                # 情况1：当前行只有 1 列（无分隔符） → 整行并入上一行最后字段
+                if len(line_cols) == 1:
+                    continuation = line.strip()
+                    if continuation:
+                        if len(prev_parts) > REQ_COL:
+                            prev_parts[REQ_COL] = prev_parts[REQ_COL] + "\n" + continuation
+                        else:
+                            prev_parts[-1] = prev_parts[-1] + "\n" + continuation
+                        result[-1] = join_cols(prev_parts)
+                        i += 1
+                        continue
+                # 情况2：当前行列数不足但 >1（单元格换行后残留尾部列）
+                # 例：成分列换行导致 "水：7732-18-5，55%\t2026年5月25日\tTT 0..."
+                # 第0列是续行文本，剩余列是上一行被"挤出来"的尾部字段
+                elif len(line_cols) > 1 and len(line_cols) < len(prev_parts):
+                    first_col = line_cols[0].strip()
+                    # 判断第0列是否像续行文本（不含日期、数字编号、"是/否"等独立字段特征）
+                    looks_like_continuation = (
+                        first_col
+                        and not re.match(r'^\d{4}[-/年]', first_col)           # 不是日期
+                        and not re.match(r'^(是|否|yes|no)$', first_col, re.I)  # 不是是否字段
+                        and not re.match(r'^WA\d', first_col)                    # 不是客户编码
+                        and not re.match(r'^HT\d', first_col)                    # 不是PI号
+                        and len(first_col) > 3                                    # 排除短数字
+                    )
+                    if looks_like_continuation:
+                        # 第0列 → 并入上一行最后字段
+                        if len(prev_parts) > REQ_COL:
+                            prev_parts[REQ_COL] = prev_parts[REQ_COL] + "\n" + first_col
+                        else:
+                            prev_parts[-1] = prev_parts[-1] + "\n" + first_col
+                        # 剩余列 → 追加到上一行末尾
+                        remaining = line_cols[1:]
+                        prev_parts.extend(remaining)
+                        result[-1] = join_cols(prev_parts)
+                        i += 1
+                        continue
 
         # 引号模式检查：若上一行的订单要求列以 " 开头但未以 " 结尾
         if result:

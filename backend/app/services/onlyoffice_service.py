@@ -59,15 +59,20 @@ class OnlyOfficeService:
             "docType": doc_type,
         }
 
-    def create_config(self, document_key: str, file_type: str, document_url: str = None) -> tuple[str, dict, str]:
+    def create_config(self, document_key: str, file_type: str, document_url: str = None, existing_safe_key: str = None) -> tuple[str, dict, str]:
         """
         Generate both JWT token and editor config with the SAME safe key.
         Returns (token, config, safe_key) tuple.
         Ensures documentKey in config and document.key in JWT match.
         safe_key is returned so caller can store document under UUID in DB.
         document_url: URL OnlyOffice uses to download the document (for JWT payload).
+        existing_safe_key: reuse a previously-generated safe key (for re-opening existing docs).
         """
-        safe_key = self._safe_key(document_key)
+        if existing_safe_key:
+            safe_key = existing_safe_key
+            OnlyOfficeService._safe_key_map[safe_key] = document_key
+        else:
+            safe_key = self._safe_key(document_key)
         now = datetime.utcnow()
         # document.url in JWT must match what OnlyOffice uses to fetch the file
         doc_url = document_url or f"{_callback_base()}/api/v1/onlyoffice/download/{safe_key}"

@@ -19,6 +19,7 @@ from app.api.v1.packaging import router as packaging_router
 from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1 import documents, msds, transport, export_codes, onlyoffice
 from app.api.v1.msds_generator import router as msds_generator_router
+from app.api.v1.msds_ledger import router as msds_ledger_router
 from app.api.v1.data_center import router as data_center_router
 from app.api.v1.transport_reports import router as transport_reports_router
 from app.api.v1.name_mapping import router as name_mapping_router
@@ -64,6 +65,7 @@ app.include_router(name_mapping_router)
 app.include_router(auth_router)
 app.include_router(audit_router)
 app.include_router(msds_generator_router)
+app.include_router(msds_ledger_router)
 
 # OnlyOffice Document Server 代理（解决 ngrok 单端口转发问题）
 DOCUMENT_SERVER = os.getenv("DOCUMENT_SERVER_URL", "http://localhost:8080")
@@ -216,6 +218,7 @@ async def auth_middleware(request: Request, call_next):
        request.url.path.startswith("/api/v1/name-mapping") or \
        request.url.path.startswith("/api/v1/transport-reports") or \
        request.url.path.startswith("/api/v1/data-center") or \
+       request.url.path.startswith("/api/v1/audit") or \
        request.url.path.startswith("/documentserver"):
         return await call_next(request)
 

@@ -11,12 +11,13 @@ TEMPLATES = {
     "booking_marked": str(ROOT / "references" / "长晟出口海运BOOKING模板-已标记.xlsx"),
     "booking_multi": str(ROOT / "references" / "长晟出口海运BOOKING模板-已标记.xlsx"),
     "loi":     str(ROOT / "references" / "LOI-op-非危险品保函模板.docx"),
-    "msds":    str(ROOT / "references" / "MSDS" / "MSDS标准模板.docx"),
+    "msds":    str(ROOT / "references" / "cnMSDS.docx"),
+    "msds_en": str(ROOT / "references" / "enMSDS.docx"),
     "customs": str(ROOT / "references" / "出口报关资料 26.3.17.xlsx"),
 }
 
 REFERENCES_DIR = str(ROOT / "references")
-MSDS_DIR = str(ROOT / "references" / "MSDS")
+MSDS_DIR = str(ROOT / "references" / "MSDS")  # Legacy MSDS files directory
 # MSDS standard template — prefer the pre-built .docx if it exists, otherwise auto-generated
 _MSDS_TEMPLATE_DEFAULT = str(ROOT / "references" / "MSDS" / "MSDS标准模板.docx")
 TRANSPORT_REPORTS_DIR = str(ROOT / "references" / "海运鉴定报告")

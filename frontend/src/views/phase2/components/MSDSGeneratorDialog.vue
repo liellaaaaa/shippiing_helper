@@ -19,10 +19,53 @@
           <el-icon><Search /></el-icon>
         </template>
       </el-input>
-      <el-button v-if="newFormulas.length > 0" type="warning" @click="importNewFormulas">
-        导入 {{ newFormulas.length }} 个新配方
+      <el-button v-if="newFormulas.length > 0" type="warning" @click="toggleEditList">
+        {{ showEditList ? '收起' : '导入' }} {{ newFormulas.length }} 个新配方
       </el-button>
       <el-button type="primary" @click="showAddDialog">新增配方</el-button>
+    </div>
+
+    <!-- 新配方可编辑列表 -->
+    <div v-if="showEditList && newFormulas.length > 0" class="edit-list-section">
+      <div class="edit-list-header">
+        <span class="edit-list-title">新配方（可编辑后导入）</span>
+        <el-button size="small" type="success" @click="importAllFormulas">确认导入</el-button>
+      </div>
+      <div class="edit-list-content">
+        <div v-for="(formula, idx) in newFormulas" :key="idx" class="formula-edit-card">
+          <div class="formula-edit-row">
+            <div class="formula-field">
+              <label>报关名称</label>
+              <el-input v-model="formula.customs_name" size="small" />
+            </div>
+            <div class="formula-field">
+              <label>外观</label>
+              <el-input v-model="formula.appearance" size="small" />
+            </div>
+            <div class="formula-field">
+              <label>离子性</label>
+              <el-select v-model="formula.ion_type" size="small" placeholder="请选择">
+                <el-option label="阳离子" value="阳离子" />
+                <el-option label="阴离子" value="阴离子" />
+                <el-option label="非离子" value="非离子" />
+              </el-select>
+            </div>
+            <div class="formula-field">
+              <label>pH值</label>
+              <el-input v-model="formula.ph" size="small" placeholder="5.0-7.0" />
+            </div>
+          </div>
+          <div class="formula-edit-row">
+            <div class="formula-field formula-field-wide">
+              <label>成分</label>
+              <el-input v-model="formula.customs_ingredients" size="small" type="textarea" :rows="2" />
+            </div>
+          </div>
+          <div class="formula-actions">
+            <el-button size="small" type="danger" link @click="removeNewFormula(idx)">移除</el-button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- 台账表格 -->
@@ -39,53 +82,22 @@
         </template>
       </el-table-column>
       <el-table-column prop="customs_name" label="报关名称" width="140" />
-      <el-table-column label="成分(摘要)" width="180">
+      <el-table-column label="成分" min-width="200">
         <template #default="{ row }">
-          {{ getCompositionSummary(row.composition) }}
+          {{ getCompositionFull(row.composition) }}
         </template>
       </el-table-column>
       <el-table-column prop="appearance" label="外观" width="160" show-overflow-tooltip />
       <el-table-column prop="ion_type" label="离子性" width="80" />
       <el-table-column prop="ph" label="pH值" width="80" />
-      <el-table-column prop="version" label="版本" width="60" />
     </el-table>
 
-    <!-- 选中产品详情 -->
-    <div v-if="selectedItem" class="detail-section">
-      <div class="detail-header">
-        <span class="detail-title">选中产品详情</span>
-        <el-button size="small" @click="showEditDialog">编辑</el-button>
-      </div>
-      <div class="detail-content">
-        <div class="detail-row">
-          <span class="detail-label">报关名称:</span>
-          <span>{{ selectedItem.customs_name }}</span>
-          <span class="detail-en" v-if="selectedItem.product_name_en"> / {{ selectedItem.product_name_en }}</span>
-        </div>
-        <div class="detail-row">
-          <span class="detail-label">外观:</span>
-          <span>{{ selectedItem.appearance || 'no data' }}</span>
-          <span class="detail-en" v-if="selectedItem.appearance_en"> / {{ selectedItem.appearance_en }}</span>
-        </div>
-        <div class="detail-row">
-          <span class="detail-label">离子性:</span>
-          <span>{{ selectedItem.ion_type || 'no data' }}</span>
-          <span class="detail-en" v-if="selectedItem.ion_type_en"> / {{ selectedItem.ion_type_en }}</span>
-        </div>
-        <div class="detail-row">
-          <span class="detail-label">pH值:</span>
-          <span>{{ selectedItem.ph || 'no data' }}</span>
-        </div>
-        <div class="detail-row">
-          <span class="detail-label">成分:</span>
-          <span>{{ getCompositionDetail(selectedItem.composition) }}</span>
-        </div>
-      </div>
-      <div class="detail-actions">
-        <el-button size="small" type="danger" @click="onDelete">删除</el-button>
-        <el-button size="small" type="primary" @click="showGenerateDialog('cn')">生成中文MSDS</el-button>
-        <el-button size="small" type="primary" @click="showGenerateDialog('en')">生成英文MSDS</el-button>
-      </div>
+    <!-- 选中产品操作按钮 -->
+    <div v-if="selectedItem" class="detail-actions">
+      <el-button size="small" @click="showEditDialog">编辑</el-button>
+      <el-button size="small" type="danger" @click="onDelete">删除</el-button>
+      <el-button size="small" type="primary" @click="showGenerateDialog('cn')">生成中文MSDS</el-button>
+      <el-button size="small" type="primary" @click="showGenerateDialog('en')">生成英文MSDS</el-button>
     </div>
 
     <!-- 新增/编辑配方对话框 -->
@@ -101,7 +113,11 @@
           <el-input v-model="formData.appearance" />
         </el-form-item>
         <el-form-item label="离子性">
-          <el-input v-model="formData.ion_type" placeholder="阳离子/阴离子/非离子" />
+          <el-select v-model="formData.ion_type" placeholder="请选择">
+            <el-option label="阳离子" value="阳离子" />
+            <el-option label="阴离子" value="阴离子" />
+            <el-option label="非离子" value="非离子" />
+          </el-select>
         </el-form-item>
         <el-form-item label="pH值">
           <el-input v-model="formData.ph" placeholder="如 5.0-7.0" />
@@ -113,7 +129,11 @@
           <el-input v-model="formData.appearance_en" />
         </el-form-item>
         <el-form-item label="离子性(英文)">
-          <el-input v-model="formData.ion_type_en" placeholder="Cationic/Anionic/Non-ionic" />
+          <el-select v-model="formData.ion_type_en" placeholder="Please select">
+            <el-option label="Cationic" value="Cationic" />
+            <el-option label="Anionic" value="Anionic" />
+            <el-option label="Non-ionic" value="Non-ionic" />
+          </el-select>
         </el-form-item>
         <el-form-item label="成分">
           <div v-for="(item, idx) in formData.composition" :key="idx" class="composition-row">
@@ -164,7 +184,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
+import { ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import { msdsLedgerApi, type MsdsLedgerItem, type CompositionItem } from '@/api/msds-ledger'
@@ -184,6 +204,7 @@ const generating = ref(false)
 const searchKeyword = ref('')
 const ledgerList = ref<MsdsLedgerItem[]>([])
 const selectedItem = ref<MsdsLedgerItem | null>(null)
+const showEditList = ref(false)
 
 // 表单相关
 const showForm = ref(false)
@@ -210,10 +231,16 @@ const generateForm = ref({
   update_date_cn: '',
 })
 
+function generateRandomPh(): string {
+  const x = Math.floor(Math.random() * 2) + 5 // 5 or 6
+  return `${x}±1`
+}
+
 watch(() => props.modelValue, (v) => {
   visible.value = v
   if (v) {
     searchKeyword.value = ''
+    showEditList.value = false
     // Extract order items info for filtering and composition check
     if (props.orderItems && props.orderItems.length > 0) {
       const names = [...new Set(props.orderItems.map((it: any) => it.customs_name || it.order?.customs_name || it.pi?.customs_name).filter(Boolean))]
@@ -259,43 +286,59 @@ async function loadLedger() {
       for (const orderItem of orderItemsWithIngredients.value) {
         if (!orderItem.customs_ingredients) continue
         
-        // Normalize ingredients for comparison
-        const orderIngredients = orderItem.customs_ingredients.replace(/\s+/g, '').toLowerCase()
-        
-        // Check if any ledger entry has matching composition
-        const hasMatch = items.some((ledgerItem: MsdsLedgerItem) => {
+        // Check if already exists in ledger (by customs_name + CAS numbers)
+        const alreadyInLedger = items.some((ledgerItem: MsdsLedgerItem) => {
           if (ledgerItem.customs_name !== orderItem.customs_name) return false
           if (!ledgerItem.composition || ledgerItem.composition.length === 0) return false
-          
-          // Build composition string from ledger
-          const ledgerIngredients = ledgerItem.composition
-            .map((c: any) => `${c.component_cn}${c.cas}${c.percentage}`)
-            .join('+')
-            .replace(/\s+/g, '')
-            .toLowerCase()
-          
-          return orderIngredients === ledgerIngredients
+          // Normalize CAS: remove leading zeros, e.g. "0026545-58-4" -> "26545-58-4"
+          const normCas = (s: string) => s.replace(/(\b0+)(\d)/g, '$2')
+          const ledgerCas = ledgerItem.composition
+            .map((c: any) => normCas(c.cas || ''))
+            .filter((s: string) => s.trim())
+            .sort()
+            .join(',')
+          const casPattern = /\d{2,7}-\d{1,2}-\d{1,2}/g
+          const orderCas = (orderItem.customs_ingredients.match(casPattern) || [])
+            .map((s: string) => normCas(s))
+            .sort()
+            .join(',')
+          return ledgerCas === orderCas
         })
         
-        if (!hasMatch) {
+        if (!alreadyInLedger) {
           // Check if we already added this formula
           const exists = newFormulas.value.some((f: any) => 
             f.customs_name === orderItem.customs_name && f.customs_ingredients === orderItem.customs_ingredients
           )
           if (!exists) {
-            newFormulas.value.push(orderItem)
+            newFormulas.value.push({
+              ...orderItem,
+              ion_type: '',
+              ph: generateRandomPh(),
+            })
           }
         }
       }
       
       if (newFormulas.value.length > 0) {
-        ElMessage.warning(`检测到 ${newFormulas.value.length} 个新配方，请点击"新增配方"添加到台账。`)
+        showEditList.value = true
       }
     }
   } catch (e: any) {
     ElMessage.error('加载台账失败: ' + (e.message || ''))
   } finally {
     loading.value = false
+  }
+}
+
+function toggleEditList() {
+  showEditList.value = !showEditList.value
+}
+
+function removeNewFormula(idx: number) {
+  newFormulas.value.splice(idx, 1)
+  if (newFormulas.value.length === 0) {
+    showEditList.value = false
   }
 }
 
@@ -313,18 +356,13 @@ function onRowClick(row: MsdsLedgerItem | null) {
   selectedItem.value = selectedItem.value?.id === row.id ? null : row
 }
 
-function getCompositionSummary(composition: CompositionItem[] | null) {
+function getCompositionFull(composition: CompositionItem[] | null) {
   if (!composition || composition.length === 0) return '-'
-  return composition.map(c => c.component_cn).join('+')
-}
-
-function getCompositionDetail(composition: CompositionItem[] | null) {
-  if (!composition || composition.length === 0) return 'no data'
   return composition.map(c => {
-    const cas = c.cas ? ` (CAS: ${c.cas})` : ''
-    const pct = c.percentage ? ` - ${c.percentage}` : ''
+    const pct = c.percentage ? ` ${c.percentage}` : ''
+    const cas = c.cas ? ` (${c.cas})` : ''
     return `${c.component_cn}${cas}${pct}`
-  }).join(', ')
+  }).join(' + ')
 }
 
 function showAddDialog() {
@@ -406,16 +444,22 @@ function getDefaultDate() {
   return `${y}/${m}/${day}`
 }
 
+function generateMsdsNumber() {
+  const year = String(new Date().getFullYear()).slice(-2)
+  const seq = String(Math.floor(Math.random() * 100)).padStart(2, '0')
+  return `HHJS-${year}${seq}`
+}
+
 function showGenerateDialog(lang: 'cn' | 'en') {
   if (!selectedItem.value) return
   generateLanguage.value = lang
   const defaultDate = getDefaultDate()
-  const d = new Date(defaultDate)
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  
+  const parts = defaultDate.split('/')
+  const y = parts[0]
+  const m = parts[1]
+
   generateForm.value = {
-    msds_number: '',
+    msds_number: generateMsdsNumber(),
     revision_date: defaultDate,
     revision: `${y}-${m}`,
     update_date_cn: `${y}年${parseInt(m)}月`,
@@ -448,15 +492,15 @@ async function onConfirmGenerate() {
   }
 }
 
-async function importNewFormulas() {
+async function importAllFormulas() {
   for (const formula of newFormulas.value) {
     // Parse ingredients string
     const ingredients = formula.customs_ingredients || ''
     const composition = parseIngredients(ingredients)
     
     // Get appearance from orderItems (passed from Phase2Workflow)
-    let appearance = ''
-    if (formula.internal_code) {
+    let appearance = formula.appearance || ''
+    if (!appearance && formula.internal_code) {
       const orderItem = orderItemsWithIngredients.value.find((item: any) => 
         item.internal_code === formula.internal_code
       )
@@ -479,8 +523,8 @@ async function importNewFormulas() {
         internal_code: formula.internal_code || '',
         customs_name: formula.customs_name,
         appearance: appearance,
-        ion_type: '',
-        ph: '',
+        ion_type: formula.ion_type || '',
+        ph: formula.ph || '',
         composition: composition,
         product_name_en: '',
         appearance_en: '',
@@ -492,6 +536,7 @@ async function importNewFormulas() {
   }
   ElMessage.success(`已导入 ${newFormulas.value.length} 个新配方`)
   newFormulas.value = []
+  showEditList.value = false
   loadLedger()
 }
 
@@ -510,14 +555,14 @@ function parseIngredients(ingredients: string): any[] {
     // Space-separated format: "十二烷基苯磺酸钠：25155-30-0，40%"
     for (const part of spaceParts) {
       const trimmed = part.trim()
-      if (!trimmed) continue
+      if (!trimmed || trimmed === '+') continue
       
       // Extract CAS number
       const casMatch = trimmed.match(/(\d{2,7}-\d{1,2}-\d{1,2})/)
       const cas = casMatch ? casMatch[1] : ''
       
-      // Extract percentage (Chinese comma or regular comma)
-      const pctMatch = trimmed.match(/[，,]\s*(\d+(?:\.\d+)?)\s*[％%]/)
+      // Extract percentage (Chinese comma, regular comma, or semicolon)
+      const pctMatch = trimmed.match(/[，;,；]\s*(\d+(?:\.\d+)?)\s*[％%]/)
       const percentage = pctMatch ? pctMatch[1] + '%' : ''
       
       // Extract component name (before colon)
@@ -576,6 +621,7 @@ function onClosed() {
   ledgerList.value = []
   selectedItem.value = null
   orderItemsNames.value = []
+  showEditList.value = false
 }
 </script>
 
@@ -585,41 +631,62 @@ function onClosed() {
   gap: 12px;
   margin-bottom: 16px;
 }
-.detail-section {
-  border: 1px solid var(--el-border-color-lighter);
+.edit-list-section {
+  border: 1px solid var(--el-color-warning-light-5);
   border-radius: 8px;
-  padding: 16px;
-  background: var(--el-fill-color-lighter);
+  padding: 12px;
+  margin-bottom: 16px;
+  background: var(--el-color-warning-light-9);
 }
-.detail-header {
+.edit-list-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 12px;
 }
-.detail-title {
+.edit-list-title {
   font-weight: 600;
+  color: var(--el-color-warning);
 }
-.detail-content {
-  font-size: 13px;
-  line-height: 1.8;
-}
-.detail-row {
+.edit-list-content {
   display: flex;
-  gap: 8px;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 300px;
+  overflow-y: auto;
 }
-.detail-label {
-  font-weight: 500;
-  min-width: 70px;
+.formula-edit-card {
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 6px;
+  padding: 12px;
+  background: white;
+}
+.formula-edit-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.formula-field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.formula-field label {
+  font-size: 12px;
   color: var(--el-text-color-secondary);
 }
-.detail-en {
-  color: var(--el-text-color-placeholder);
+.formula-field-wide {
+  flex: 3;
+}
+.formula-actions {
+  display: flex;
+  justify-content: flex-end;
 }
 .detail-actions {
-  margin-top: 12px;
   display: flex;
   gap: 8px;
+  margin-bottom: 16px;
 }
 .composition-row {
   display: flex;

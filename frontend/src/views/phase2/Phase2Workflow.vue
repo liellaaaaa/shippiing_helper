@@ -173,20 +173,14 @@
               <el-input v-if="selectedOrderId || selectedLedgerId" v-model="currentOrderInfo.port" size="small" placeholder="可编辑" />
               <span v-else class="info-value muted">—</span>
             </div>
-            <div class="info-row">
-              <span class="info-label">报关名称</span>
-              <el-input v-if="selectedOrderId || selectedLedgerId" v-model="currentOrderInfo.product_cn" size="small" placeholder="可编辑" />
-              <span v-else class="info-value muted">—</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">英文名称</span>
-              <el-input v-if="selectedOrderId || selectedLedgerId" v-model="currentOrderInfo.product_en" size="small" placeholder="可编辑" />
-              <span v-else class="info-value muted">—</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">H.S.Code</span>
-              <el-input v-if="selectedOrderId || selectedLedgerId" v-model="currentOrderInfo.hs_code" size="small" placeholder="可编辑" />
-              <span v-else class="info-value muted">—</span>
+            <div v-if="currentOrderItems.length >= 1" class="product-list-section" style="margin-top: 8px;">
+              <el-table :data="currentOrderItems" size="small" border>
+                <el-table-column prop="customs_name" label="报关名称" min-width="120" show-overflow-tooltip />
+                <el-table-column prop="product_en" label="英文" min-width="120" show-overflow-tooltip />
+                <el-table-column prop="order.hs_code" label="HS Code" min-width="80" />
+                <el-table-column prop="appearance" label="外观" min-width="120" show-overflow-tooltip />
+                <el-table-column prop="customs_ingredients" label="成分" min-width="180" show-overflow-tooltip />
+              </el-table>
             </div>
             <div class="info-row">
               <span class="info-label">毛重</span>
@@ -202,14 +196,10 @@
               </el-input>
               <span v-else class="info-value muted">— m³</span>
             </div>
+
             <div class="info-row">
-              <span class="info-label">桶数</span>
+              <span class="info-label">桶数/托盘数</span>
               <el-input v-if="selectedOrderId || selectedLedgerId" v-model="currentOrderInfo.drum_count" size="small" placeholder="可编辑" />
-              <span v-else class="info-value muted">—</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">托盘数</span>
-              <el-input v-if="selectedOrderId || selectedLedgerId" v-model="currentOrderInfo.pallet_count" size="small" placeholder="可编辑" />
               <span v-else class="info-value muted">—</span>
             </div>
             <div class="info-row">
@@ -217,21 +207,7 @@
               <span v-if="(selectedOrderId || selectedLedgerId) && currentOrderInfo.fits_20gp" class="info-value" :class="currentOrderInfo.fits_20gp === '适合' ? 'text-success' : 'text-danger'">{{ currentOrderInfo.fits_20gp }}</span>
               <span v-else class="info-value muted">—</span>
             </div>
-            <!-- 产品明细列表 -->
-            <div v-if="currentOrderItems.length >= 1" class="product-list-section">
-              <el-collapse>
-                <el-collapse-item title="产品明细" name="products">
-                  <el-table :data="currentOrderItems" size="small" stripe>
-                    <el-table-column prop="internal_code" label="Internal Code" min-width="100" />
-                    <el-table-column prop="customs_name" label="报关名称" min-width="120" show-overflow-tooltip />
-                    <el-table-column prop="order.hs_code" label="HS Code" min-width="80" />
-                    <el-table-column prop="order.quantity" label="数量(kg)" min-width="80" align="right" />
-                    <el-table-column prop="order.gross_weight" label="毛重(kg)" min-width="80" align="right" />
-                    <el-table-column prop="order.volume" label="体积(m³)" min-width="80" align="right" />
-                  </el-table>
-                </el-collapse-item>
-              </el-collapse>
-            </div>
+
           </div>
         </el-card>
 
@@ -290,7 +266,7 @@
     />
 
     <!-- ── MSDS Generator Dialog ──────────────────── -->
-    <MSDSGeneratorDialog v-model="showMsdsDialog" @generated="onMsdsGenerated" />
+    <MSDSGeneratorDialog v-model="showMsdsDialog" :order-items="currentOrderItems" @generated="onMsdsGenerated" />
 
     <MyDocumentsDrawer v-model="showMyDocuments" @open-doc="onOpenMyDoc" />
 
@@ -416,7 +392,25 @@ async function onOrderChange(orderId: number): Promise<void> {
   if (!orderId) return
   try {
     const data = await getOrderComparison(orderId)
-    currentOrderItems.value = data.items || []
+    // Enrich items with English name, composition and appearance
+    const enrichedItems = (data.items || []).map((it: any) => ({
+      ...it,
+      product_en: it.order?.product_en || '',
+      customs_ingredients: it.order?.customs_ingredients || '',
+      appearance: it.order?.appearance || '',
+    }))
+    currentOrderItems.value = enrichedItems
+    
+    // Look up English names for each item
+    for (const item of currentOrderItems.value) {
+      const cn = item.customs_name || item.order?.customs_name || ''
+      if (cn && !item.product_en) {
+        try {
+          const res = await nameMappingApi.lookupByCn(cn)
+          if (res.data.en) item.product_en = res.data.en
+        } catch { /* ignore */ }
+      }
+    }
     if (data.pi_no) selectedPiNo.value = data.pi_no
     const pis = await getOrderPiContracts(orderId)
     piList.value = pis
@@ -584,9 +578,12 @@ async function loadLedgerRecord(ledgerId: number) {
     const consigneeFull = [record.consignee_name, record.consignee_address].filter(Boolean).join('\n')
 
     // 构造与 onOrderChange 相同结构的 items（表格列引用 order.hs_code 等嵌套字段）
-    currentOrderItems.value = items.map((it: any) => ({
+    const mappedItems = items.map((it: any) => ({
       internal_code: it.internal_code,
       customs_name: it.customs_name,
+      product_en: it.product_en || '',
+      customs_ingredients: it.customs_ingredients || '',
+      appearance: it.product_appearance || '',
       order: {
         hs_code: it.hs_code,
         quantity: it.quantity_kg,
@@ -594,6 +591,18 @@ async function loadLedgerRecord(ledgerId: number) {
         volume: it.volume_cbm,
       },
     }))
+    currentOrderItems.value = mappedItems
+    
+    // Look up English names
+    for (const item of currentOrderItems.value) {
+      const cn = item.customs_name || ''
+      if (cn && !item.product_en) {
+        try {
+          const res = await nameMappingApi.lookupByCn(cn)
+          if (res.data.en) item.product_en = res.data.en
+        } catch { /* ignore */ }
+      }
+    }
 
     // 查询英文名（取第一个报关名称做映射）
     let productEn = ''

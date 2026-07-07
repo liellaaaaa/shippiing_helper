@@ -2317,24 +2317,28 @@ class MSDSGeneratorService:
         return content, doc_key
 
     def _fill_placeholder(self, doc, placeholder, value):
-        """Replace placeholder text in all paragraphs."""
-        for para in doc.paragraphs:
+        """Replace placeholder text in all paragraphs, preserving surrounding text."""
+        # Collect all paragraphs to scan: body + headers + footers
+        all_paras = list(doc.paragraphs)
+        for section in doc.sections:
+            all_paras.extend(section.header.paragraphs)
+            all_paras.extend(section.footer.paragraphs)
+
+        for para in all_paras:
             if placeholder in para.text:
+                full_text = para.text.replace(placeholder, value)
                 if para.runs:
-                    # Save first run's format
                     first_run = para.runs[0]
                     orig_font_name = first_run.font.name
                     orig_font_size = first_run.font.size
-                    # Clear all runs and set new text
                     for run in para.runs:
                         run.text = ''
-                    para.runs[0].text = value
-                    # Restore format
+                    para.runs[0].text = full_text
                     if orig_font_name:
                         para.runs[0].font.name = orig_font_name
                     if orig_font_size:
                         para.runs[0].font.size = orig_font_size
-        
+
         # Also check in tables
         for table in doc.tables:
             for row in table.rows:
@@ -2342,9 +2346,10 @@ class MSDSGeneratorService:
                     for para in cell.paragraphs:
                         if placeholder in para.text:
                             if para.runs:
+                                full_text = para.text.replace(placeholder, value)
                                 for run in para.runs:
                                     run.text = ''
-                                para.runs[0].text = value
+                                para.runs[0].text = full_text
 
     def _fill_composition_from_template(self, doc, composition, language):
         """Fill composition table from template placeholder."""

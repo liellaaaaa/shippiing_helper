@@ -36,6 +36,7 @@ class OrderItemData(BaseModel):
     total_amount: Optional[float] = None
     hs_code: Optional[str] = None
     customs_name: Optional[str] = None
+    customs_ingredients: Optional[str] = None
     gross_weight: Optional[float] = None
     volume: Optional[float] = None
     product_en: Optional[str] = None

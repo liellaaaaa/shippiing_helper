@@ -39,6 +39,7 @@ class OrderItemData(BaseModel):
     gross_weight: Optional[float] = None
     volume: Optional[float] = None
     product_en: Optional[str] = None
+    appearance: Optional[str] = None
 
 
 class PiItemData(BaseModel):

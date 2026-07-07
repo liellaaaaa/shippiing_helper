@@ -147,6 +147,9 @@ class MergeService:
 
             comparison_items = []
             for r in all_records:
+                # Direct field from order_pi_records
+                appearance = getattr(r, 'product_appearance', '') or ''
+                
                 order_data = OrderItemData(
                     quantity=r.quantity_kg,
                     unit_price=r.unit_price,
@@ -156,6 +159,7 @@ class MergeService:
                     gross_weight=r.gross_weight_kg,
                     volume=r.volume_cbm,
                     product_en=r.product_en,
+                    appearance=appearance,
                 )
                 comparison_items.append(ComparisonItem(
                     id=r.id,

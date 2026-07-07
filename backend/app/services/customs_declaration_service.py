@@ -30,10 +30,15 @@ class CustomsDeclarationService:
     def get_instance(cls, json_path: Optional[str] = None) -> "CustomsDeclarationService":
         if cls._instance is None:
             if json_path is None:
-                base = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                base = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
                 json_path = os.path.join(base, "references", "申报要素.json")
             cls._instance = cls(json_path)
         return cls._instance
+
+    @classmethod
+    def reset(cls):
+        """清除缓存实例，下次 get_instance() 会重新加载 JSON。"""
+        cls._instance = None
 
     def lookup(self, hs_code: str) -> Optional[dict]:
         """

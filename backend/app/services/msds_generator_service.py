@@ -12,7 +12,7 @@ from docx import Document
 from docx.shared import Pt, RGBColor
 from io import BytesIO
 
-from app.core.config import CUSTOMS_CODES_JSON, MSDS_DIR
+from app.core.config import CUSTOMS_CODES_JSON, MSDS_DIR, TEMPLATES
 
 
 # 项目根目录
@@ -2230,3 +2230,140 @@ class MSDSGeneratorService:
                 pf.first_line_indent = saved_first_indent
                 pf.left_indent = saved_left_indent
                 break
+
+
+    # ===================== Template-based MSDS Generation =====================
+
+    def generate_msds_from_template(
+        self,
+        ledger_data: dict,
+        language: str,
+        msds_number: str,
+        revision_date: str
+    ) -> tuple:
+        """
+        Generate MSDS from unified template (cnMSDS.docx or enMSDS.docx).
+        
+        Args:
+            ledger_data: dict with keys: customs_name, appearance, ion_type, ph, composition,
+                         product_name_en, appearance_en, ion_type_en
+            language: "cn" or "en"
+            msds_number: MSDS编号
+            revision_date: 修订时间 (YYYY/MM/DD)
+        
+        Returns:
+            (docx_bytes, doc_key)
+        """
+        import time
+        from docx import Document
+        
+        # 1. Select template
+        template_key = "msds" if language == "cn" else "msds_en"
+        template_path = TEMPLATES.get(template_key)
+        if not template_path or not os.path.exists(template_path):
+            raise FileNotFoundError(f"MSDS template not found: {template_key}")
+        
+        doc = Document(template_path)
+        
+        # 2. Fill product info
+        if language == "cn":
+            self._fill_placeholder(doc, "{{customs_name}}", ledger_data.get("customs_name", ""))
+            self._fill_placeholder(doc, "{{appearance}}", ledger_data.get("appearance", "无资料"))
+            self._fill_placeholder(doc, "{{ion_type}}", ledger_data.get("ion_type", "无资料"))
+            self._fill_placeholder(doc, "{{ph}}", ledger_data.get("ph", "无资料"))
+        else:
+            self._fill_placeholder(doc, "{{product_name_en}}", ledger_data.get("product_name_en", ""))
+            self._fill_placeholder(doc, "{{appearance_en}}", ledger_data.get("appearance_en", "No data"))
+            self._fill_placeholder(doc, "{{ion_type_en}}", ledger_data.get("ion_type_en", "No data"))
+            self._fill_placeholder(doc, "{{ph}}", ledger_data.get("ph", "No data"))
+        
+        # 3. Fill composition table
+        composition = ledger_data.get("composition", [])
+        if composition:
+            self._fill_composition_from_template(doc, composition, language)
+        
+        # 4. Fill header (MSDS编号 + 修订时间)
+        self._fill_placeholder(doc, "{{msds_number}}", msds_number)
+        self._fill_placeholder(doc, "{{revision_date}}", revision_date)
+        
+        # 5. Fill Section 16 (版次 + 更新日期)
+        parts = revision_date.split("/") if revision_date else ["", ""]
+        if len(parts) >= 2:
+            year = parts[0]
+            month = parts[1]
+            revision = f"{year}-{month}"
+            update_date_cn = f"{year}年{int(month)}月"
+            update_date_en = f"{year}/{month}"
+        else:
+            revision = ""
+            update_date_cn = ""
+            update_date_en = ""
+        
+        self._fill_placeholder(doc, "{{revision}}", revision)
+        if language == "cn":
+            self._fill_placeholder(doc, "{{update_date}}", update_date_cn)
+        else:
+            self._fill_placeholder(doc, "{{update_date}}", update_date_en)
+        
+        # 6. Save
+        from io import BytesIO
+        buf = BytesIO()
+        doc.save(buf)
+        content = buf.getvalue()
+        
+        product_name = ledger_data.get("customs_name", ledger_data.get("product_name_en", "unknown"))
+        doc_key = f"msds_{product_name}_{int(time.time())}"
+        
+        return content, doc_key
+
+    def _fill_placeholder(self, doc, placeholder, value):
+        """Replace placeholder text in all paragraphs."""
+        for para in doc.paragraphs:
+            if placeholder in para.text:
+                if para.runs:
+                    # Save first run's format
+                    first_run = para.runs[0]
+                    orig_font_name = first_run.font.name
+                    orig_font_size = first_run.font.size
+                    # Clear all runs and set new text
+                    for run in para.runs:
+                        run.text = ''
+                    para.runs[0].text = value
+                    # Restore format
+                    if orig_font_name:
+                        para.runs[0].font.name = orig_font_name
+                    if orig_font_size:
+                        para.runs[0].font.size = orig_font_size
+        
+        # Also check in tables
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    for para in cell.paragraphs:
+                        if placeholder in para.text:
+                            if para.runs:
+                                for run in para.runs:
+                                    run.text = ''
+                                para.runs[0].text = value
+
+    def _fill_composition_from_template(self, doc, composition, language):
+        """Fill composition table from template placeholder."""
+        if not doc.tables:
+            return
+        
+        table = doc.tables[0]
+        
+        # Remove placeholder row(s) except header
+        while len(table.rows) > 1:
+            row = table.rows[-1]
+            row._tr.getparent().remove(row._tr)
+        
+        # Add rows for each component
+        for item in composition:
+            new_row = table.add_row()
+            if language == "cn":
+                new_row.cells[0].text = item.get("component_cn", "")
+            else:
+                new_row.cells[0].text = item.get("component_en", "") or item.get("component_cn", "")
+            new_row.cells[1].text = item.get("cas", "")
+            new_row.cells[2].text = item.get("percentage", "")

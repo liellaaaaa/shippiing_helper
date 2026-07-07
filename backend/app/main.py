@@ -207,9 +207,8 @@ async def auth_middleware(request: Request, call_next):
        request.url.path.startswith("/assets/") or \
        request.url.path.startswith("/workflow") or \
        request.url.path.startswith("/dashboard") or \
-       request.url.path.startswith("/phase2") or \
-       request.url.path.startswith("/phase3") or \
-       request.url.path.startswith("/data-center") or \
+        request.url.path.startswith("/phase2") or \
+        request.url.path.startswith("/data-center") or \
        request.url.path.startswith("/login") or \
        request.url.path.startswith("/api/v1/packaging/") or \
        request.url.path.startswith("/api/v1/packages/") or \

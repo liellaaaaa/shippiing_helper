@@ -4,7 +4,6 @@ import { trackEvent, flush } from '@/plugins/track'
 import Layout from '@/views/Layout.vue'
 import Phase1Workflow from '@/views/phase1/Phase1Workflow.vue'
 import Phase2Workflow from '@/views/phase2/Phase2Workflow.vue'
-import Phase3Workflow from '@/views/phase3/Phase3Workflow.vue'
 import Dashboard from '@/views/phase1/Dashboard.vue'
 import DataCenter from '@/views/data-center/DataCenter.vue'
 
@@ -44,12 +43,6 @@ const router = createRouter({
           meta: { title: '文档编辑' }
         },
         {
-          path: 'phase3',
-          name: 'Phase3Workflow',
-          component: Phase3Workflow,
-          meta: { title: '报关资料编辑' }
-        },
-        {
           path: 'data-center',
           name: 'DataCenter',
           component: DataCenter,
@@ -67,7 +60,6 @@ let currentModule: string | null = null
 const moduleMap: Record<string, RegExp[]> = {
   'phase1': [/^\/workflow$/, /^\/$/],
   'phase2': [/^\/phase2/],
-  'phase3': [/^\/phase3/],
   'dashboard': [/^\/dashboard/],
   'data-center': [/^\/data-center/],
 }

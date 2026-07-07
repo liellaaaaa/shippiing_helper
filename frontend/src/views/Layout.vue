@@ -37,15 +37,6 @@
             </span>
             <span class="link-text">文档编辑</span>
           </router-link>
-          <router-link to="/phase3" class="nav-link">
-            <span class="link-icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M9 11l3 3L22 4"/>
-                <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
-              </svg>
-            </span>
-            <span class="link-text">报关资料</span>
-          </router-link>
           <router-link to="/dashboard" class="nav-link">
             <span class="link-icon">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -143,7 +134,6 @@ const healthLoading = ref(false)
 function getCurrentModule(): string {
   const path = router.currentRoute.value.path
   if (path.startsWith('/phase2')) return 'phase2'
-  if (path.startsWith('/phase3')) return 'phase3'
   if (path.startsWith('/dashboard')) return 'dashboard'
   if (path.startsWith('/data-center')) return 'data-center'
   return 'phase1'

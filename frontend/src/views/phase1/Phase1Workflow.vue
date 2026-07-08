@@ -411,8 +411,8 @@ async function handleSaveLedger() {
         return {
           internal_code: item.internal_code,
           product_cn: item.product_cn,
-          product_en: '',  // 稍后查询
-          spec_kg: item.spec_kg || undefined,
+          product_en: '',
+          spec_kg: item.spec_kg ?? undefined,
           quantity_kg: item.quantity_kg,
           unit_price: item.unit_price,
           total_amount: item.total_amount,
@@ -420,15 +420,16 @@ async function handleSaveLedger() {
           customs_name: item.customs_name,
           customs_ingredients: item.customs_ingredients,
           product_appearance: item.product_appearance,
-          drum_count: rowCalc.drums || undefined,
-          pallet_count: rowCalc.pallets || (rowCalc.drums && rowCalc.drums_per_pallet ? Math.ceil(rowCalc.drums / rowCalc.drums_per_pallet) : undefined),
-          net_weight_kg: rowCalc.net_weight_kg || undefined,
-          gross_weight_kg: rowCalc.gross_weight_kg || undefined,
-          volume_cbm: rowCalc.volume_cbm || undefined,
+          packaging_name: rowCalc.packaging_name || undefined,
+          drum_count: rowCalc.drums ?? undefined,
+          pallet_count: rowCalc.pallets ?? (rowCalc.drums && rowCalc.drums_per_pallet ? Math.ceil(rowCalc.drums / rowCalc.drums_per_pallet) : undefined),
+          net_weight_kg: rowCalc.net_weight_kg ?? undefined,
+          gross_weight_kg: rowCalc.gross_weight_kg ?? undefined,
+          volume_cbm: rowCalc.volume_cbm ?? undefined,
           fits_20gp: rowCalc.fits_20gp || undefined,
           packaging_type_id: undefined,
           pallet_spec: rowCalc.pallet_spec || undefined,
-          drums_per_pallet: rowCalc.drums_per_pallet || undefined,
+          drums_per_pallet: rowCalc.drums_per_pallet ?? undefined,
         }
       })
 

@@ -318,7 +318,16 @@ class LedgerService:
         db = SessionLocal()
         first_record = None
         try:
+            # 预加载包装类型名称→ID映射
+            from app.models.order import PackagingType
+            pkg_map = {pt.name: pt.id for pt in db.query(PackagingType).all()}
+
             for item in req.items:
+                # 通过包装名称查找 packaging_type_id
+                pkg_type_id = item.packaging_type_id
+                if not pkg_type_id and item.packaging_name:
+                    pkg_type_id = pkg_map.get(item.packaging_name)
+
                 record = OrderPiRecord(
                     order_no=req.order_no,
                     customer_code=req.customer_code,
@@ -362,7 +371,7 @@ class LedgerService:
                     components=item.customs_ingredients,
                     product_appearance=item.product_appearance,
                     # 包装（从计算服务填充）
-                    packaging_type_id=item.packaging_type_id,
+                    packaging_type_id=pkg_type_id,
                     pallet_spec=item.pallet_spec,
                     drums_per_pallet=item.drums_per_pallet,
                     drum_count=item.drum_count,
@@ -370,7 +379,7 @@ class LedgerService:
                     net_weight_kg=item.net_weight_kg,
                     gross_weight_kg=item.gross_weight_kg,
                     volume_cbm=item.volume_cbm,
-                    fits_20gp="适合" if item.fits_20gp is True else ("超出" if item.fits_20gp is False else None),
+                    fits_20gp=item.fits_20gp,
                     status="pending",
                 )
                 db.add(record)

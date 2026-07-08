@@ -18,6 +18,7 @@ class LedgerItemSchema(BaseModel):
     customs_ingredients: Optional[str] = None
     product_appearance: Optional[str] = None
     # 包装
+    packaging_name: Optional[str] = None
     packaging_type_id: Optional[int] = None
     pallet_spec: Optional[str] = None
     drums_per_pallet: Optional[int] = None

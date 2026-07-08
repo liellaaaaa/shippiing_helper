@@ -450,9 +450,6 @@ async function handleSaveLedger() {
       return
     }
 
-    // 调试：打印写入数据
-    console.log('[LEDGER SAVE] items:', JSON.stringify(items, null, 2))
-
     const request: LedgerWriteRequest = {
       order_no: preview.order_no,
       customer_code: preview.customer_code,

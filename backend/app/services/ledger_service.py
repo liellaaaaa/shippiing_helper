@@ -328,6 +328,8 @@ class LedgerService:
                 if not pkg_type_id and item.packaging_name:
                     pkg_type_id = pkg_map.get(item.packaging_name)
 
+                print(f"[LEDGER WRITE] code={item.internal_code} pkg_name={item.packaging_name} pkg_id={pkg_type_id} dpp={item.drums_per_pallet} pallet_spec={item.pallet_spec} drum={item.drum_count} pallet={item.pallet_count} nw={item.net_weight_kg} gw={item.gross_weight_kg} vol={item.volume_cbm} 20gp={item.fits_20gp}")
+
                 record = OrderPiRecord(
                     order_no=req.order_no,
                     customer_code=req.customer_code,

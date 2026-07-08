@@ -460,6 +460,17 @@ class LedgerService:
         finally:
             db.close()
 
+    def get_ledger_record_by_order_no(self, order_no: str) -> Optional[LedgerRecordResponse]:
+        """按订单号读取台账记录（取第一条作为代表）"""
+        db = SessionLocal()
+        try:
+            record = db.query(OrderPiRecord).filter_by(order_no=order_no).first()
+            if not record:
+                return None
+            return self.get_ledger_record(record.id)
+        finally:
+            db.close()
+
     def delete_ledger(self, order_no: str) -> int:
         """按订单号删除台账记录（整单删除），返回删除行数"""
         db = SessionLocal()

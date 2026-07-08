@@ -1,24 +1,17 @@
 <template>
   <div class="phase2">
 
-    <!-- ── Toolbar ─────────────────────────────── -->
-    <header class="toolbar">
-      <div class="toolbar-left">
-        <svg class="toolbar-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-          <polyline points="14 2 14 8 20 8"/>
-        </svg>
-        <span class="toolbar-title">文档编辑</span>
-      </div>
-
-      <div class="toolbar-center">
-        <div class="toolbar-field">
-          <label class="toolbar-label">订单</label>
+    <!-- ── Page Header ─────────────────────────────── -->
+    <div class="page-header">
+      <h1 class="page-title">单证生成工作流</h1>
+      <div class="page-header-row">
+        <div class="header-select">
+          <label class="header-select-label">订单</label>
           <el-select
             v-model="selectedOrderId"
             placeholder="选择订单"
             size="small"
-            class="toolbar-select"
+            class="header-select-input"
             @change="onOrderChange"
             clearable
           >
@@ -33,92 +26,57 @@
             />
           </el-select>
         </div>
-
-        <div class="toolbar-field" v-if="selectedOrderId || selectedLedgerId">
-          <label class="toolbar-label">PI合同</label>
-          <el-select
-            v-model="selectedPiNo"
-            placeholder="选择PI"
+        <div class="header-actions">
+          <el-button
+            type="primary"
             size="small"
-            class="toolbar-select"
-            clearable
+            :disabled="!selectedOrderId && !selectedLedgerId"
+            v-track="{ event: 'generate_document', module: 'phase2', detail: { doc_type: 'booking' } }"
+            @click="showBookingDialog = true"
           >
-            <el-option
-              v-for="p in piList"
-              :key="p.pi_no"
-              :label="p.pi_no"
-              :value="p.pi_no"
-            />
-          </el-select>
+            订舱单
+          </el-button>
+          <el-button
+            type="primary"
+            size="small"
+            :disabled="!selectedOrderId && !selectedLedgerId"
+            v-track="{ event: 'generate_document', module: 'phase2', detail: { doc_type: 'loi' } }"
+            @click="openDocument('loi')"
+          >
+            LOI保函
+          </el-button>
+          <el-button
+            size="small"
+            v-track="{ event: 'generate_document', module: 'phase2', detail: { doc_type: 'msds' } }"
+            @click="showMsdsDialog = true"
+          >
+            MSDS
+          </el-button>
+          <el-button
+            size="small"
+            :disabled="!selectedLedgerId"
+            v-track="{ event: 'generate_document', module: 'phase2', detail: { doc_type: 'customs' } }"
+            @click="openCustomsDocument"
+          >
+            报关资料
+          </el-button>
+          <el-dropdown @command="(cmd: 'booking' | 'loi' | 'msds') => openBlankTemplate(cmd)" trigger="click">
+            <el-button size="small">
+              空白模板
+              <el-icon class="el-icon--right"><arrow-down /></el-icon>
+            </el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="booking">订舱单 Booking</el-dropdown-item>
+                <el-dropdown-item command="loi">LOI保函</el-dropdown-item>
+                <el-dropdown-item command="msds">MSDS物质安全表</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+          <el-button size="small" @click="showMyDocuments = true">我的模板</el-button>
         </div>
       </div>
-
-      <div class="toolbar-actions">
-        <el-button
-          type="primary"
-          size="small"
-          :disabled="!selectedOrderId && !selectedLedgerId"
-          v-track="{ event: 'generate_document', module: 'phase2', detail: { doc_type: 'booking' } }"
-          @click="showBookingDialog = true"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px">
-            <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>
-          </svg>
-          订舱单
-        </el-button>
-        <el-button
-          type="primary"
-          size="small"
-          :disabled="(!selectedOrderId && !selectedLedgerId) || !selectedPiNo"
-          v-track="{ event: 'generate_document', module: 'phase2', detail: { doc_type: 'loi' } }"
-          @click="openDocument('loi')"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px">
-            <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M8 13h8M8 17h8M8 9h2"/>
-          </svg>
-          LOI保函
-        </el-button>
-        <el-button size="small" v-track="{ event: 'generate_document', module: 'phase2', detail: { doc_type: 'msds' } }" @click="showMsdsDialog = true">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px">
-            <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M8 13h8M8 17h8M8 9h2"/>
-          </svg>
-          MSDS
-        </el-button>
-        <el-button
-          size="small"
-          :disabled="!selectedLedgerId"
-          v-track="{ event: 'generate_document', module: 'phase2', detail: { doc_type: 'customs' } }"
-          @click="openCustomsDocument"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px">
-            <path d="M9 12h6M9 16h6M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 2h5l2 2h5a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2z"/>
-          </svg>
-          报关资料
-        </el-button>
-        <el-dropdown @command="(cmd: 'booking' | 'loi' | 'msds') => openBlankTemplate(cmd)" trigger="click">
-          <el-button size="small">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px">
-              <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>
-            </svg>
-            空白模板
-            <el-icon class="el-icon--right"><arrow-down /></el-icon>
-          </el-button>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item command="booking">📄 订舱单 Booking</el-dropdown-item>
-              <el-dropdown-item command="loi">📝 LOI保函</el-dropdown-item>
-              <el-dropdown-item command="msds">⚠️ MSDS物质安全表</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
-        <el-button size="small" @click="showMyDocuments = true">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px">
-            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-          </svg>
-          我的模板
-        </el-button>
-      </div>
-    </header>
+    </div>
 
     <!-- ── Main Layout: Left Info + Right Editor ── -->
     <div class="main-layout">
@@ -139,7 +97,7 @@
                 <el-input
                   v-model="currentOrderInfo.shipper"
                   type="textarea"
-                  :rows="3"
+                  :autosize="{ minRows: 2 }"
                   size="small"
                   placeholder="公司名称+地址+TEL/传真"
                 />
@@ -160,12 +118,12 @@
             </div>
             <div class="info-row">
               <span class="info-label">收货人</span>
-              <el-input v-if="selectedOrderId || selectedLedgerId" v-model="currentOrderInfo.consignee" type="textarea" :rows="2" size="small" placeholder="公司名称+地址+TEL/传真" />
+              <el-input v-if="selectedOrderId || selectedLedgerId" v-model="currentOrderInfo.consignee" type="textarea" :autosize="{ minRows: 2 }" size="small" placeholder="公司名称+地址+TEL/传真" />
               <span v-else class="info-value muted">—</span>
             </div>
             <div class="info-row">
               <span class="info-label">通知人</span>
-              <el-input v-if="selectedOrderId || selectedLedgerId" v-model="currentOrderInfo.notify" type="textarea" :rows="2" size="small" placeholder="公司名称+地址+TEL/传真" />
+              <el-input v-if="selectedOrderId || selectedLedgerId" v-model="currentOrderInfo.notify" type="textarea" :autosize="{ minRows: 2 }" size="small" placeholder="公司名称+地址+TEL/传真" />
               <span v-else class="info-value muted">—</span>
             </div>
             <div class="info-row">
@@ -174,13 +132,20 @@
               <span v-else class="info-value muted">—</span>
             </div>
             <div v-if="currentOrderItems.length >= 1" class="product-list-section" style="margin-top: 8px;">
-              <el-table :data="currentOrderItems" size="small" border>
-                <el-table-column prop="customs_name" label="报关名称" min-width="120" show-overflow-tooltip />
-                <el-table-column prop="product_en" label="英文" min-width="120" show-overflow-tooltip />
-                <el-table-column prop="order.hs_code" label="HS Code" min-width="80" />
-                <el-table-column prop="appearance" label="外观" min-width="120" show-overflow-tooltip />
-                <el-table-column prop="customs_ingredients" label="成分" min-width="180" show-overflow-tooltip />
+              <el-table :data="currentOrderItems" size="small" border fit>
+                <el-table-column prop="customs_name" label="报关名称" min-width="80" show-overflow-tooltip />
+                <el-table-column prop="product_en" label="英文" min-width="70" show-overflow-tooltip />
+                <el-table-column prop="order.hs_code" label="HS Code" min-width="60" />
+                <el-table-column prop="appearance" label="外观" min-width="70" show-overflow-tooltip />
+                <el-table-column prop="customs_ingredients" label="成分" min-width="80" show-overflow-tooltip />
               </el-table>
+            </div>
+            <div class="info-row">
+              <span class="info-label">净重</span>
+              <el-input v-if="selectedOrderId || selectedLedgerId" v-model="currentOrderInfo.net_weight_kg" size="small" placeholder="可编辑">
+                <template #append>kg</template>
+              </el-input>
+              <span v-else class="info-value muted">— kg</span>
             </div>
             <div class="info-row">
               <span class="info-label">毛重</span>
@@ -190,40 +155,21 @@
               <span v-else class="info-value muted">— kg</span>
             </div>
             <div class="info-row">
-              <span class="info-label">体积(CBM)</span>
+              <span class="info-label">体积</span>
               <el-input v-if="selectedOrderId || selectedLedgerId" v-model="currentOrderInfo.volume_cbm" size="small" placeholder="可编辑">
                 <template #append>m³</template>
               </el-input>
               <span v-else class="info-value muted">— m³</span>
             </div>
-
             <div class="info-row">
               <span class="info-label">桶数/托盘数</span>
               <el-input v-if="selectedOrderId || selectedLedgerId" v-model="currentOrderInfo.drum_count" size="small" placeholder="可编辑" />
               <span v-else class="info-value muted">—</span>
             </div>
-            <div class="info-row">
-              <span class="info-label">20GP判断</span>
-              <span v-if="(selectedOrderId || selectedLedgerId) && currentOrderInfo.fits_20gp" class="info-value" :class="currentOrderInfo.fits_20gp === '适合' ? 'text-success' : 'text-danger'">{{ currentOrderInfo.fits_20gp }}</span>
-              <span v-else class="info-value muted">—</span>
-            </div>
 
           </div>
         </el-card>
 
-        <!-- Field Reference Card: 运输鉴定报告 -->
-        <el-card class="info-card ref-card" shadow="never" style="margin-top: 12px; flex: 1; display: flex; flex-direction: column; overflow: hidden;">
-          <template #header>
-            <div class="card-header">
-              <span class="card-title">字段参考</span>
-            </div>
-          </template>
-          <div style="flex: 1; overflow: hidden; display: flex; flex-direction: column;">
-            <FieldReferenceCard
-              style="flex: 1; overflow: hidden;"
-            />
-          </div>
-        </el-card>
       </aside>
 
       <!-- 分隔条 -->
@@ -281,7 +227,6 @@ import DocumentEditor from './components/DocumentEditor.vue'
 import BookingConfirmDialog from './components/BookingConfirmDialog.vue'
 import MSDSGeneratorDialog from './components/MSDSGeneratorDialog.vue'
 import MyDocumentsDrawer from './components/MyDocumentsDrawer.vue'
-import FieldReferenceCard from './components/FieldReferenceCard.vue'
 import { ArrowDown } from '@element-plus/icons-vue'
 import { phase2Api } from '@/api/phase2'
 import { getOrderList, getOrderComparison, getOrderPiContracts, type OrderListItem } from '@/api/merge'
@@ -362,11 +307,11 @@ const currentOrderInfo = ref({
   product_cn: '',
   product_en: '',
   hs_code: '',
+  net_weight_kg: '',
   gross_weight_kg: '',
   volume_cbm: '',
   drum_count: '',
   pallet_count: '',
-  fits_20gp: '',
 })
 
 if (route.query.orderId) {
@@ -390,9 +335,101 @@ async function onOrderChange(orderId: number): Promise<void> {
   shipperEditing.value = false
   shipperSelectValue.value = ''
   if (!orderId) return
+
+  // 先找到订单号
+  const orderItem = orderList.value.find(o => o.order_id === orderId)
+  const orderNo = orderItem?.order_no || ''
+
+  // 优先从台账加载（数据更完整）
+  if (orderNo) {
+    const ledgerRecord = await ordersApi.getLedgerRecordByOrderNo(orderNo)
+    if (ledgerRecord) {
+      // 用 loadLedgerRecord 相同的逻辑填充数据
+      const items = ledgerRecord.items || []
+
+      const totalNw = items.reduce((sum: number, it: any) => sum + (it.net_weight_kg || 0), 0)
+      const totalGw = items.reduce((sum: number, it: any) => sum + (it.gross_weight_kg || 0), 0)
+      const totalVol = items.reduce((sum: number, it: any) => sum + (it.volume_cbm || 0), 0)
+      const totalDrums = items.reduce((sum: number, it: any) => sum + (it.drum_count || 0), 0)
+      const totalPallets = items.reduce((sum: number, it: any) => sum + (it.pallet_count || 0), 0)
+
+      const customsNameAll = items.map((it: any) => it.customs_name).filter(Boolean).join(' / ')
+      const hsCodeAll = items.map((it: any) => it.hs_code).filter(Boolean).join(' / ')
+
+      const mappedItems = items.map((it: any) => ({
+        internal_code: it.internal_code,
+        customs_name: it.customs_name,
+        product_en: it.product_en || '',
+        customs_ingredients: it.customs_ingredients || '',
+        appearance: it.product_appearance || '',
+        order: {
+          hs_code: it.hs_code,
+          quantity: it.quantity_kg,
+          gross_weight: it.gross_weight_kg,
+          volume: it.volume_cbm,
+        },
+      }))
+      currentOrderItems.value = mappedItems
+
+      for (const item of currentOrderItems.value) {
+        const cn = item.customs_name || ''
+        if (cn && !item.product_en) {
+          try {
+            const res = await nameMappingApi.lookupByCn(cn)
+            if (res.data.en) item.product_en = res.data.en
+          } catch { /* ignore */ }
+        }
+      }
+
+      let productEn = ''
+      const firstCustomsName = items[0]?.customs_name || ''
+      if (firstCustomsName) {
+        try {
+          const res = await nameMappingApi.lookupByCn(firstCustomsName)
+          productEn = res.data.en || ''
+        } catch { /* ignore */ }
+      }
+      const productEnAll = items.map((it: any) => it.product_en).filter(Boolean).join(' / ')
+
+      const consigneeFull = [ledgerRecord.consignee_name, ledgerRecord.consignee_address].filter(Boolean).join('\n')
+
+      currentOrderInfo.value = {
+        order_no: ledgerRecord.order_no || '',
+        customer_code: ledgerRecord.customer_code || '',
+        shipper: getShipperFromTitle(ledgerRecord.shipment_title),
+        consignee: consigneeFull,
+        consignee_name: ledgerRecord.consignee_name || '',
+        consignee_address: ledgerRecord.consignee_address || '',
+        consignee_tel: ledgerRecord.consignee_tel || '',
+        shipment_title: ledgerRecord.shipment_title || '',
+        notify: 'SAME AS CONSIGNEE',
+        port: ledgerRecord.destination || '',
+        product_cn: customsNameAll,
+        product_en: productEnAll || productEn,
+        hs_code: hsCodeAll,
+        net_weight_kg: totalNw ? String(Math.round(totalNw * 10) / 10) : '',
+        gross_weight_kg: totalGw ? String(Math.round(totalGw * 10) / 10) : '',
+        volume_cbm: totalVol ? String(Math.round(totalVol * 1000) / 1000) : '',
+        drum_count: totalDrums ? String(totalDrums) : '',
+        pallet_count: totalPallets ? String(totalPallets) : (items[0]?.pallet_count != null ? String(items[0].pallet_count) : ''),
+      }
+      selectedPiNo.value = ledgerRecord.pi_no || ledgerRecord.order_no || ''
+      selectedLedgerId.value = ledgerRecord.id
+
+      const shipperVal = getShipperFromTitle(ledgerRecord.shipment_title)
+      currentOrderInfo.value.shipper = shipperVal
+      shipperSelectValue.value = shipperVal === SHIPPER_OPTIONS[0] ? 'HONGHAO' : (shipperVal ? '__other__' : '')
+
+      if (ledgerRecord.pi_no) {
+        piList.value = [{ pi_no: ledgerRecord.pi_no, consignee_name: ledgerRecord.consignee_name || '', consignee_address: ledgerRecord.consignee_address || '', destination: ledgerRecord.destination || '' }]
+      }
+      return
+    }
+  }
+
+  // 台账无记录，走原来的 comparison 逻辑
   try {
     const data = await getOrderComparison(orderId)
-    // Enrich items with English name, composition and appearance
     const enrichedItems = (data.items || []).map((it: any) => ({
       ...it,
       product_en: it.order?.product_en || '',
@@ -400,8 +437,7 @@ async function onOrderChange(orderId: number): Promise<void> {
       appearance: it.order?.appearance || '',
     }))
     currentOrderItems.value = enrichedItems
-    
-    // Look up English names for each item
+
     for (const item of currentOrderItems.value) {
       const cn = item.customs_name || item.order?.customs_name || ''
       if (cn && !item.product_en) {
@@ -417,9 +453,7 @@ async function onOrderChange(orderId: number): Promise<void> {
     if (pis.length > 0 && !selectedPiNo.value) {
       selectedPiNo.value = pis[0].pi_no
     }
-    // Populate editable fields — 汇总所有产品的报关名称/英文名/HS Code
     const items = data.items || []
-    // 英文名取第一个报关名称的（有值的情况下）
     const firstCustomsName = items[0]?.order?.customs_name || items[0]?.pi?.customs_name || ''
     let productEn = ''
     if (firstCustomsName) {
@@ -430,11 +464,9 @@ async function onOrderChange(orderId: number): Promise<void> {
         productEn = ''
       }
     }
-    // 多产品时用 / 连接（使用报关名称）
     const customsNameAll = items.map(it => it.order?.customs_name || it.pi?.customs_name).filter(Boolean).join(' / ')
     const hsCodeAll = items.map(it => it.order?.hs_code).filter(Boolean).join(' / ')
     const productEnAll = items.map(it => (it as any).product_en).filter(Boolean).join(' / ')
-    // 收货人 = 名称 + 地址（用换行连接）
     const piConsigneeName = (pis[0] as any)?.consignee_name || ''
     const piConsigneeAddr = (pis[0] as any)?.consignee_address || ''
     const consigneeFull = [piConsigneeName, piConsigneeAddr].filter(Boolean).join('\n')
@@ -452,11 +484,11 @@ async function onOrderChange(orderId: number): Promise<void> {
       product_cn: customsNameAll,
       product_en: productEnAll || productEn,
       hs_code: hsCodeAll,
+      net_weight_kg: data.net_weight_kg ? String(data.net_weight_kg) : '',
       gross_weight_kg: data.gross_weight_kg ? String(data.gross_weight_kg) : '',
       volume_cbm: data.volume_cbm ? String(data.volume_cbm) : '',
       drum_count: data.drum_count ? String(data.drum_count) : '',
       pallet_count: data.pallet_count ? String(data.pallet_count) : '',
-      fits_20gp: data.fits_20gp || '',
     }
   } catch (e) {
     piList.value = []
@@ -566,6 +598,7 @@ async function loadLedgerRecord(ledgerId: number) {
     const items = record.items || []
 
     // 汇总多产品的包装数据
+    const totalNw = items.reduce((sum: number, it: any) => sum + (it.net_weight_kg || 0), 0)
     const totalGw = items.reduce((sum: number, it: any) => sum + (it.gross_weight_kg || 0), 0)
     const totalVol = items.reduce((sum: number, it: any) => sum + (it.volume_cbm || 0), 0)
     const totalDrums = items.reduce((sum: number, it: any) => sum + (it.drum_count || 0), 0)
@@ -630,11 +663,11 @@ async function loadLedgerRecord(ledgerId: number) {
       product_cn: customsNameAll,
       product_en: productEnAll || productEn,
       hs_code: hsCodeAll,
+      net_weight_kg: totalNw ? String(Math.round(totalNw * 10) / 10) : '',
       gross_weight_kg: totalGw ? String(Math.round(totalGw * 10) / 10) : '',
       volume_cbm: totalVol ? String(Math.round(totalVol * 1000) / 1000) : '',
       drum_count: totalDrums ? String(totalDrums) : '',
       pallet_count: totalPallets ? String(totalPallets) : (items[0]?.pallet_count != null ? String(items[0].pallet_count) : ''),
-      fits_20gp: items[0]?.fits_20gp ?? '',
     }
     selectedPiNo.value = record.pi_no || record.order_no || ''
     // 设置 selectedOrderId 使顶部按钮可操作
@@ -659,56 +692,51 @@ async function loadLedgerRecord(ledgerId: number) {
   padding: 24px;
   max-width: 1400px;
   margin: 0 auto;
-  min-height: 100vh;
-  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
 }
 
-/* ── Toolbar ─────────────────────────────────── */
-.toolbar {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  height: 56px;
-  padding: 0 20px;
-  border-bottom: 1px solid var(--el-border-color-light, #e4e7ed);
-  flex-shrink: 0;
-}
-.toolbar-left {
+/* ── Page Header (matches Phase 1) ──────────────── */
+.page-header { margin-bottom: 20px; }
+.page-title { font-size: 28px; font-weight: 600; margin: 0 0 8px 0; }
+.page-header-row { display: flex; align-items: center; justify-content: space-between; }
+.header-select {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: var(--el-text-color-primary, #303133);
-  min-width: 100px;
 }
-.toolbar-icon { color: var(--el-color-primary, #409eff); flex-shrink: 0; }
-.toolbar-title { font-size: 14px; font-weight: 600; letter-spacing: 0.02em; }
-.toolbar-center {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex: 1;
-}
-.toolbar-field {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.toolbar-label {
-  font-size: 12px;
+.header-select-label {
+  font-size: 14px;
   color: var(--el-text-color-secondary, #909399);
   white-space: nowrap;
 }
-.toolbar-select { width: 200px; }
-.toolbar-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
+.header-select-input { width: 240px; }
+.header-actions { display: flex; gap: 8px; }
 
 /* ── Main Layout ─────────────────────────── */
-.main-layout { display: flex; gap: 0; align-items: stretch; overflow: hidden; }
-.info-panel { width: 200px; flex-shrink: 0; display: flex; flex-direction: column; min-width: 0; }
+.main-layout {
+  display: flex;
+  gap: 0;
+  align-items: stretch;
+  height: calc(100vh - 180px);
+  overflow: hidden;
+}
+.info-panel {
+  width: 200px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  height: 100%;
+}
+.info-panel > .info-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.info-panel > .info-card > :deep(.el-card__body) {
+  flex: 1;
+  overflow-y: auto;
+}
 .editor-panel { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
 
 .resizer {
@@ -730,13 +758,6 @@ async function loadLedgerRecord(ledgerId: number) {
 }
 :deep(.el-card__body) {
   padding: 12px 14px;
-}
-.ref-card :deep(.el-card__body) {
-  padding: 0;
-  flex: 1;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
 }
 .card-header {
   font-weight: 600;
@@ -809,7 +830,7 @@ async function loadLedgerRecord(ledgerId: number) {
 .editor-card {
   border-radius: 12px;
   overflow: hidden;
-  height: calc(100vh - 140px);
+  height: 100%;
   display: flex;
   flex-direction: column;
 }
@@ -824,7 +845,7 @@ async function loadLedgerRecord(ledgerId: number) {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: calc(100vh - 180px);
+  height: 100%;
   gap: 12px;
   color: #bfbfbf;
 }
@@ -919,8 +940,6 @@ async function loadLedgerRecord(ledgerId: number) {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-}
-.shipper-edit-row .el-textarea {
   flex: 1;
 }
 </style>

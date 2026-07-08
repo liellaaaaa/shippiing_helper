@@ -317,6 +317,23 @@ async def get_ledger_record(
 
 
 @router.get(
+    "/ledger/by-order/{order_no}",
+    response_model=LedgerRecordResponse,
+    summary="按订单号读取台账记录",
+    description="按订单号读取台账记录（取第一条作为代表）",
+)
+async def get_ledger_record_by_order_no(
+    order_no: str,
+    service: LedgerService = Depends(get_ledger_service),
+):
+    """按订单号读取台账记录"""
+    record = service.get_ledger_record_by_order_no(order_no)
+    if not record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="台账记录不存在")
+    return record
+
+
+@router.get(
     "/ledger",
     response_model=LedgerListResponse,
     summary="台账列表",

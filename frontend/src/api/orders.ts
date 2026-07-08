@@ -266,6 +266,16 @@ export const ordersApi = {
     return resp.data
   },
 
+  /** 按订单号读取台账记录 */
+  getLedgerRecordByOrderNo: async (orderNo: string): Promise<LedgerRecord | null> => {
+    try {
+      const resp = await apiClient.get(`/orders/ledger/by-order/${encodeURIComponent(orderNo)}`)
+      return resp.data
+    } catch {
+      return null
+    }
+  },
+
   /** 删除台账记录（按订单号） */
   deleteLedger: async (orderNo: string): Promise<{ deleted: number; message: string }> => {
     const resp = await apiClient.delete(`/orders/ledger/${encodeURIComponent(orderNo)}`)

@@ -251,6 +251,7 @@ import {
   type LedgerWriteRequest,
 } from '@/api/orders'
 import { uploadPiFile, type PiUploadResponse } from '@/api/pi'
+import { nameMappingApi } from '@/api/name_mapping'
 
 // ── State ────────────────────────────────────────────────────────────────────
 
@@ -410,6 +411,7 @@ async function handleSaveLedger() {
         return {
           internal_code: item.internal_code,
           product_cn: item.product_cn,
+          product_en: '',  // 稍后查询
           spec_kg: item.spec_kg || undefined,
           quantity_kg: item.quantity_kg,
           unit_price: item.unit_price,
@@ -429,6 +431,17 @@ async function handleSaveLedger() {
           drums_per_pallet: rowCalc.drums_per_pallet || undefined,
         }
       })
+
+    // 查询英文名
+    for (const item of items) {
+      const cn = item.customs_name || item.product_cn || ''
+      if (cn) {
+        try {
+          const res = await nameMappingApi.lookupByCn(cn)
+          if (res.data.en) item.product_en = res.data.en
+        } catch { /* ignore */ }
+      }
+    }
 
     // 检查是否有产品被写入
     if (items.length === 0) {

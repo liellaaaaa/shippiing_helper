@@ -527,7 +527,7 @@ function getRows() {
     drums: r.drums,
     pallets: r.pallets,
     drums_per_pallet: r.drums_per_pallet,
-    net_weight_kg: 0,
+    net_weight_kg: r.quantity_kg,
     gross_weight_kg: r.total_weight_kg,
     volume_cbm: r.total_cbm,
     fits_20gp: r.fits_20gp ? '适合' : '超出',

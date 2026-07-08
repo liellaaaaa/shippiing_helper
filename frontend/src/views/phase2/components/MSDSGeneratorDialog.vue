@@ -23,6 +23,12 @@
         {{ showEditList ? '收起' : '导入' }} {{ newFormulas.length }} 个新配方
       </el-button>
       <el-button type="primary" @click="showAddDialog">新增配方</el-button>
+      <el-button
+        :type="batchMode ? 'success' : 'default'"
+        @click="toggleBatchMode"
+      >
+        {{ batchMode ? '退出批量' : '批量选择' }}
+      </el-button>
     </div>
 
     <!-- 新配方可编辑列表 -->
@@ -70,13 +76,16 @@
 
     <!-- 台账表格 -->
     <el-table
+      ref="tableRef"
       :data="ledgerList"
-      highlight-current-row
+      :highlight-current-row="!batchMode"
       size="small"
       style="width: 100%; margin-bottom: 16px"
       @current-change="onRowClick"
+      @selection-change="onSelectionChange"
     >
-      <el-table-column width="50">
+      <el-table-column v-if="batchMode" type="selection" width="50" />
+      <el-table-column v-else width="50">
         <template #default="{ row }">
           <el-checkbox :model-value="selectedItem?.id === row.id" @change="onRowClick(row)" />
         </template>
@@ -92,12 +101,19 @@
       <el-table-column prop="ph" label="pH值" width="80" />
     </el-table>
 
-    <!-- 选中产品操作按钮 -->
-    <div v-if="selectedItem" class="detail-actions">
+    <!-- 单选操作按钮 -->
+    <div v-if="!batchMode && selectedItem" class="detail-actions">
       <el-button size="small" @click="showEditDialog">编辑</el-button>
       <el-button size="small" type="danger" @click="onDelete">删除</el-button>
       <el-button size="small" type="primary" @click="showGenerateDialog('cn')">生成中文MSDS</el-button>
       <el-button size="small" type="primary" @click="showGenerateDialog('en')">生成英文MSDS</el-button>
+    </div>
+
+    <!-- 批量操作按钮 -->
+    <div v-if="batchMode && selectedItems.length > 0" class="detail-actions">
+      <el-button type="primary" @click="showBatchGenerateDialog">
+        批量生成MSDS ({{ selectedItems.length }}个产品)
+      </el-button>
     </div>
 
     <!-- 新增/编辑配方对话框 -->
@@ -180,6 +196,13 @@
         <el-button type="primary" :loading="generating" @click="onConfirmGenerate">确认生成</el-button>
       </template>
     </el-dialog>
+
+    <!-- 批量生成对话框 -->
+    <BatchGenerateDialog
+      v-model="showBatchGenerate"
+      :selected-items="selectedItems"
+      @generated="onBatchGenerated"
+    />
   </el-dialog>
 </template>
 
@@ -188,6 +211,7 @@ import { ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import { msdsLedgerApi, type MsdsLedgerItem, type CompositionItem } from '@/api/msds-ledger'
+import BatchGenerateDialog from './BatchGenerateDialog.vue'
 
 const props = defineProps<{ modelValue: boolean; orderItems?: any[] }>()
 const emit = defineEmits<{
@@ -205,6 +229,11 @@ const searchKeyword = ref('')
 const ledgerList = ref<MsdsLedgerItem[]>([])
 const selectedItem = ref<MsdsLedgerItem | null>(null)
 const showEditList = ref(false)
+
+// 批量选择相关
+const batchMode = ref(false)
+const selectedItems = ref<MsdsLedgerItem[]>([])
+const showBatchGenerate = ref(false)
 
 // 表单相关
 const showForm = ref(false)
@@ -616,12 +645,43 @@ function parseIngredients(ingredients: string): any[] {
   return result
 }
 
+// 批量选择相关函数
+function toggleBatchMode() {
+  batchMode.value = !batchMode.value
+  if (!batchMode.value) {
+    selectedItems.value = []
+  }
+  selectedItem.value = null
+}
+
+function onSelectionChange(selection: MsdsLedgerItem[]) {
+  selectedItems.value = selection
+}
+
+function showBatchGenerateDialog() {
+  if (selectedItems.value.length === 0) {
+    ElMessage.warning('请至少选择一个产品')
+    return
+  }
+  showBatchGenerate.value = true
+}
+
+function onBatchGenerated() {
+  showBatchGenerate.value = false
+  batchMode.value = false
+  selectedItems.value = []
+  loadLedger()
+}
+
 function onClosed() {
   searchKeyword.value = ''
   ledgerList.value = []
   selectedItem.value = null
   orderItemsNames.value = []
   showEditList.value = false
+  batchMode.value = false
+  selectedItems.value = []
+  showBatchGenerate.value = false
 }
 </script>
 

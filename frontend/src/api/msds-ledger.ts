@@ -28,6 +28,11 @@ export interface GenerateMsdsRequest {
   revision_date: string
 }
 
+export interface BatchGenerateMsdsRequest {
+  ledger_ids: number[]
+  overrides?: Record<string, { msds_number?: string; revision_date?: string }>
+}
+
 export const msdsLedgerApi = {
   list(params?: { keyword?: string; internal_code?: string }) {
     return apiClient.get<{ items: MsdsLedgerItem[] }>('/msds-ledger', { params })
@@ -51,5 +56,9 @@ export const msdsLedgerApi = {
 
   generate(request: GenerateMsdsRequest) {
     return apiClient.post('/msds-ledger/generate', request)
+  },
+
+  batchGenerate(request: BatchGenerateMsdsRequest) {
+    return apiClient.post('/msds-ledger/batch-generate', request, { responseType: 'blob' })
   },
 }

@@ -1,5 +1,11 @@
 """MSDS ledger API endpoints."""
+import re
+import random
+import zipfile
+from io import BytesIO
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Query, Body
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
 from app.database import SessionLocal
@@ -7,6 +13,8 @@ from app.services.msds_ledger_service import msds_ledger_svc
 
 
 router = APIRouter(prefix="/api/v1/msds-ledger", tags=["msds-ledger"])
+
+BATCH_LIMIT = 50
 
 
 class LedgerCreate(BaseModel):
@@ -38,6 +46,11 @@ class GenerateRequest(BaseModel):
     language: str = "cn"
     msds_number: str = ""
     revision_date: str = ""
+
+
+class BatchGenerateRequest(BaseModel):
+    ledger_ids: list[int]
+    overrides: dict = {}  # {ledger_id: {msds_number, revision_date}}
 
 
 @router.get("")
@@ -169,6 +182,124 @@ async def generate_msds(request: GenerateRequest):
         db.close()
 
 
+@router.post("/batch-generate")
+async def batch_generate(request: BatchGenerateRequest):
+    """Batch generate MSDS for multiple products. Returns ZIP file."""
+    from app.services.msds_generator_service import MSDSGeneratorService
+
+    if len(request.ledger_ids) == 0:
+        return {"error": "请至少选择一个产品"}
+    if len(request.ledger_ids) > BATCH_LIMIT:
+        return {"error": f"单次最多生成{BATCH_LIMIT}个产品"}
+
+    db = SessionLocal()
+    try:
+        gen_svc = MSDSGeneratorService()
+        generated_files = []  # [(content_bytes, filename), ...]
+        errors = []  # [(ledger_id, product_name, error_msg), ...]
+        used_numbers = set()  # Track numbers used in this batch
+
+        for ledger_id in request.ledger_ids:
+            try:
+                item = msds_ledger_svc.get_ledger(db, ledger_id)
+                if not item:
+                    errors.append((ledger_id, str(ledger_id), "Ledger not found"))
+                    continue
+
+                ledger_data = {
+                    "customs_name": item.customs_name or "",
+                    "appearance": item.appearance or "",
+                    "ion_type": item.ion_type or "",
+                    "ph": item.ph or "",
+                    "composition": item.composition or [],
+                    "product_name_en": item.product_name_en or "",
+                    "appearance_en": item.appearance_en or "",
+                    "ion_type_en": item.ion_type_en or "",
+                }
+
+                # Resolve MSDS number
+                override = request.overrides.get(str(ledger_id), {})
+                if override.get("msds_number"):
+                    msds_number = override["msds_number"]
+                    revision_date = override.get("revision_date", "")
+                else:
+                    msds_number, revision_date = _auto_generate_msds_number()
+
+                # Check collision in DB and within this batch
+                msds_number = _check_number_collision(db, msds_number)
+                while msds_number in used_numbers:
+                    suffix = msds_number.split("-")[-1]
+                    if suffix.isdigit():
+                        msds_number = f"HHJS-{msds_number[5:-len(suffix)]}{int(suffix)+1}"
+                    else:
+                        msds_number = f"{msds_number}-2"
+                    msds_number = _check_number_collision(db, msds_number)
+                used_numbers.add(msds_number)
+
+                # Generate CN MSDS
+                cn_bytes, cn_key = gen_svc.generate_msds_from_template(
+                    ledger_data=ledger_data,
+                    language="cn",
+                    msds_number=msds_number,
+                    revision_date=revision_date,
+                )
+                cn_filename = _make_filename(
+                    ledger_data["customs_name"],
+                    ledger_data["appearance"],
+                    "cn"
+                )
+                generated_files.append((cn_bytes, cn_filename))
+
+                # Generate EN MSDS
+                en_bytes, en_key = gen_svc.generate_msds_from_template(
+                    ledger_data=ledger_data,
+                    language="en",
+                    msds_number=msds_number,
+                    revision_date=revision_date,
+                )
+                en_filename = _make_filename(
+                    ledger_data["customs_name"],
+                    ledger_data["appearance"],
+                    "en"
+                )
+                generated_files.append((en_bytes, en_filename))
+
+            except Exception as e:
+                product_name = ""
+                try:
+                    item = msds_ledger_svc.get_ledger(db, ledger_id)
+                    product_name = item.customs_name if item else str(ledger_id)
+                except:
+                    product_name = str(ledger_id)
+                errors.append((ledger_id, product_name, str(e)))
+
+        # Package ZIP
+        zip_buf = BytesIO()
+        with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for content, filename in generated_files:
+                zf.writestr(filename, content)
+
+            # Add errors.txt if there are errors
+            if errors:
+                error_lines = [f"Ledger ID: {lid}, Product: {name}, Error: {err}" for lid, name, err in errors]
+                zf.writestr("errors.txt", "\n".join(error_lines))
+
+        zip_buf.seek(0)
+
+        # Generate ZIP filename (ASCII only — latin-1 can't encode Chinese)
+        today = datetime.now().strftime("%Y%m%d")
+        product_count = len(generated_files) // 2
+        zip_filename = f"MSDS_{today}_{product_count}products.zip"
+
+        return StreamingResponse(
+            zip_buf,
+            media_type="application/zip",
+            headers={"Content-Disposition": f"attachment; filename={zip_filename}"}
+        )
+    finally:
+        db.close()
+
+
 def _to_dict(item):
     return {
         "id": item.id,
@@ -183,3 +314,44 @@ def _to_dict(item):
         "ion_type_en": item.ion_type_en or "",
         "version": item.version or 1,
     }
+
+
+def _auto_generate_msds_number() -> tuple[str, str]:
+    """Generate MSDS number with random month offset 3-5 months back.
+    Returns (msds_number, revision_date)."""
+    now = datetime.now()
+    year = now.strftime("%y")
+    month_offset = random.randint(3, 5)
+    past = now - timedelta(days=month_offset * 30)
+    mm = past.strftime("%m")
+    day = random.randint(1, 28)
+    msds_number = f"HHJS-{year}{mm}"
+    revision_date = f"{past.year}/{mm}/{day:02d}"
+    return msds_number, revision_date
+
+
+def _check_number_collision(db, msds_number: str) -> str:
+    """Check if MSDS number already exists in DB, append suffix if collision."""
+    from app.models.shipment_doc import ShipmentDoc
+    existing = db.query(ShipmentDoc).filter(
+        ShipmentDoc.file_name.like(f"%{msds_number}%")
+    ).count()
+    if existing == 0:
+        return msds_number
+    suffix = 2
+    while True:
+        candidate = f"{msds_number}-{suffix}"
+        exists = db.query(ShipmentDoc).filter(
+            ShipmentDoc.file_name.like(f"%{candidate}%")
+        ).count()
+        if exists == 0:
+            return candidate
+        suffix += 1
+
+
+def _make_filename(customs_name: str, appearance: str, lang: str) -> str:
+    """Generate filename: {产品名}-{外观性状}-{中/英文}MSDS.docx"""
+    safe_name = re.sub(r'[\\/:*?"<>|]', '', customs_name)[:30]
+    safe_appearance = re.sub(r'[\\/:*?"<>|]', '', appearance)[:20] if appearance else "无资料"
+    lang_label = "中文" if lang == "cn" else "英文"
+    return f"{safe_name}-{safe_appearance}-{lang_label}MSDS.docx"

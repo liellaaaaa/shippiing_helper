@@ -592,6 +592,15 @@ class LedgerService:
                         customs_name=ri.customs_name,
                         customs_ingredients=ri.components,
                         product_appearance=ri.product_appearance,
+                        packaging_type_id=ri.packaging_type_id,
+                        pallet_spec=ri.pallet_spec,
+                        drums_per_pallet=ri.drums_per_pallet,
+                        drum_count=ri.drum_count,
+                        pallet_count=ri.pallet_count,
+                        net_weight_kg=ri.net_weight_kg,
+                        gross_weight_kg=ri.gross_weight_kg,
+                        volume_cbm=ri.volume_cbm,
+                        fits_20gp=ri.fits_20gp,
                     )
                     for ri in records
                 ]

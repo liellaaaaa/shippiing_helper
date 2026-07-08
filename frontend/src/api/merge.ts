@@ -48,6 +48,7 @@ export interface OrderComparisonResponse {
   order_no: string
   customer_code?: string
   pi_no?: string
+  net_weight_kg?: number
   drum_count?: number
   pallet_count?: number
   gross_weight_kg?: number

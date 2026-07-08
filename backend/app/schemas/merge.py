@@ -82,6 +82,7 @@ class OrderComparisonResponse(BaseModel):
     customer_code: Optional[str] = None
     pi_no: Optional[str] = None  # 该订单关联的 PI 号
     # 包装计算数据
+    net_weight_kg: Optional[float] = None
     drum_count: Optional[int] = None
     pallet_count: Optional[int] = None
     gross_weight_kg: Optional[float] = None

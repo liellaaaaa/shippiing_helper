@@ -173,6 +173,7 @@ class MergeService:
 
             # 汇总所有产品的重量、体积、桶数、托盘数
             total_gross_weight = round(sum(r.gross_weight_kg or 0 for r in all_records), 1)
+            total_net_weight = round(sum(r.net_weight_kg or 0 for r in all_records), 1)
             total_volume = round(sum(r.volume_cbm or 0 for r in all_records), 3)
             total_drum_count = sum(r.drum_count or 0 for r in all_records)
             total_pallet_count = sum(r.pallet_count or 0 for r in all_records)
@@ -182,6 +183,7 @@ class MergeService:
                 order_no=first.order_no,
                 customer_code=first.customer_code,
                 pi_no=first.pi_no,
+                net_weight_kg=total_net_weight,
                 drum_count=total_drum_count,
                 pallet_count=total_pallet_count,
                 gross_weight_kg=total_gross_weight,
@@ -243,6 +245,7 @@ class MergeService:
             order_no=order.order_no,
             customer_code=order.customer_code,
             pi_no=order.pi_no,
+            net_weight_kg=sum(item.net_weight_kg or 0 for item in order_items),
             drum_count=order_items[0].drum_count if order_items else None,
             pallet_count=order_items[0].pallet_count if order_items else None,
             gross_weight_kg=order.total_gross_weight_kg,

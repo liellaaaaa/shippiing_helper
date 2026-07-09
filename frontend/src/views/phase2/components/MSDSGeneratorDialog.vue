@@ -138,25 +138,11 @@
         <el-form-item label="pH值">
           <el-input v-model="formData.ph" placeholder="如 5.0-7.0" />
         </el-form-item>
-        <el-form-item label="产品英文名">
-          <el-input v-model="formData.product_name_en" />
-        </el-form-item>
-        <el-form-item label="外观(英文)">
-          <el-input v-model="formData.appearance_en" />
-        </el-form-item>
-        <el-form-item label="离子性(英文)">
-          <el-select v-model="formData.ion_type_en" placeholder="Please select">
-            <el-option label="Cationic" value="Cationic" />
-            <el-option label="Anionic" value="Anionic" />
-            <el-option label="Non-ionic" value="Non-ionic" />
-          </el-select>
-        </el-form-item>
         <el-form-item label="成分">
           <div v-for="(item, idx) in formData.composition" :key="idx" class="composition-row">
-            <el-input v-model="item.component_cn" placeholder="成分名" style="width: 120px" />
-            <el-input v-model="item.component_en" placeholder="English" style="width: 120px" />
-            <el-input v-model="item.cas" placeholder="CAS" style="width: 110px" />
-            <el-input v-model="item.percentage" placeholder="%" style="width: 60px" />
+            <el-input v-model="item.component_cn" placeholder="成分名" style="width: 150px" />
+            <el-input v-model="item.cas" placeholder="CAS" style="width: 130px" />
+            <el-input v-model="item.percentage" placeholder="%" style="width: 70px" />
             <el-button type="danger" link @click="removeComposition(idx)">删除</el-button>
           </div>
           <el-button size="small" @click="addComposition">+ 添加成分</el-button>
@@ -402,9 +388,6 @@ function showAddDialog() {
     appearance: '',
     ion_type: '',
     ph: '',
-    product_name_en: '',
-    appearance_en: '',
-    ion_type_en: '',
     composition: [],
   }
   showForm.value = true
@@ -419,16 +402,13 @@ function showEditDialog() {
     appearance: selectedItem.value.appearance,
     ion_type: selectedItem.value.ion_type,
     ph: selectedItem.value.ph,
-    product_name_en: selectedItem.value.product_name_en,
-    appearance_en: selectedItem.value.appearance_en,
-    ion_type_en: selectedItem.value.ion_type_en,
     composition: selectedItem.value.composition ? [...selectedItem.value.composition] : [],
   }
   showForm.value = true
 }
 
 function addComposition() {
-  formData.value.composition.push({ component_cn: '', component_en: '', cas: '', percentage: '' })
+  formData.value.composition.push({ component_cn: '', cas: '', percentage: '' })
 }
 
 function removeComposition(idx: number) {

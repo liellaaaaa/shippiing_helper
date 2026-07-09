@@ -1,4 +1,5 @@
 """MSDS ledger API endpoints."""
+import os
 import re
 import random
 import zipfile
@@ -51,6 +52,7 @@ class GenerateRequest(BaseModel):
 class BatchGenerateRequest(BaseModel):
     ledger_ids: list[int]
     overrides: dict = {}  # {ledger_id: {msds_number, revision_date}}
+    output_format: str = "docx"  # "docx" or "pdf"
 
 
 @router.get("")
@@ -198,6 +200,7 @@ async def batch_generate(request: BatchGenerateRequest):
         generated_files = []  # [(content_bytes, filename), ...]
         errors = []  # [(ledger_id, product_name, error_msg), ...]
         used_numbers = set()  # Track numbers used in this batch
+        used_filenames = set()  # Track filenames to detect duplicates
 
         for ledger_id in request.ledger_ids:
             try:
@@ -248,6 +251,11 @@ async def batch_generate(request: BatchGenerateRequest):
                     ledger_data["appearance"],
                     "cn"
                 )
+                # Handle PDF conversion if requested
+                if request.output_format == "pdf":
+                    cn_bytes, ext = MSDSGeneratorService.convert_docx_to_pdf(cn_bytes)
+                    cn_filename = os.path.splitext(cn_filename)[0] + ext
+                cn_filename = _unique_filename(cn_filename, used_filenames)
                 generated_files.append((cn_bytes, cn_filename))
 
                 # Generate EN MSDS
@@ -262,6 +270,11 @@ async def batch_generate(request: BatchGenerateRequest):
                     ledger_data["appearance"],
                     "en"
                 )
+                # Handle PDF conversion if requested
+                if request.output_format == "pdf":
+                    en_bytes, ext = MSDSGeneratorService.convert_docx_to_pdf(en_bytes)
+                    en_filename = os.path.splitext(en_filename)[0] + ext
+                en_filename = _unique_filename(en_filename, used_filenames)
                 generated_files.append((en_bytes, en_filename))
 
             except Exception as e:
@@ -355,3 +368,18 @@ def _make_filename(customs_name: str, appearance: str, lang: str) -> str:
     safe_appearance = re.sub(r'[\\/:*?"<>|]', '', appearance)[:20] if appearance else "无资料"
     lang_label = "中文" if lang == "cn" else "英文"
     return f"{safe_name}-{safe_appearance}-{lang_label}MSDS.docx"
+
+
+def _unique_filename(base_name: str, used: set) -> str:
+    """Deduplicate filename by appending -1, -2, ... suffix when needed."""
+    if base_name not in used:
+        used.add(base_name)
+        return base_name
+    stem, ext = os.path.splitext(base_name)
+    counter = 1
+    while True:
+        candidate = f"{stem}-{counter}{ext}"
+        if candidate not in used:
+            used.add(candidate)
+            return candidate
+        counter += 1

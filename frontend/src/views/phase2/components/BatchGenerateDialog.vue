@@ -8,8 +8,16 @@
   >
     <div class="batch-info">
       <el-alert type="info" :closable="false" show-icon>
-        已选择 <strong>{{ items.length }}</strong> 个产品，每个产品将生成中文和英文两个MSDS文件
+        已选择 <strong>{{ items.length }}</strong> 个产品，每个产品将生成中文和英文两个MSDS文件（{{ outputFormat === 'pdf' ? 'PDF' : 'Word' }} 格式）
       </el-alert>
+    </div>
+
+    <div class="format-selector">
+      <span class="format-label">输出格式：</span>
+      <el-radio-group v-model="outputFormat" size="small">
+        <el-radio value="docx">Word (.docx)</el-radio>
+        <el-radio value="pdf">PDF (.pdf)</el-radio>
+      </el-radio-group>
     </div>
 
     <el-table :data="items" size="small" style="width: 100%; margin: 16px 0" max-height="400">
@@ -77,7 +85,7 @@
     <template #footer>
       <el-button @click="visible = false">取消</el-button>
       <el-button type="primary" :loading="generating" @click="onConfirm">
-        确认生成 ({{ items.length }}个产品 × 2 = {{ items.length * 2 }}个文件)
+        确认生成 ({{ items.length }}个产品 × 2 = {{ items.length * 2 }}个{{ outputFormat === 'pdf' ? 'PDF' : 'Word' }}文件)
       </el-button>
     </template>
   </el-dialog>
@@ -105,6 +113,7 @@ const visible = ref(props.modelValue)
 const generating = ref(false)
 const items = ref<BatchItem[]>([])
 const errors = ref<{ product_name: string; message: string }[]>([])
+const outputFormat = ref<'docx' | 'pdf'>('docx')
 
 watch(() => props.modelValue, (v) => {
   visible.value = v
@@ -180,6 +189,7 @@ async function onConfirm() {
     const res = await msdsLedgerApi.batchGenerate({
       ledger_ids: items.value.map(i => i.id),
       overrides,
+      output_format: outputFormat.value,
     })
 
     // Download ZIP
@@ -187,7 +197,7 @@ async function onConfirm() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `MSDS_${new Date().toISOString().slice(0, 10).replace(/-/g, '')}_${items.value.length}个产品.zip`
+    a.download = `MSDS_${new Date().toISOString().slice(0, 10).replace(/-/g, '')}_${items.value.length}个产品_${outputFormat.value}.zip`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
@@ -212,6 +222,19 @@ function onClosed() {
 <style scoped>
 .batch-info {
   margin-bottom: 8px;
+}
+.format-selector {
+  display: flex;
+  align-items: center;
+  margin: 12px 0;
+  padding: 8px 12px;
+  background: #f5f7fa;
+  border-radius: 4px;
+}
+.format-label {
+  font-size: 13px;
+  color: #606266;
+  margin-right: 12px;
 }
 .error-section {
   margin-top: 16px;

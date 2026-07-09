@@ -2316,6 +2316,47 @@ class MSDSGeneratorService:
         
         return content, doc_key
 
+    @staticmethod
+    def convert_docx_to_pdf(docx_bytes: bytes) -> tuple:
+        """
+        Convert docx bytes to PDF using Word/WPS COM on Windows.
+        Falls back to returning original docx if conversion fails.
+        
+        Returns: (content_bytes, extension)
+        """
+        import win32com.client
+        import tempfile
+        
+        try:
+            word = win32com.client.Dispatch("Word.Application")
+            word.Visible = False
+            
+            with tempfile.TemporaryDirectory() as tmpdir:
+                docx_path = os.path.join(tmpdir, "input.docx")
+                pdf_path = os.path.join(tmpdir, "output.pdf")
+                
+                with open(docx_path, "wb") as f:
+                    f.write(docx_bytes)
+                
+                doc = word.Documents.Open(os.path.abspath(docx_path))
+                doc.SaveAs2(os.path.abspath(pdf_path), FileFormat=17)  # 17 = wdFormatPDF
+                doc.Close(0)
+                
+                # Read PDF before attempting to quit Word
+                if os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0:
+                    with open(pdf_path, "rb") as f:
+                        pdf_bytes = f.read()
+                    return pdf_bytes, ".pdf"
+            
+            return docx_bytes, ".docx"
+        except Exception:
+            return docx_bytes, ".docx"
+        finally:
+            try:
+                word.Quit()
+            except Exception:
+                pass
+
     def _fill_placeholder(self, doc, placeholder, value):
         """Replace placeholder text in all paragraphs, preserving surrounding text."""
         # Collect all paragraphs to scan: body + headers + footers

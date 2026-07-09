@@ -31,6 +31,7 @@ export interface GenerateMsdsRequest {
 export interface BatchGenerateMsdsRequest {
   ledger_ids: number[]
   overrides?: Record<string, { msds_number?: string; revision_date?: string }>
+  output_format?: 'docx' | 'pdf'
 }
 
 export const msdsLedgerApi = {

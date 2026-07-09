@@ -583,12 +583,33 @@ class MSDSGeneratorService:
         return None
 
     def translate_ingredient(self, ingredient_cn: str) -> Optional[str]:
-        """翻译成分名为英文"""
+        """翻译成分名为英文，支持精确匹配和模糊匹配"""
+        if not ingredient_cn:
+            return None
+
+        # 1. Exact match
         for item in self._ingredient_map:
             if ingredient_cn in item.get("cn_names", []):
                 en_names = item.get("en_names", [])
                 if en_names:
                     return en_names[0]
+
+        # 2. Fuzzy match: input is substring of a cn_name (e.g. "甘油" matches "丙三醇（甘油）")
+        for item in self._ingredient_map:
+            for cn_name in item.get("cn_names", []):
+                if ingredient_cn in cn_name:
+                    en_names = item.get("en_names", [])
+                    if en_names:
+                        return en_names[0]
+
+        # 3. Reverse fuzzy: a cn_name is substring of input (e.g. "甘油xx" matches "甘油")
+        for item in self._ingredient_map:
+            for cn_name in item.get("cn_names", []):
+                if cn_name in ingredient_cn:
+                    en_names = item.get("en_names", [])
+                    if en_names:
+                        return en_names[0]
+
         return None
 
     def translate_appearance(self, appearance_cn: str) -> Optional[str]:

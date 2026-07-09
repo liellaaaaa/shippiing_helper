@@ -2272,6 +2272,8 @@ class MSDSGeneratorService:
             self._fill_placeholder(doc, "{{ion_type}}", ledger_data.get("ion_type", "无资料"))
             self._fill_placeholder(doc, "{{ph}}", ledger_data.get("ph", "无资料"))
         else:
+            # Auto-fill English fields from mapping files if empty
+            ledger_data = self._auto_fill_english_fields(ledger_data)
             self._fill_placeholder(doc, "{{product_name_en}}", ledger_data.get("product_name_en", ""))
             self._fill_placeholder(doc, "{{appearance_en}}", ledger_data.get("appearance_en", "No data"))
             self._fill_placeholder(doc, "{{ion_type_en}}", ledger_data.get("ion_type_en", "No data"))
@@ -2315,6 +2317,40 @@ class MSDSGeneratorService:
         doc_key = f"msds_{product_name}_{int(time.time())}"
         
         return content, doc_key
+
+    def _auto_fill_english_fields(self, ledger_data: dict) -> dict:
+        """
+        Auto-fill English fields from mapping files if empty.
+        Preserves existing values — only fills blanks.
+        """
+        # Product name: products_name_mapping.json
+        if not ledger_data.get("product_name_en"):
+            cn_name = ledger_data.get("customs_name", "")
+            en_name = self.translate_product_name(cn_name)
+            if en_name:
+                ledger_data["product_name_en"] = en_name
+
+        # Appearance: appearance_color_mapping.json
+        if not ledger_data.get("appearance_en"):
+            cn_appearance = ledger_data.get("appearance", "")
+            en_appearance = self._appearance_map.get(cn_appearance)
+            if en_appearance:
+                ledger_data["appearance_en"] = en_appearance
+
+        # Ion type: ion_type_mapping.json
+        if not ledger_data.get("ion_type_en"):
+            cn_ion = ledger_data.get("ion_type", "")
+            en_ion = self._ion_type_map.get(cn_ion)
+            if en_ion:
+                ledger_data["ion_type_en"] = en_ion
+
+        # Composition: translate component_cn to component_en
+        composition = ledger_data.get("composition", [])
+        for item in composition:
+            if not item.get("component_en") and item.get("component_cn"):
+                item["component_en"] = self.translate_text_fallback(item["component_cn"])
+
+        return ledger_data
 
     @staticmethod
     def convert_docx_to_pdf(docx_bytes: bytes) -> tuple:

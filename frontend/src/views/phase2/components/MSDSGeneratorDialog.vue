@@ -555,9 +555,6 @@ async function importAllFormulas() {
         ion_type: formula.ion_type || '',
         ph: formula.ph || '',
         composition: composition,
-        product_name_en: '',
-        appearance_en: '',
-        ion_type_en: '',
       })
     } catch (e) {
       console.error('Failed to import formula:', e)

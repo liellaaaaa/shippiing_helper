@@ -388,6 +388,9 @@ function showAddDialog() {
     appearance: '',
     ion_type: '',
     ph: '',
+    product_name_en: '',
+    appearance_en: '',
+    ion_type_en: '',
     composition: [],
   }
   showForm.value = true
@@ -402,13 +405,16 @@ function showEditDialog() {
     appearance: selectedItem.value.appearance,
     ion_type: selectedItem.value.ion_type,
     ph: selectedItem.value.ph,
+    product_name_en: selectedItem.value.product_name_en || '',
+    appearance_en: selectedItem.value.appearance_en || '',
+    ion_type_en: selectedItem.value.ion_type_en || '',
     composition: selectedItem.value.composition ? [...selectedItem.value.composition] : [],
   }
   showForm.value = true
 }
 
 function addComposition() {
-  formData.value.composition.push({ component_cn: '', cas: '', percentage: '' })
+  formData.value.composition.push({ component_cn: '', component_en: '', cas: '', percentage: '' })
 }
 
 function removeComposition(idx: number) {

@@ -14,6 +14,7 @@ from app.database import SessionLocal
 from app.models.order import Order, OrderItem
 from app.models.order_pi_record import OrderPiRecord
 from app.models.pi_contract import PiContract, PiContractItem
+from app.services.customs_declaration_service import CustomsDeclarationService
 
 
 import re
@@ -286,8 +287,12 @@ class DocumentService:
             product_usage = ""
             if hs_code:
                 decl_svc = CustomsDeclarationService.get_instance()
-                elements = decl_svc.get_elements(hs_code)
-                product_usage = elements.get("用途", "")
+                elements_str = decl_svc.get_elements_str(hs_code, product_cn)
+                # 从字符串中提取"用途：xxx"
+                import re
+                usage_match = re.search(r'用途：([^|]+)', elements_str)
+                if usage_match:
+                    product_usage = usage_match.group(1).strip()
 
             # 3. 填充模板
             doc = Document(template_path)
@@ -753,30 +758,28 @@ class DocumentService:
             ws.cell(row, 16, "肇庆")                            # P: 境内货源地
             ws.cell(row, 19, "照章征税")                        # S: 征免
 
-            # 申报要素（行 row+1, D 列）— 台账优先，回退到 JSON
-            elem = decl_svc.get_elements(item.hs_code or "")
-            parts = []
-            if elem.get("用途"):
-                parts.append(f"用途：{elem['用途']}")
-            # 成分：优先台账 customs_ingredients，换行替换为双空格
-            ingredient = (item.customs_ingredients or elem.get("成分", "")).replace("\n", "  ")
-            if ingredient:
-                parts.append(f"成分：{ingredient}")
-            # 是否溶于水：JSON 中 "是否溶于水" 优先，仅当值为"不溶于水"时才用"其他"回退
-            soluble = elem.get("是否溶于水", "")
-            if not soluble and elem.get("其他") == "不溶于水":
-                soluble = "不溶于水"
-            if soluble:
-                parts.append(f"是否溶于水：{soluble}")
-            # 外观：优先台账 product_appearance
-            appear = item.product_appearance or elem.get("外观", "")
-            if appear:
-                parts.append(f"外观：{appear}")
-            if elem.get("出口享惠情况"):
-                parts.append(f"出口享惠情况：{elem['出口享惠情况']}")
-            if elem.get("底料来源"):
-                parts.append(f"底料来源：{elem['底料来源']}")
-            decl_str = "|".join(parts)
+            # 申报要素（行 row+1, D 列）— 从 JSON 复制整块，替换成分
+            # 获取申报要素字符串
+            elements_str = decl_svc.get_elements_str(item.hs_code or "", item.customs_name or "")
+
+            if elements_str:
+                # 成分：优先台账 customs_ingredients，换行替换为双空格
+                ingredient = (item.customs_ingredients or "").replace("\n", "  ")
+                if ingredient:
+                    # 替换成分字段
+                    decl_str = CustomsDeclarationService.replace_ingredient(elements_str, ingredient)
+                else:
+                    # 没有台账成分，使用 JSON 中的原始成分
+                    decl_str = elements_str
+            else:
+                # JSON 中没有找到，手动构建
+                parts = []
+                if item.customs_name:
+                    parts.append(f"用途：{item.customs_name}")
+                if item.customs_ingredients:
+                    parts.append(f"成分：{item.customs_ingredients.replace(chr(10), '  ')}")
+                decl_str = "|".join(parts)
+
             if decl_str:
                 ws.cell(row + 1, 4, decl_str)                  # D21: 申报要素
 

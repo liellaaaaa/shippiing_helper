@@ -13,7 +13,7 @@ TEMPLATES = {
     "loi":     str(ROOT / "references" / "LOI-op-非危险品保函模板.docx"),
     "msds":    str(ROOT / "references" / "cnMSDS.docx"),
     "msds_en": str(ROOT / "references" / "enMSDS.docx"),
-    "customs": str(ROOT / "references" / "出口报关资料 26.3.17.xlsx"),
+    "customs": str(ROOT / "references" / "出口报关资料-模板.xlsx"),
 }
 
 REFERENCES_DIR = str(ROOT / "references")

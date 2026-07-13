@@ -102,6 +102,7 @@
             <div class="summary-row"><span class="label">目的港：</span>{{ piFileData.destination || '-' }}</div>
             <div class="summary-row"><span class="label">收货人：</span>{{ piFileData.consignee_name || '-' }}</div>
             <div class="summary-row"><span class="label">价格条款：</span>{{ piFileData.price_term || '-' }}</div>
+            <div class="summary-row"><span class="label">币制：</span>{{ piFileData.currency || '-' }}</div>
           </div>
         </el-card>
       </div>
@@ -168,6 +169,7 @@
               <div class="field-item"><span class="label">目的港</span><span class="value">{{ mergePreviewData.destination || '-' }}</span></div>
               <div class="field-item"><span class="label">装货港</span><span class="value">{{ mergePreviewData.loading_port || '-' }}</span></div>
               <div class="field-item"><span class="label">价格条款</span><span class="value">{{ mergePreviewData.price_term || '-' }}</span></div>
+              <div class="field-item"><span class="label">币制</span><span class="value">{{ mergePreviewData.currency || '-' }}</span></div>
               <div class="field-item"><span class="label">付款方式</span><span class="value">{{ mergePreviewData.payment_terms || '-' }}</span></div>
             </div>
           </div>
@@ -464,6 +466,7 @@ async function handleSaveLedger() {
       price_term: preview.price_term,
       payment_terms: preview.payment_terms,
       bank_info: preview.bank_info,
+      currency: preview.currency,
       // 从销售订单表补充（取第一条订单的数据）
       ...buildSalesOrderFields(),
       items,

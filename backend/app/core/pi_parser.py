@@ -620,6 +620,46 @@ def _extract_price_term_from_rows(rows: list[list[str]]) -> str | None:
     return None
 
 
+def _extract_currency_from_rows(rows: list[list[str]]) -> str | None:
+    """
+    从 PI 文件行中提取币制（USD / CNY / RMB）。
+    策略：
+    1. 从 Total 行提取（如 "TOTAL : 18000.00 US$49,720.00" 或 "Total Amount US$49,720.00"）
+    2. 从表头提取（如 "单价(USD)"、"Amount (USD)"）
+    3. 从价格条款提取（如 "CIF Jakarta(USD/Kg)"）
+    """
+    # 策略1: 从 Total/Amount 行提取
+    for row in rows:
+        for cell in row:
+            cell_str = str(cell).strip()
+            # US$ / USD / $
+            m = re.search(r'(?i)(?:US\s*\$|USD|CNY|RMB|人民币|美元)', cell_str)
+            if m:
+                token = m.group(0).upper().replace("US$", "USD").replace("US $", "USD").replace("人民币", "CNY").replace("美元", "USD")
+                if token in ("USD", "CNY", "RMB"):
+                    return "USD" if token == "RMB" else token
+
+    # 策略2: 从表头提取
+    for row in rows[:5]:
+        for cell in row:
+            cell_str = str(cell).strip()
+            m = re.search(r'(?i)\(?\s*(USD|CNY|RMB)\s*\)?', cell_str)
+            if m:
+                token = m.group(1).upper()
+                return "USD" if token == "RMB" else token
+
+    # 策略3: 从价格条款提取（如 "CIF Jakarta(USD/Kg)"）
+    for row in rows[:5]:
+        for cell in row:
+            cell_str = str(cell).strip()
+            m = re.search(r'(?i)(?:CIF|FOB|CFR|C\s*&\s*F)\s*.+?\(\s*(USD|CNY|RMB)', cell_str)
+            if m:
+                token = m.group(1).upper()
+                return "USD" if token == "RMB" else token
+
+    return None
+
+
 def _find_hs_code_column(rows: list[list[str]]) -> int | None:
     """
     查找包含 HS CODE 的表头列索引。
@@ -694,6 +734,9 @@ def parse_proforma_invoice(rows: list[list[str]]) -> PiContractUploadResponse:
 
     # ── 5. H.S. Code（从标签提取） ──────────────────────────────────
     hs_code_from_label = _extract_hs_code_from_rows(rows)
+
+    # ── 5b. 币制提取 ──────────────────────────────────────────────────
+    currency = _extract_currency_from_rows(rows)
 
     # ── 6. 从 Payment terms and conditions 区域提取字段 ──────────
     payment_terms = None
@@ -991,6 +1034,7 @@ def parse_proforma_invoice(rows: list[list[str]]) -> PiContractUploadResponse:
         price_term=price_term,
         payment_terms=payment_terms,
         invoice_to=invoice_to,
+        currency=currency,
         items=items,
         confidence=confidence,
     )

@@ -54,6 +54,7 @@ class OrderPiRecord(Base):
     price_term = Column(String(50))
     payment_terms = Column(String(200))
     bank_info = Column(Text)
+    currency = Column(String(10))  # 币制：USD / CNY / RMB 等
 
     # --- 来自销售订单表 ---
     sales_order_no = Column(String(100))   # 销售订单号（与 PI 号可能不同）

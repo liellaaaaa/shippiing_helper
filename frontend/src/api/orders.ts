@@ -140,6 +140,7 @@ export interface MergePreviewResponse {
   price_term?: string
   payment_terms?: string
   bank_info?: string
+  currency?: string
   // 产品列表
   items: MergePreviewItem[]
   // 匹配统计
@@ -185,6 +186,7 @@ export interface LedgerRecord {
   price_term?: string
   payment_terms?: string
   bank_info?: string
+  currency?: string
   items: LedgerItem[]
   status: string
   created_at?: string
@@ -217,6 +219,7 @@ export interface LedgerWriteRequest {
   price_term?: string
   payment_terms?: string
   bank_info?: string
+  currency?: string
   items: LedgerItem[]
 }
 

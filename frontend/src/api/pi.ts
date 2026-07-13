@@ -37,6 +37,7 @@ export interface PiUploadResponse {
   loading_port?: string
   price_term?: string
   invoice_to?: string
+  currency?: string
   items: PiContractItem[]
   confidence: Confidence
 }

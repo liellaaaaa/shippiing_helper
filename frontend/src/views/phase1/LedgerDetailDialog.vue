@@ -56,6 +56,7 @@
               <el-descriptions-item label="目的港">{{ record.destination || '-' }}</el-descriptions-item>
               <el-descriptions-item label="装货港">{{ record.loading_port || '-' }}</el-descriptions-item>
               <el-descriptions-item label="价格条款">{{ record.price_term || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="币制">{{ record.currency || '-' }}</el-descriptions-item>
               <el-descriptions-item label="付款方式" :span="2">{{ record.payment_terms || '-' }}</el-descriptions-item>
               <el-descriptions-item label="银行信息" :span="3">{{ record.bank_info || '-' }}</el-descriptions-item>
             </el-descriptions>

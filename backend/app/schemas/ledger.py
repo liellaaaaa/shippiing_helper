@@ -68,6 +68,7 @@ class LedgerRecordSchema(BaseModel):
     price_term: Optional[str] = None    # 价格条款
     payment_terms: Optional[str] = None  # 付款方式
     bank_info: Optional[str] = None     # 银行信息
+    currency: Optional[str] = None      # 币制：USD / CNY / RMB
 
     class Config:
         from_attributes = True
@@ -152,6 +153,7 @@ class MergePreviewResponse(BaseModel):
     price_term: Optional[str] = None
     payment_terms: Optional[str] = None
     bank_info: Optional[str] = None
+    currency: Optional[str] = None      # 币制：USD / CNY / RMB
     # 合并后的产品列表
     items: list[MergePreviewItem] = []
     # 产品匹配统计
@@ -205,6 +207,7 @@ class LedgerWriteRequest(BaseModel):
     price_term: Optional[str] = None
     payment_terms: Optional[str] = None
     bank_info: Optional[str] = None
+    currency: Optional[str] = None      # 币制：USD / CNY / RMB
     # 产品明细
     items: list[LedgerItemSchema] = []
 
@@ -246,6 +249,7 @@ class LedgerRecordResponse(BaseModel):
     price_term: Optional[str] = None
     payment_terms: Optional[str] = None
     bank_info: Optional[str] = None
+    currency: Optional[str] = None      # 币制：USD / CNY / RMB
     items: list[LedgerItemSchema] = []
     status: str
     created_at: Optional[str] = None

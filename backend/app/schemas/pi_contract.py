@@ -47,6 +47,7 @@ class PiContractUploadResponse(BaseModel):
     price_term: Optional[str] = None          # 价格条款 (FOB/C&F/CIF等)
     payment_terms: Optional[str] = None       # 付款方式
     invoice_to: Optional[str] = None          # 发票抬头
+    currency: Optional[str] = None            # 币制：USD / CNY / RMB
     items: list[PiContractItemRow] = []
     confidence: ConfidenceInfo
 

@@ -131,6 +131,32 @@ def clear_markers(ws):
                 cell.value = None
 
 
+def replace_placeholder(ws, placeholder: str, value) -> bool:
+    """在 worksheet 中查找 {{占位符}} 并替换为 value。返回是否替换成功。"""
+    if value is None:
+        return False
+    for row in ws.iter_rows():
+        for cell in row:
+            if cell.value and str(cell.value).strip() == placeholder:
+                cell.value = value
+                return True
+    return False
+
+
+def _to_invoice_no(contract_no: str) -> str:
+    """合同号转发票号：去掉字母前缀（HT/HH/HTPK等），换成 IN。
+    例: HT260304E01→IN260304E01, HTPK260304→IN260304, HH12345→IN12345
+    """
+    if not contract_no:
+        return ""
+    # 找到第一个数字的位置，取后面的部分
+    m = re.search(r'\d', contract_no)
+    if m:
+        return "IN" + contract_no[m.start():]
+    # 没有数字，直接加 IN 前缀
+    return "IN" + contract_no
+
+
 class DocumentService:
     def __init__(self):
         self.msds_service = MSDSService()
@@ -692,6 +718,7 @@ class DocumentService:
         price_term = record.price_term or ""
         payment_terms = record.payment_terms or ""
         pi_date = record.pi_date or ""
+        currency = getattr(record, "currency", None) or "CNY"  # 默认人民币
         total_pallets = sum(it.pallet_count or 0 for it in items)
         total_drums = sum(it.drum_count or 0 for it in items)
         total_gw = sum(it.gross_weight_kg or 0 for it in items)
@@ -701,26 +728,24 @@ class DocumentService:
         piece_count = total_pallets if total_pallets else total_drums
 
         # ══════════════════════════════════════════════════════════════
-        # Sheet 1: 报关单 — 完整填充
+        # Sheet 1: 报关单 — 占位符替换
         # ══════════════════════════════════════════════════════════════
         ws = ws_customs
-        ws["A4"] = "广东宏昊化工有限公司"
-        ws["A6"] = consignee
-        if pi_no:
-            ws["A10"] = pi_no
-        if dest_cn:
-            ws["E10"] = dest_cn
-            ws["G10"] = dest_cn
-        if dest_port:
-            ws["K10"] = dest_port
-        if piece_count:
-            ws["E12"] = piece_count
-        if total_gw:
-            ws["F12"] = round(total_gw, 1)
-        if total_nw:
-            ws["G12"] = round(total_nw, 1)
-        if price_term:
-            ws["I12"] = price_term
+        # 固定值：A4 公司名（模板中已预填，保持不变）
+        # 表头动态字段
+        replace_placeholder(ws, "{{CONSIGNEE}}", consignee)
+        replace_placeholder(ws, "{{CONTRACT_NO}}", pi_no)
+        replace_placeholder(ws, "{{DEST_COUNTRY_CN}}", dest_cn)
+        replace_placeholder(ws, "{{DEST_COUNTRY_CN_2}}", dest_cn)
+        replace_placeholder(ws, "{{DEST_PORT}}", dest_port)
+        replace_placeholder(ws, "{{TOTAL_PIECES}}", piece_count)
+        replace_placeholder(ws, "{{TOTAL_GROSS_WEIGHT}}", round(total_gw, 1) if total_gw else None)
+        replace_placeholder(ws, "{{TOTAL_NET_WEIGHT}}", round(total_nw, 1) if total_nw else None)
+        replace_placeholder(ws, "{{PRICE_TERM}}", price_term)
+        # V4: 成交方式（发票公式 =报关单!V4 引用）
+        replace_placeholder(ws, "{{PRICE_TERM_V4}}", price_term)
+        # 币制：I22 单元格
+        replace_placeholder(ws, "{{CURRENCY}}", currency)
 
         # 产品明细：每品占 3 行（数据行 / 申报要素行 / 公式行）
         # 起始行 = 20 + idx * 3，模板最多支持到行 37（约 5-6 个产品）
@@ -788,150 +813,131 @@ class DocumentService:
             if item.total_amount:
                 ws.cell(row + 1, 9, item.total_amount)         # I21: 总价
 
+        # ── T/U/V 辅助列：供箱单公式引用 ──
+        # 箱单公式: OFFSET(报关单!$V$1, ROW(报关单!V{N})*3+16, 0)
+        # 产品2: V23/U23/T23, 产品3: V26/U26/T26, ...
+        for idx, item in enumerate(items):
+            if idx == 0:
+                continue  # 第1个产品由箱单直接引用 F12/G20
+            helper_row = 23 + (idx - 1) * 3  # 23, 26, 29, 32, 35
+            if helper_row > ws.max_row:
+                break
+            nw = item.quantity_kg or item.net_weight_kg
+            gw = item.gross_weight_kg
+            pc = item.pallet_count or item.drum_count
+            if nw:
+                ws.cell(helper_row, 20, round(nw, 1))   # T: 净重
+            if gw:
+                ws.cell(helper_row, 21, round(gw, 1))   # U: 毛重
+            if pc:
+                ws.cell(helper_row, 22, pc)               # V: 件数
+
         # ══════════════════════════════════════════════════════════════
-        # Sheet 2: 发票 — 独立填充（openpyxl 保存后公式缓存不更新）
+        # Sheet 2: 发票 — 填充所有产品行（公式只覆盖第1行，其余需手动填）
         # ══════════════════════════════════════════════════════════════
         ws = ws_invoice
+        # 发票号：去掉合同号的字母前缀（HT/HH/HTPK等），换成 IN
         if pi_no:
-            inv_no = pi_no
-            if inv_no.upper().startswith("HT"):
-                inv_no = "IN" + inv_no[2:]
-            else:
-                inv_no = "IN" + inv_no
+            inv_no = _to_invoice_no(pi_no)
             ws["G2"] = inv_no
-        if consignee:
-            ws["C3"] = consignee
         if pi_date:
             ws["G3"] = _parse_date(pi_date)
-        if dest_port:
-            ws["H6"] = dest_port
-        # 产品明细行（从行 8 开始，每品 1 行）
+        # G6 成交方式由公式 =报关单!V4 自动填充
+        # 币制显示：USD → USD，CNY/RMB → 人民币
+        currency_label = "人民币" if currency in ("CNY", "RMB", None) else currency
+        # 填充所有产品行（行8开始，每品1行）
+        # 注意：箱单公式引用 发票!D11/D12/D13（产品2/3/4），需要写到正确行
+        total_amt_inv = 0
         for idx, item in enumerate(items):
             r = 8 + idx
-            ws.cell(r, 1, "N/M")                              # A: 唛头
-            if item.customs_name:
-                ws.cell(r, 3, item.customs_name)              # C: 货物名称
-            if item.quantity_kg:
-                ws.cell(r, 4, item.quantity_kg)               # D: 数量
-            ws.cell(r, 5, "千克")                              # E: 单位
-            if item.unit_price:
-                ws.cell(r, 6, item.unit_price)                # F: 单价
-            ws.cell(r, 7, "人民币")                             # G: 币制
-            if item.total_amount:
-                ws.cell(r, 8, item.total_amount)              # H: 总金额
+            if r > 23:
+                break
+            ws.cell(r, 1).value = "N/M"                       # A: 唛头
+            ws.cell(r, 3).value = item.customs_name or ""     # C: 货物名称
+            ws.cell(r, 5).value = "千克"                      # E: 单位
+            ws.cell(r, 6).value = round(item.unit_price or 0, 2)  # F: 单价
+            ws.cell(r, 7).value = currency_label              # G: 币制
+            amt = round(item.total_amount or 0, 2)
+            ws.cell(r, 8).value = amt                         # H: 总金额
+            total_amt_inv += amt
+        # 箱单公式引用 发票!D11/D12/D13（偏移+3行），单独写入
+        for idx, item in enumerate(items):
+            if idx == 0:
+                continue  # 产品1由箱单直接引用
+            inv_row = 11 + (idx - 1)  # D11, D12, D13...
+            if inv_row <= 23:
+                ws.cell(inv_row, 4).value = item.quantity_kg or 0  # D: 数量
         # 汇总行
-        total_amt = sum(it.total_amount or 0 for it in items)
-        if total_amt:
-            ws["H24"] = round(total_amt, 2)
-            ws["G24"] = "人民币"
+        ws["G24"].value = currency_label
+        ws["H24"].value = round(total_amt_inv, 2)
+
+        # ── T/U/V 辅助列：供箱单公式引用 ──
+        # 箱单公式: OFFSET(报关单!$V$1, ROW(报关单!V{N})*3+16, 0)
+        # V4→V29, V5→V32, V6→V35, V7→V38, V8→V41
+        ws = ws_customs  # 切回报关单
+        for idx, item in enumerate(items):
+            if idx == 0:
+                continue  # 第1个产品由箱单直接引用 F12/G20
+            # 箱单公式 ROW(V{4+idx})*3+16 = (4+idx)*3+16, 再+1偏移
+            helper_row = 26 + idx * 3  # 29, 32, 35, 38, 41
+            if helper_row > ws.max_row:
+                break
+            nw = item.quantity_kg or item.net_weight_kg or 0
+            gw = item.gross_weight_kg or 0
+            pc = item.pallet_count or item.drum_count or 0
+            ws.cell(helper_row, 20).value = round(nw, 1)   # T: 净重
+            ws.cell(helper_row, 21).value = round(gw, 1)   # U: 毛重
+            ws.cell(helper_row, 22).value = pc               # V: 件数
 
         # ══════════════════════════════════════════════════════════════
-        # Sheet 3: 箱单 — 独立填充
+        # Sheet 3: 箱单 — 填充第1行产品的件数/数量/单位
+        # （产品2+ 通过公式引用报关单 T/U/V 辅助列）
         # ══════════════════════════════════════════════════════════════
         ws = ws_packing
-        if pi_date:
-            ws["H3"] = _parse_date(pi_date)
-        if pi_no:
-            ws["H4"] = f"IN{pi_no}" if pi_no.upper().startswith("HT") else pi_no
-        if consignee:
-            ws["B5"] = consignee
-        if pi_no:
-            ws["H5"] = pi_no
-        if dest_cn:
-            ws["E7"] = dest_cn
-        if payment_terms:
-            ws["H7"] = payment_terms
-        # 产品明细行（从行 10 开始）
-        for idx, item in enumerate(items):
-            r = 10 + idx
-            ws.cell(r, 1, "N/M")                              # A: 唛头
-            if item.customs_name:
-                ws.cell(r, 2, item.customs_name)              # B: 货物名称
-            pc = item.pallet_count
-            dc = item.drum_count
-            if pc:
-                ws.cell(r, 3, pc)                             # C: 件数
-                ws.cell(r, 4, "托")                            # D: 单位
-            elif dc:
-                ws.cell(r, 3, dc)                             # C: 件数
-                ws.cell(r, 4, "桶")                            # D: 单位
-            if item.quantity_kg:
-                ws.cell(r, 5, item.quantity_kg)               # E: 数量
-            ws.cell(r, 6, "千克")                              # F: 单位
-            if item.gross_weight_kg:
-                ws.cell(r, 7, round(item.gross_weight_kg, 1)) # G: 毛重
-            nw = item.quantity_kg or item.net_weight_kg
-            if nw:
-                ws.cell(r, 8, round(nw, 1))                   # H: 净重
-        # 汇总行
-        total_drums = sum(it.drum_count or 0 for it in items)
-        total_pc = sum(it.pallet_count or 0 for it in items) or total_drums
-        total_qty = sum(it.quantity_kg or 0 for it in items)
-        if total_pc:
-            ws["C26"] = total_pc
-        if total_qty:
-            ws["E26"] = round(total_qty, 1)
-        if total_gw:
-            ws["G26"] = round(total_gw, 1)
-        if total_nw:
-            ws["H26"] = round(total_nw, 1)
+        if items:
+            first = items[0]
+            first_pc = first.pallet_count or first.drum_count or 0
+            first_qty = first.quantity_kg or 0
+            first_gw = first.gross_weight_kg or 0
+            first_nw = first.quantity_kg or first.net_weight_kg or 0
+            # 件数单位：有托盘用"托"，否则用"桶"
+            first_unit = "托" if first.pallet_count else "桶"
+            # 填充第1行产品的所有列（覆盖模板中的公式和硬编码值）
+            ws.cell(10, 3).value = first_pc                     # C10: 件数
+            ws.cell(10, 4).value = first_unit                   # D10: 件数单位
+            ws.cell(10, 5).value = first_qty                    # E10: 数量
+            ws.cell(10, 6).value = "千克"                       # F10: 数量单位
+            ws.cell(10, 7).value = round(first_gw, 1)           # G10: 毛重
+            ws.cell(10, 8).value = round(first_nw, 1)           # H10: 净重
+            # 清除空行（行11-12是模板空行，不需要）
+            for r in range(11, 13):
+                for c in range(1, 9):
+                    ws.cell(r, c).value = None
 
         # ══════════════════════════════════════════════════════════════
-        # Sheet 4: 合同 — 独立填充
+        # Sheet 4: 合同 — 填充占位符 + 无公式的独立单元格
+        # （产品数据通过公式引用发票，无需手动填充）
         # ══════════════════════════════════════════════════════════════
         ws = ws_contract
-        if pi_no:
-            ws["G4"] = pi_no
-        if pi_date:
-            ws["G7"] = _parse_date(pi_date)
-        if consignee:
-            ws["C8"] = consignee
         if consignee_addr:
-            ws["C10"] = consignee_addr
-        ws["G10"] = "肇庆"
-        if price_term:
-            ws["G13"] = price_term
-        if dest_port:
-            ws["H13"] = dest_port
+            replace_placeholder(ws, "{{CONSIGNEE_ADDR}}", consignee_addr)
+        # 固定值：G10 肇庆（模板中已预填，保持不变）
+        replace_placeholder(ws, "{{PRICE_TERM}}", price_term)
+        replace_placeholder(ws, "{{DEST_PORT}}", dest_port)
+        replace_placeholder(ws, "{{PRICE_TERM_V4}}", price_term)
         if pi_date:
             ws["C37"] = _parse_date(pi_date)
-        # 产品明细行（从行 19 开始）
-        for idx, item in enumerate(items):
-            r = 19 + idx
-            if item.customs_name:
-                ws.cell(r, 2, item.customs_name)              # B: 货物名称
-            if item.quantity_kg:
-                ws.cell(r, 4, item.quantity_kg)               # D: 数量
-            ws.cell(r, 5, "千克")                              # E: 单位
-            if item.unit_price:
-                ws.cell(r, 6, item.unit_price)                # F: 单价
-            ws.cell(r, 7, "人民币")                             # G: 币制
-            if item.total_amount:
-                ws.cell(r, 8, item.total_amount)              # H: 金额
-        if total_amt:
-            ws["H31"] = round(total_amt, 2)
-            ws["G31"] = "人民币"
 
         # ══════════════════════════════════════════════════════════════
-        # Sheet 5: 委托书 — 独立填充
+        # Sheet 5: 委托书 — 填充货物名称和HS编码（去重拼接）
         # ══════════════════════════════════════════════════════════════
         ws = ws_proxy
-        ws["C21"] = "广东宏昊化工有限公司"
-        all_names = [i.customs_name for i in items if i.customs_name]
-        all_hs = [i.hs_code for i in items if i.hs_code]
-        name_summary = " / ".join(dict.fromkeys(all_names))
-        hs_summary = " / ".join(dict.fromkeys(all_hs))
-        if name_summary:
-            ws["C22"] = name_summary
-        if hs_summary:
-            ws["C23"] = hs_summary
-        if total_amt:
-            ws["D24"] = round(total_amt, 2)
-        if pi_date:
-            d = _parse_date(pi_date)
-            ws["H16"] = d
-            ws["H23"] = d
-            ws["H25"] = d
+        # 货物名称：去重拼接
+        all_names = list(dict.fromkeys(i.customs_name for i in items if i.customs_name))
+        replace_placeholder(ws, "{{PROXY_GOODS_NAME}}", " / ".join(all_names) if all_names else None)
+        # HS编码：去重拼接
+        all_hs = list(dict.fromkeys(i.hs_code for i in items if i.hs_code))
+        replace_placeholder(ws, "{{PROXY_HS_CODE}}", " / ".join(all_hs) if all_hs else None)
 
         # ── 保存 ────────────────────────────────────────────────
         buf = BytesIO()

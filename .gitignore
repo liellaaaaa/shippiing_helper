@@ -8,10 +8,13 @@ venv/
 .venv/
 env/
 .env
+.env.*
 *.egg-info/
 dist/
 build/
 *.egg
+.pytest_cache/
+.mypy_cache/
 
 # Node
 node_modules/

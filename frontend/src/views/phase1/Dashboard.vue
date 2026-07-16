@@ -106,6 +106,7 @@
       v-model="showDetailDialog"
       :record="selectedRecord"
       @edit="handleEdit"
+      @saved="handleSaved"
     />
   </div>
 </template>
@@ -158,6 +159,15 @@ const handleSizeChange = () => {
 const handleRowClick = (row: LedgerRecord) => {
   selectedRecord.value = row
   showDetailDialog.value = true
+}
+
+const handleSaved = async () => {
+  await loadData()
+  // 刷新 selectedRecord 为列表中的最新数据
+  if (selectedRecord.value) {
+    const updated = recordList.value.find(r => r.order_no === selectedRecord.value!.order_no)
+    if (updated) selectedRecord.value = updated
+  }
 }
 
 const handleEdit = (row: LedgerRecord) => {

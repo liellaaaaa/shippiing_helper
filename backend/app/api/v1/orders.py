@@ -13,6 +13,7 @@
   POST /api/v1/orders/pi-contract-paste  - 解析PI合同表粘贴文本
   POST /api/v1/orders/merge-preview       - 三源合并预览
   POST /api/v1/orders/ledger             - 写入台账
+  PUT  /api/v1/orders/ledger/{order_no}  - 更新台账记录
   GET  /api/v1/orders/ledger/{id}       - 读取单条台账记录
   GET  /api/v1/orders/ledger             - 台账列表
   POST /api/v1/orders                    - 保存订单
@@ -276,6 +277,24 @@ async def write_ledger(
         return service.write_ledger(request)
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"写入台账失败: {str(e)}")
+
+
+@router.put(
+    "/ledger/{order_no}",
+    response_model=LedgerWriteResponse,
+    summary="更新台账记录",
+    description="按订单号更新整单台账记录（删除旧记录 + 重新写入）",
+)
+async def update_ledger(
+    order_no: str,
+    request: LedgerWriteRequest,
+    service: LedgerService = Depends(get_ledger_service),
+):
+    """更新台账记录（按订单号整单替换）"""
+    try:
+        return service.update_ledger(order_no, request)
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"更新台账失败: {str(e)}")
 
 
 @router.delete(

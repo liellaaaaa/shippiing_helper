@@ -399,6 +399,93 @@ class LedgerService:
         finally:
             db.close()
 
+    def update_ledger(self, order_no: str, req: LedgerWriteRequest) -> LedgerWriteResponse:
+        """更新台账：在同一事务中删除旧记录 + 重新写入"""
+        db = SessionLocal()
+        first_record = None
+        try:
+            # 1. 删除旧记录
+            db.query(OrderPiRecord).filter_by(order_no=order_no).delete()
+            db.flush()
+
+            # 2. 重新写入（复用 write_ledger 的创建逻辑）
+            from app.models.order import PackagingType
+            pkg_map = {pt.name: pt.id for pt in db.query(PackagingType).all()}
+
+            for item in req.items:
+                pkg_type_id = item.packaging_type_id
+                if not pkg_type_id and item.packaging_name:
+                    pkg_type_id = pkg_map.get(item.packaging_name)
+
+                record = OrderPiRecord(
+                    order_no=req.order_no,
+                    customer_code=req.customer_code,
+                    sales_person=req.sales_person,
+                    pi_no=req.order_no,
+                    pi_date=req.pi_date,
+                    sales_order_no=req.sales_order_no,
+                    merchandiser=req.merchandiser,
+                    order_date=req.order_date,
+                    delivery_date=req.delivery_date,
+                    shipment_channel=req.shipment_channel,
+                    shipment_method=req.shipment_method,
+                    review_status=req.review_status,
+                    spec_abnormal=req.spec_abnormal,
+                    has_sample=req.has_sample,
+                    price_adjusted=req.price_adjusted,
+                    order_confirmed=req.order_confirmed,
+                    production_deadline=req.production_deadline,
+                    shipment_title=req.shipment_title,
+                    document_type=req.document_type,
+                    consignee_name=req.consignee_name,
+                    consignee_address=req.consignee_address,
+                    consignee_tel=req.consignee_tel,
+                    destination=req.destination,
+                    loading_port=req.loading_port,
+                    price_term=req.price_term,
+                    payment_terms=req.payment_terms,
+                    bank_info=req.bank_info,
+                    currency=req.currency,
+                    internal_code=item.internal_code,
+                    product_cn=item.product_cn,
+                    product_en=item.product_en,
+                    spec_kg=item.spec_kg,
+                    quantity_kg=item.quantity_kg,
+                    unit_price=item.unit_price,
+                    total_amount=item.total_amount,
+                    hs_code=item.hs_code,
+                    customs_name=item.customs_name,
+                    components=item.customs_ingredients,
+                    product_appearance=item.product_appearance,
+                    packaging_type_id=pkg_type_id,
+                    pallet_spec=item.pallet_spec,
+                    drums_per_pallet=item.drums_per_pallet,
+                    drum_count=item.drum_count,
+                    pallet_count=item.pallet_count,
+                    net_weight_kg=item.net_weight_kg,
+                    gross_weight_kg=item.gross_weight_kg,
+                    volume_cbm=item.volume_cbm,
+                    fits_20gp=item.fits_20gp,
+                    status="pending",
+                )
+                db.add(record)
+                if first_record is None:
+                    first_record = record
+
+            db.commit()
+            if first_record:
+                db.refresh(first_record)
+            return LedgerWriteResponse(
+                record_id=first_record.id if first_record else 0,
+                items_count=len(req.items),
+                message=f"更新台账 {len(req.items)} 条产品记录",
+            )
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+
     def get_ledger_record(self, record_id: int) -> Optional[LedgerRecordResponse]:
         """读取单条台账记录（含所有字段）"""
         db = SessionLocal()

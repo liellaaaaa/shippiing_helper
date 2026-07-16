@@ -285,6 +285,12 @@ export const ordersApi = {
     return resp.data
   },
 
+  /** 更新台账记录（按订单号整单替换） */
+  updateLedger: async (orderNo: string, data: LedgerWriteRequest): Promise<LedgerWriteResponse> => {
+    const resp = await apiClient.put(`/orders/ledger/${encodeURIComponent(orderNo)}`, data)
+    return resp.data
+  },
+
   /** 台账列表 */
   listLedger: async (params?: { search?: string; page?: number; page_size?: number }) => {
     const resp = await apiClient.get(`/orders/ledger`, { params })

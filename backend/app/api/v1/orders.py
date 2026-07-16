@@ -38,6 +38,8 @@ from app.schemas.ledger import (
     LedgerWriteResponse,
     LedgerRecordResponse,
     LedgerListResponse,
+    DuplicateCheckRequest,
+    DuplicateCheckResponse,
 )
 from app.schemas.pi_contract import PiContractUploadResponse
 
@@ -277,6 +279,20 @@ async def write_ledger(
         return service.write_ledger(request)
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"写入台账失败: {str(e)}")
+
+
+@router.post(
+    "/check-duplicates",
+    response_model=DuplicateCheckResponse,
+    summary="检查产品重复",
+    description="检查待入库产品是否已存在于台账中，按内编+报关名+H.S.Code+成分+外观判重",
+)
+async def check_duplicates(
+    request: DuplicateCheckRequest,
+    service: LedgerService = Depends(get_ledger_service),
+):
+    """检查产品重复"""
+    return service.check_duplicates(request)
 
 
 @router.put(

@@ -262,3 +262,30 @@ class LedgerListResponse(BaseModel):
     """台账列表响应"""
     records: list[LedgerRecordResponse]
     total: int
+
+
+# ── 判重 ────────────────────────────────────────────────
+
+
+class DuplicateCheckRequest(BaseModel):
+    """判重请求"""
+    items: list[LedgerItemSchema]
+
+
+class DuplicateItem(BaseModel):
+    """单条重复产品"""
+    internal_code: str
+    customs_name: Optional[str] = None
+    hs_code: Optional[str] = None
+    components: Optional[str] = None
+    product_appearance: Optional[str] = None
+    existing_order_no: str
+    existing_record_id: int
+
+
+class DuplicateCheckResponse(BaseModel):
+    """判重响应"""
+    has_duplicates: bool
+    duplicates: list[DuplicateItem] = []
+    total_checked: int
+    total_duplicates: int

@@ -32,6 +32,14 @@
       </div>
     </div>
 
+    <!-- 重复产品提示弹窗 -->
+    <DuplicateWarningDialog
+      v-model="duplicateDialogVisible"
+      :duplicates="duplicateItems"
+      @confirm="handleConfirmSave"
+      @cancel="handleDuplicateCancel"
+    />
+
     <!-- 三列输入区 -->
     <div class="three-col-layout">
       <!-- 第一列：PI合同表 -->
@@ -246,11 +254,13 @@ import { Document } from '@element-plus/icons-vue'
 import PasteTextarea from '@/components/phase1/PasteTextarea.vue'
 import PiUploadDragger from '@/components/phase1/PiUploadDragger.vue'
 import PackagingCalculator from '@/components/phase1/PackagingCalculator.vue'
+import DuplicateWarningDialog from '@/components/phase1/DuplicateWarningDialog.vue'
 import {
   ordersApi,
   type ParsedOrderSchema,
   type MergePreviewResponse,
   type LedgerWriteRequest,
+  type DuplicateItem,
 } from '@/api/orders'
 import { uploadPiFile, type PiUploadResponse } from '@/api/pi'
 import { nameMappingApi } from '@/api/name_mapping'
@@ -280,6 +290,11 @@ const previewing = ref(false)
 // 保存
 const saving = ref(false)
 const savedRecordId = ref<number | null>(null)
+
+// 重复检测
+const duplicateDialogVisible = ref(false)
+const duplicateItems = ref<DuplicateItem[]>([])
+const pendingSaveRequest = ref<LedgerWriteRequest | null>(null)
 
 // 包装计算
 const calcRef = ref<InstanceType<typeof PackagingCalculator>>()
@@ -472,6 +487,28 @@ async function handleSaveLedger() {
       items,
     }
 
+    // 先检查重复
+    const checkResult = await ordersApi.checkDuplicates({ items })
+    if (checkResult.has_duplicates) {
+      duplicateItems.value = checkResult.duplicates
+      pendingSaveRequest.value = request
+      duplicateDialogVisible.value = true
+      saving.value = false
+      return
+    }
+
+    // 无重复，直接写入
+    await doWriteLedger(request)
+  } catch (err: any) {
+    ElMessage.error(err.response?.data?.detail || '写入台账失败')
+  } finally {
+    saving.value = false
+  }
+}
+
+async function doWriteLedger(request: LedgerWriteRequest) {
+  saving.value = true
+  try {
     const resp = await ordersApi.writeLedger(request)
     savedRecordId.value = resp.record_id
     ElMessage.success(`成功写入台账：${resp.items_count} 条产品记录`)
@@ -480,6 +517,17 @@ async function handleSaveLedger() {
   } finally {
     saving.value = false
   }
+}
+
+async function handleConfirmSave() {
+  if (pendingSaveRequest.value) {
+    await doWriteLedger(pendingSaveRequest.value)
+    pendingSaveRequest.value = null
+  }
+}
+
+function handleDuplicateCancel() {
+  pendingSaveRequest.value = null
 }
 
 function buildSalesOrderFields(): Partial<LedgerWriteRequest> {

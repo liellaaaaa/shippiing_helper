@@ -229,6 +229,29 @@ export interface LedgerWriteResponse {
   message: string
 }
 
+// ── 判重相关类型 ─────────────────────────────────────────────────────────────
+
+export interface DuplicateCheckRequest {
+  items: LedgerItem[]
+}
+
+export interface DuplicateItem {
+  internal_code: string
+  customs_name?: string
+  hs_code?: string
+  components?: string
+  product_appearance?: string
+  existing_order_no: string
+  existing_record_id: number
+}
+
+export interface DuplicateCheckResponse {
+  has_duplicates: boolean
+  duplicates: DuplicateItem[]
+  total_checked: number
+  total_duplicates: number
+}
+
 export const ordersApi = {
   parsePaste: async (rawText: string): Promise<PasteParseResponse> => {
     const resp = await apiClient.post(`/orders/paste`, { raw_text: rawText })
@@ -294,6 +317,12 @@ export const ordersApi = {
   /** 台账列表 */
   listLedger: async (params?: { search?: string; page?: number; page_size?: number }) => {
     const resp = await apiClient.get(`/orders/ledger`, { params })
+    return resp.data
+  },
+
+  /** 检查产品重复 */
+  checkDuplicates: async (data: DuplicateCheckRequest): Promise<DuplicateCheckResponse> => {
+    const resp = await apiClient.post(`/orders/check-duplicates`, data)
     return resp.data
   },
 

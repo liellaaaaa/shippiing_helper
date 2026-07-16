@@ -12,6 +12,9 @@ from app.schemas.ledger import (
     LedgerRecordResponse,
     LedgerItemSchema,
     LedgerListResponse,
+    DuplicateCheckRequest,
+    DuplicateCheckResponse,
+    DuplicateItem,
 )
 from app.schemas.order import ParsedOrderSchema, OrderItemSchema, SkippedRowSchema
 from app.schemas.pi_contract import PiContractUploadResponse
@@ -395,6 +398,39 @@ class LedgerService:
                 record_id=first_record.id if first_record else 0,
                 items_count=len(req.items),
                 message=f"写入台账 {len(req.items)} 条产品记录",
+            )
+        finally:
+            db.close()
+
+    def check_duplicates(self, req: DuplicateCheckRequest) -> DuplicateCheckResponse:
+        """检查待入库产品是否已存在于台账中"""
+        db = SessionLocal()
+        try:
+            duplicates: list[DuplicateItem] = []
+            for item in req.items:
+                query = db.query(OrderPiRecord).filter(
+                    OrderPiRecord.internal_code == item.internal_code,
+                    OrderPiRecord.customs_name == item.customs_name,
+                    OrderPiRecord.hs_code == item.hs_code,
+                    OrderPiRecord.components == item.customs_ingredients,
+                    OrderPiRecord.product_appearance == item.product_appearance,
+                )
+                existing = query.first()
+                if existing:
+                    duplicates.append(DuplicateItem(
+                        internal_code=item.internal_code,
+                        customs_name=item.customs_name,
+                        hs_code=item.hs_code,
+                        components=item.customs_ingredients,
+                        product_appearance=item.product_appearance,
+                        existing_order_no=existing.order_no,
+                        existing_record_id=existing.id,
+                    ))
+            return DuplicateCheckResponse(
+                has_duplicates=len(duplicates) > 0,
+                duplicates=duplicates,
+                total_checked=len(req.items),
+                total_duplicates=len(duplicates),
             )
         finally:
             db.close()

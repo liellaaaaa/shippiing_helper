@@ -40,6 +40,7 @@ export interface CalculateRequest {
   order_qty_kg: number
   use_pallet: boolean
   pallet_name?: string
+  actual_fill_kg?: number
 }
 
 const packagingApi = {

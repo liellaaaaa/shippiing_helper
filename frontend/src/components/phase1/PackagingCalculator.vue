@@ -44,6 +44,19 @@
             <el-input-number v-model="row.quantity_kg" size="small" :min="0" controls-position="right" @change="() => onRowPackageChange(row, row.packaging_name)" />
           </template>
         </el-table-column>
+        <el-table-column label="实际装入量(kg)" width="130">
+          <template #default="{ row }">
+            <el-input-number
+              v-model="row.actual_fill_kg"
+              size="small"
+              :min="0"
+              :step="1"
+              controls-position="right"
+              :placeholder="getNetKg(row.packaging_name)"
+              @change="() => onRowPackageChange(row, row.packaging_name)"
+            />
+          </template>
+        </el-table-column>
         <el-table-column label="每卡板桶数" width="100">
           <template #default="{ row }">
             <template v-if="isPalletizable(row.packaging_name)">
@@ -161,8 +174,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ref, computed, onMounted } from 'vue'
 import packagingApi, { type PackageType, type PalletType } from '@/api/packaging'
 
 // Task 3A: PackingRow interface
@@ -173,6 +185,7 @@ interface PackingRow {
   packaging_name: string
   pallet_spec: string
   quantity_kg: number
+  actual_fill_kg: number | null  // 每桶实际装入量，null=用标称值
   drums: number
   pallets: number  // 板数（用户可编辑）
   drums_per_pallet: number
@@ -201,35 +214,7 @@ const autoRemainderRows = computed(() => rows.value.filter(r => r.remainder > 0 
 const totalAutoRemainder = computed(() => rows.value.reduce((s, r) => s + (r.remainder > 0 && r.is_auto ? r.remainder : 0), 0))
 const remainderExtraCbm = computed(() => calcRemainderContribution().extraCbm)
 const remainderExtraWeight = computed(() => calcRemainderContribution().extraWeight)
-
-// 合并超容检查：各产品余数占用板位比例之和是否超过 1
-// 例：1桶125kg占1/4板位，20袋25kg占20/40=1/2板位，合计3/4 < 1 → 不超容
-const mergeOverflow = computed(() => {
-  if (remainder_mode.value !== 'full_pallet_merge') return false
-  const remRows = rows.value.filter(r => r.remainder > 0 && r.is_auto)
-  if (remRows.length === 0) return false
-  const palletSpec = remRows[0].remainder_pallet_spec
-  if (!palletSpec) return false
-
-  let totalRatio = 0
-  for (const r of remRows) {
-    const pkg = packageTypes.value.find(p => p.name === r.packaging_name)
-    if (!pkg) continue
-    const capacity = palletSpec.includes('1.0*1.0')
-      ? (pkg as any).pallet_qty_1x1
-      : (pkg as any).pallet_qty_1_1x1_1
-    if (capacity == null || capacity === 0) return true  // 该产品无法放在此板上，合并无效
-    totalRatio += r.remainder / capacity
-  }
-  return totalRatio > 1
-})
-
-watch(remainder_mode, (newMode) => {
-  if (newMode === 'full_pallet_merge' && mergeOverflow.value) {
-    ElMessage.warning('余数合并超出单板容量，已自动切换到"余数独立"模式')
-    remainder_mode.value = 'full_pallet_independent'
-  }
-})
+const mergePalletCount = ref(0)  // 合并模式实际需要的板数
 
 onMounted(async () => {
   try {
@@ -253,6 +238,7 @@ function addRow(internalCode = '', productName = '', quantityKg = 0) {
     packaging_name: '',
     pallet_spec: '1.1*1.1m',
     quantity_kg: quantityKg,
+    actual_fill_kg: null,
     drums: 0,
     pallets: 0,
     drums_per_pallet: 0,
@@ -306,21 +292,29 @@ function calcRemainderContribution(): { extraCbm: number; extraWeight: number } 
   const remainderRows = rows.value.filter(r => r.remainder > 0 && r.is_auto)
 
   if (remainder_mode.value === 'full_pallet_merge') {
-    // 所有余数合并到 1 块共享余数板上
-    const totalRemainder = remainderRows.reduce((s, r) => s + r.remainder, 0)
-    // 取第一行的余数板规格作为共享板规格（用户可自行指定）
-    if (totalRemainder > 0 && remainderRows.length > 0) {
-      const firstRow = remainderRows[0]
-      const pallet = palletTypes.value.find(p => p.name === firstRow.remainder_pallet_spec)
+    // 按 (packaging_name, remainder_pallet_spec) 分组，每组计算所需板数
+    const groups = new Map<string, { totalDrums: number; totalTare: number; capacity: number; palletSpec: string }>()
+    for (const r of remainderRows) {
+      const pkg = packageTypes.value.find(p => p.name === r.packaging_name)
+      if (!pkg) continue
+      const capacity = r.remainder_pallet_spec.includes('1.0*1.0')
+        ? ((pkg as any).pallet_qty_1x1 ?? 0)
+        : ((pkg as any).pallet_qty_1_1x1_1 ?? 0)
+      const key = `${r.packaging_name}|${r.remainder_pallet_spec}|${capacity}`
+      if (!groups.has(key)) groups.set(key, { totalDrums: 0, totalTare: 0, capacity, palletSpec: r.remainder_pallet_spec })
+      const g = groups.get(key)!
+      g.totalDrums += r.remainder
+      g.totalTare += r.remainder * pkg.tare_kg
+    }
+    for (const [, g] of groups) {
+      if (g.capacity <= 0 || g.totalDrums <= 0) continue
+      const boards = Math.ceil(g.totalDrums / g.capacity)
+      const pallet = palletTypes.value.find(p => p.name === g.palletSpec)
       if (pallet) {
-        extraCbm += pallet.cbm
-        extraWeight += pallet.weight_kg
+        extraCbm += boards * pallet.cbm
+        extraWeight += boards * pallet.weight_kg
       }
-      // 各行余数桶皮重之和
-      for (const r of remainderRows) {
-        const pkg = packageTypes.value.find(p => p.name === r.packaging_name)
-        if (pkg) extraWeight += r.remainder * pkg.tare_kg
-      }
+      extraWeight += g.totalTare
     }
   } else if (remainder_mode.value === 'full_pallet_independent') {
     // 每个有余数的行各自开 1 块余数板
@@ -349,7 +343,8 @@ async function onRowCapacityChange(row: PackingRow) {
   const pkg = packageTypes.value.find(p => p.name === row.packaging_name)
   if (!pkg) return
 
-  const drums = Math.ceil(row.quantity_kg / pkg.net_kg)
+  const fillKg = row.actual_fill_kg && row.actual_fill_kg > 0 ? row.actual_fill_kg : pkg.net_kg
+  const drums = Math.ceil(row.quantity_kg / fillKg)
   row.drums = drums
   row.is_auto = true  // 恢复自动模式
   const fp = Math.floor(drums / row.drums_per_pallet)
@@ -382,6 +377,7 @@ async function onRowPackageChange(row: PackingRow, packagingName: string) {
       packaging_name: packagingName,
       order_qty_kg: row.quantity_kg,
       use_pallet: usePallet,
+      actual_fill_kg: row.actual_fill_kg && row.actual_fill_kg > 0 ? row.actual_fill_kg : undefined,
     })
     const match = schemes.find((s: any) => s.pallet_type === row.pallet_spec) || schemes[0]
     if (match) {
@@ -427,6 +423,12 @@ function isPalletUnsupported(packagingName: string, palletName: string): boolean
   return (pkg as any).pallet_qty_1_1x1_1 == null
 }
 
+function getNetKg(packagingName: string): string {
+  if (!packagingName) return ''
+  const pkg = packageTypes.value.find(p => p.name === packagingName)
+  return pkg ? String(pkg.net_kg) : ''
+}
+
 function getPalletsFeedback(row: PackingRow): { type: 'surplus' | 'shortfall' | 'ok'; text: string } {
   if (row.is_auto) return { type: 'ok', text: '' }
   const capacity = (row.pallets || 0) * row.drums_per_pallet
@@ -442,25 +444,48 @@ function applyRemainderMode() {
   const remRows = rows.value.filter(r => r.remainder > 0 && r.is_auto)
 
   if (remainder_mode.value === 'full_pallet_merge') {
-    // 合并模式：所有余数行共享 +1 块余数板，仅第一行承担板体积/重量
+    // 合并模式：按桶型+板规格分组，每组计算所需板数
     if (remRows.length === 0) { recalcSummary(); return }
-    const firstRow = remRows[0]
-    const firstPkg = packageTypes.value.find(p => p.name === firstRow.packaging_name)
-    const firstPallet = palletTypes.value.find(p => p.name === firstRow.remainder_pallet_spec)
-    if (firstPkg && firstPallet) {
-      firstRow.total_cbm = firstRow.drums * firstPkg.cbm + (firstRow.pallets + 1) * firstPallet.cbm
-      firstRow.total_weight_kg = firstRow.drums * firstPkg.gross_kg + (firstRow.pallets + 1) * firstPallet.weight_kg
-      firstRow.pallets += 1
-    }
-    // 其余行：体积/重量已含全部桶数，无需再加板（板由第一行承担）
-    for (let i = 1; i < remRows.length; i++) {
-      const r = remRows[i]
+
+    const groups = new Map<string, { rows: PackingRow[]; totalDrums: number; capacity: number }>()
+    for (const r of remRows) {
       const pkg = packageTypes.value.find(p => p.name === r.packaging_name)
-      if (pkg) {
-        r.total_cbm = r.drums * pkg.cbm
-        r.total_weight_kg = r.drums * pkg.gross_kg
+      if (!pkg) continue
+      const capacity = r.remainder_pallet_spec.includes('1.0*1.0')
+        ? ((pkg as any).pallet_qty_1x1 ?? 0)
+        : ((pkg as any).pallet_qty_1_1x1_1 ?? 0)
+      const key = `${r.packaging_name}|${r.remainder_pallet_spec}|${capacity}`
+      if (!groups.has(key)) groups.set(key, { rows: [], totalDrums: 0, capacity })
+      const g = groups.get(key)!
+      g.rows.push(r)
+      g.totalDrums += r.remainder
+    }
+
+    let totalNewPallets = 0
+    for (const [, g] of groups) {
+      if (g.capacity <= 0 || g.totalDrums <= 0) continue
+      const boardsNeeded = Math.ceil(g.totalDrums / g.capacity)
+      totalNewPallets += boardsNeeded
+      // 第一行承担板体积/重量
+      const firstRow = g.rows[0]
+      const firstPkg = packageTypes.value.find(p => p.name === firstRow.packaging_name)
+      const firstPallet = palletTypes.value.find(p => p.name === firstRow.remainder_pallet_spec)
+      if (firstPkg && firstPallet) {
+        firstRow.total_cbm = firstRow.drums * firstPkg.cbm + (firstRow.pallets + boardsNeeded) * firstPallet.cbm
+        firstRow.total_weight_kg = firstRow.drums * firstPkg.gross_kg + (firstRow.pallets + boardsNeeded) * firstPallet.weight_kg
+        firstRow.pallets += boardsNeeded
+      }
+      // 其余行：体积/重量已含全部桶数
+      for (let i = 1; i < g.rows.length; i++) {
+        const r = g.rows[i]
+        const pkg = packageTypes.value.find(p => p.name === r.packaging_name)
+        if (pkg) {
+          r.total_cbm = r.drums * pkg.cbm
+          r.total_weight_kg = r.drums * pkg.gross_kg
+        }
       }
     }
+    mergePalletCount.value = totalNewPallets
     // 全部清零余数
     for (const r of remRows) { r.remainder = 0; r.is_auto = false }
 
@@ -499,7 +524,7 @@ function recalcSummary() {
   }
   // 散货装载模式的托盘贡献
   if (remainder_mode.value === 'full_pallet_merge') {
-    s.total_pallets += rows.value.some(r => r.remainder > 0 && r.is_auto) ? 1 : 0
+    s.total_pallets += mergePalletCount.value
   } else if (remainder_mode.value === 'full_pallet_independent') {
     s.total_pallets += rows.value.filter(r => r.remainder > 0 && r.is_auto).length
   }
@@ -531,6 +556,7 @@ function getRows() {
     gross_weight_kg: r.total_weight_kg,
     volume_cbm: r.total_cbm,
     fits_20gp: r.fits_20gp ? '适合' : '超出',
+    actual_fill_kg: r.actual_fill_kg,
   }))
 }
 

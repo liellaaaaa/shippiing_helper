@@ -66,6 +66,7 @@ class OrderProductInput:
     specification_kg: float     # 单桶/单袋净重 kg
     barrel_type: str             # "胶桶" / "编织袋" / "IBC"
     pallet_spec: str = "1.1*1.1m"  # 默认卡板规格
+    actual_fill_kg: Optional[float] = None  # 每桶实际装入量，None时用specification_kg
 
 
 @dataclass
@@ -191,6 +192,7 @@ def calculate(
     order_qty_kg: float,
     use_pallet: bool = False,
     pallet_name: Optional[str] = None,
+    actual_fill_kg: Optional[float] = None,
 ) -> PackingResult:
     """
     核心计算函数
@@ -200,6 +202,7 @@ def calculate(
         order_qty_kg: 订单总净重 kg
         use_pallet: 是否打卡板
         pallet_name: 托盘规格，如 "1.1*1.1m"（use_pallet=True 时必填）
+        actual_fill_kg: 每桶实际装入量，None时用标称净重
 
     返回:
         PackingResult
@@ -208,8 +211,9 @@ def calculate(
     if not pkg:
         raise ValueError(f"未找到包装种类: {packaging_name}")
 
-    # 桶数 = ceil(order_qty / net_kg_per_drum)
-    drums = math.ceil(order_qty_kg / pkg.net_kg)
+    # 桶数 = ceil(order_qty / fill_kg)
+    fill_kg = actual_fill_kg if actual_fill_kg and actual_fill_kg > 0 else pkg.net_kg
+    drums = math.ceil(order_qty_kg / fill_kg)
 
     if not use_pallet:
         # 模式A：不打卡板
@@ -279,6 +283,7 @@ def calculate(
 def calculate_all_schemes(
     packaging_name: str,
     order_qty_kg: float,
+    actual_fill_kg: Optional[float] = None,
 ) -> list[PackingResult]:
     """
     计算所有可用方案（不打卡板 + 两种托盘）
@@ -288,7 +293,7 @@ def calculate_all_schemes(
 
     # 不打卡板
     try:
-        r = calculate(packaging_name, order_qty_kg, use_pallet=False)
+        r = calculate(packaging_name, order_qty_kg, use_pallet=False, actual_fill_kg=actual_fill_kg)
         results.append(r)
     except Exception:
         pass
@@ -296,7 +301,7 @@ def calculate_all_schemes(
     # 打卡板（1.0*1.0 和 1.1*1.1）
     for pallet_name in ["1.0*1.0m", "1.1*1.1m"]:
         try:
-            r = calculate(packaging_name, order_qty_kg, use_pallet=True, pallet_name=pallet_name)
+            r = calculate(packaging_name, order_qty_kg, use_pallet=True, pallet_name=pallet_name, actual_fill_kg=actual_fill_kg)
             results.append(r)
         except Exception:
             pass
@@ -310,6 +315,7 @@ def calculate_single_product(
     specification_kg: float,
     barrel_type: str,
     pallet_spec: str = "1.1*1.1m",
+    actual_fill_kg: Optional[float] = None,
 ) -> ProductPackagingResult:
     """
     计算单个产品的包装需求
@@ -320,6 +326,7 @@ def calculate_single_product(
         specification_kg: 单桶/单袋净重 kg
         barrel_type: 包装方式: "胶桶" / "纸桶" / "编织袋" / "IBC"
         pallet_spec: 卡板规格
+        actual_fill_kg: 每桶实际装入量，None时用specification_kg
 
     Returns:
         ProductPackagingResult: 单产品包装计算结果
@@ -328,8 +335,9 @@ def calculate_single_product(
     if not pkg:
         raise ValueError(f"未找到包装种类: {packaging_name}")
 
-    # 桶数 = ceil(order_qty / net_kg_per_drum)
-    drums = math.ceil(quantity_kg / specification_kg)
+    # 桶数 = ceil(order_qty / fill_kg)
+    fill_kg = actual_fill_kg if actual_fill_kg and actual_fill_kg > 0 else specification_kg
+    drums = math.ceil(quantity_kg / fill_kg)
 
     # 确定每托盘桶数
     if "1.0*1.0" in pallet_spec:
@@ -413,6 +421,7 @@ def calculate_order_packaging(products: list[OrderProductInput]) -> OrderPackagi
             specification_kg=prod.specification_kg,
             barrel_type=prod.barrel_type,
             pallet_spec=prod.pallet_spec,
+            actual_fill_kg=prod.actual_fill_kg,
         )
         product_details.append(result)
         total_drums += result.drums

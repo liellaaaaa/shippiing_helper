@@ -24,6 +24,7 @@ class CalculateRequest(BaseModel):
     order_qty_kg: float
     use_pallet: bool = False
     pallet_name: Optional[str] = None
+    actual_fill_kg: Optional[float] = None
 
 
 class PackingScheme(BaseModel):
@@ -79,7 +80,7 @@ def calculate_packaging(req: CalculateRequest):
     try:
         if req.use_pallet:
             # 返回所有打卡板方案
-            schemes = calculate_all_schemes(req.packaging_name, req.order_qty_kg)
+            schemes = calculate_all_schemes(req.packaging_name, req.order_qty_kg, actual_fill_kg=req.actual_fill_kg)
             schemes = [s for s in schemes if s.use_pallet or s.pallets == 0]
             if not schemes:
                 raise ValueError("无可用方案")
@@ -99,7 +100,7 @@ def calculate_packaging(req: CalculateRequest):
                 full_pallets=best.full_pallets,
             )
         else:
-            r = calculate(req.packaging_name, req.order_qty_kg, use_pallet=False)
+            r = calculate(req.packaging_name, req.order_qty_kg, use_pallet=False, actual_fill_kg=req.actual_fill_kg)
             return PackingScheme(
                 drums=r.drums,
                 pallets=r.pallets,
@@ -121,7 +122,7 @@ def calculate_packaging(req: CalculateRequest):
 def calculate_all_packaging_schemes(req: CalculateRequest):
     """返回所有可用方案（不打卡板 + 两种托盘）"""
     try:
-        schemes = calculate_all_schemes(req.packaging_name, req.order_qty_kg)
+        schemes = calculate_all_schemes(req.packaging_name, req.order_qty_kg, actual_fill_kg=req.actual_fill_kg)
         return [
             {
                 "drums": s.drums,
@@ -151,6 +152,7 @@ class OrderProductItem(BaseModel):
     specification_kg: float
     barrel_type: str = "胶桶"
     pallet_spec: str = "1.1*1.1m"
+    actual_fill_kg: Optional[float] = None
 
 
 class OrderPackagingRequest(BaseModel):
@@ -177,6 +179,7 @@ def calculate_order_packaging_endpoint(req: OrderPackagingRequest):
                 specification_kg=p.specification_kg,
                 barrel_type=p.barrel_type,
                 pallet_spec=p.pallet_spec,
+                actual_fill_kg=p.actual_fill_kg,
             )
             for p in req.products
         ]

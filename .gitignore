@@ -29,6 +29,7 @@ frontend/*.local.js
 
 # Data
 data/
+backend/data/
 *.db
 *.db-journal
 *.sqlite

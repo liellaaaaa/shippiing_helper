@@ -31,3 +31,6 @@ os.makedirs(DOCS_DIR, exist_ok=True)
 DOCUMENT_SERVER_URL = os.getenv("DOCUMENT_SERVER_URL", "http://localhost:8080")
 ONLYOFFICE_SECRET_KEY = os.getenv("ONLYOFFICE_SECRET_KEY", "shipping-helper-secret-key")
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
+
+# DeepSeek AI API
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")

@@ -19,3 +19,4 @@ docx2pdf
 python-dotenv
 httpx
 lxml
+openai>=1.0.0

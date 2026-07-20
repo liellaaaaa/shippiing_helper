@@ -9,6 +9,7 @@ PI文件解析器 - 从Excel文件中提取PI合同数据
 import re
 import io
 import os
+import json
 import math
 import pymupdf
 import pytesseract
@@ -1292,6 +1293,196 @@ def parse_proforma_invoice_from_text(text: str, filename: str = "") -> PiContrac
     )
 
 
+# ──────────────────────────────────────────────────────────────────────
+# DeepSeek AI 解析
+# ──────────────────────────────────────────────────────────────────────
+
+def _format_rows_for_ai(rows: list[list[str]]) -> str:
+    """将行列数据格式化为AI可读的结构化文本"""
+    lines = []
+    for row_idx, row in enumerate(rows):
+        cells = []
+        for col_idx, cell in enumerate(row):
+            if cell.strip():
+                cells.append(f"[R{row_idx+1}C{col_idx+1}]{cell}")
+        if cells:
+            lines.append(" | ".join(cells))
+    return "\n".join(lines)
+
+
+def _safe_float(value) -> float | None:
+    """安全转换为浮点数"""
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return None
+
+
+def _build_response_from_ai(ai_data: dict) -> PiContractUploadResponse:
+    """将AI返回的JSON转换为PiContractUploadResponse"""
+    items = []
+    for idx, item in enumerate(ai_data.get("items", [])):
+        items.append(PiContractItemRow(
+            row_index=idx + 1,
+            status="success",
+            error_msg=None,
+            internal_code=item.get("internal_code"),
+            quantity=_safe_float(item.get("quantity")),
+            unit_price=_safe_float(item.get("unit_price")),
+            total_amount=_safe_float(item.get("total_amount")),
+            product_color=item.get("product_color"),
+            hs_code=item.get("hs_code"),
+            customs_name=item.get("customs_name"),
+            customs_composition=item.get("customs_composition"),
+            order_customs_name=None,
+            notes=item.get("notes"),
+        ))
+
+    # 计算置信度（基于识别到的字段数）
+    fields = ["pi_no", "customer_code", "consignee_name", "destination", "price_term", "currency"]
+    recognized = sum(1 for f in fields if ai_data.get(f))
+    confidence = ConfidenceInfo(
+        recognized=recognized,
+        total=len(fields),
+        percentage=f"{recognized / len(fields) * 100:.0f}%",
+        failed_rows=0,
+    )
+
+    return PiContractUploadResponse(
+        pi_no=ai_data.get("pi_no") or "",
+        customer_code=ai_data.get("customer_code"),
+        sales_person=ai_data.get("sales_person"),
+        pi_date=ai_data.get("pi_date"),
+        is_ordered="0",
+        consignee_name=ai_data.get("consignee_name"),
+        consignee_address=ai_data.get("consignee_address"),
+        consignee_tel=ai_data.get("consignee_tel"),
+        destination=ai_data.get("destination"),
+        loading_port=ai_data.get("loading_port"),
+        price_term=ai_data.get("price_term"),
+        payment_terms=ai_data.get("payment_terms"),
+        invoice_to=ai_data.get("invoice_to"),
+        currency=ai_data.get("currency"),
+        items=items,
+        confidence=confidence,
+    )
+
+
+def _call_deepseek_api(rows: list[list[str]], filename: str) -> PiContractUploadResponse | None:
+    """
+    调用DeepSeek-V4-Flash API解析PI文件
+    返回解析结果或None（失败时）
+    """
+    from app.core.config import DEEPSEEK_API_KEY
+
+    if not DEEPSEEK_API_KEY:
+        print("[AI Parse] DEEPSEEK_API_KEY未配置，跳过AI解析")
+        return None
+
+    # 格式化Excel内容
+    content = _format_rows_for_ai(rows)
+
+    system_prompt = """你是一个PI(Proforma Invoice)合同解析专家。请从Excel内容中提取以下字段，返回JSON格式。
+
+字段列表：
+- pi_no: PI号/合同号（必须包含HT开头的编号）
+- customer_code: 客户编码
+- sales_person: 业务员
+- pi_date: 日期
+- consignee_name: 收货人名称
+- consignee_address: 收货人地址
+- consignee_tel: 收货人电话
+- destination: 目的港
+- loading_port: 装货港
+- price_term: 价格条款（FOB/CIF/CFR等）
+- payment_terms: 付款条款
+- currency: 币制（USD/CNY/RMB）
+- invoice_to: 发票抬头
+- items: 产品明细数组，每项包含：
+  - internal_code: 内部编码/产品代码
+  - quantity: 数量（数字）
+  - unit_price: 单价（数字）
+  - total_amount: 金额（数字）
+  - product_color: 产品颜色
+  - hs_code: 海关编码/H.S.Code
+  - customs_name: 报关品名/产品描述
+  - customs_composition: 报关成分
+  - notes: 备注
+
+JSON输出格式示例：
+{
+  "pi_no": "HT20260315A",
+  "customer_code": "TOA-DOVECHEM",
+  "sales_person": "张三",
+  "pi_date": "2026-03-15",
+  "consignee_name": "PT ABC Indonesia",
+  "consignee_address": "Jl. Sudirman No.123, Jakarta",
+  "consignee_tel": "+62-21-1234567",
+  "destination": "Jakarta, Indonesia",
+  "loading_port": "Shanghai",
+  "price_term": "CIF Jakarta",
+  "payment_terms": "T/T 30 days after B/L date",
+  "currency": "USD",
+  "invoice_to": "PT ABC Indonesia",
+  "items": [
+    {
+      "internal_code": "SILI-001",
+      "quantity": 2400,
+      "unit_price": 29.5,
+      "total_amount": 70800,
+      "product_color": "White",
+      "hs_code": "3402.90.99",
+      "customs_name": "FIXING HT-7212",
+      "customs_composition": "Active matter: 15%",
+      "notes": ""
+    }
+  ]
+}
+
+注意：
+1. 无法识别的字段填null
+2. 数值字段保持数字类型，不要加引号
+3. items数组包含所有产品明细行
+4. 如果有多个产品，全部放入items数组
+5. 严格按照上述JSON格式返回，不要添加额外文字"""
+
+    try:
+        from openai import OpenAI
+
+        client = OpenAI(
+            api_key=DEEPSEEK_API_KEY,
+            base_url="https://api.deepseek.com"
+        )
+
+        response = client.chat.completions.create(
+            model="deepseek-v4-flash",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"文件名: {filename}\n\nExcel内容:\n{content}"}
+            ],
+            max_tokens=4096,
+            response_format={'type': 'json_object'},
+            extra_body={"thinking": {"type": "disabled"}}
+        )
+
+        ai_content = response.choices[0].message.content
+
+        # 处理空响应
+        if not ai_content:
+            print("[AI Parse] AI返回空内容")
+            return None
+
+        # 解析JSON
+        ai_data = json.loads(ai_content)
+        return _build_response_from_ai(ai_data)
+
+    except Exception as e:
+        print(f"[AI Parse] DeepSeek API调用失败: {e}")
+        return None
+
+
 def _auto_parse_rows(rows: list[list[str]]) -> PiContractUploadResponse:
     """
     自动识别格式并解析：先尝试表格解析，失败则尝试 Proforma Invoice 格式。
@@ -1319,14 +1510,28 @@ def parse_file_path(file_path: str) -> PiContractUploadResponse:
 
 
 def parse_pi_bytes(content: bytes, filename: str) -> PiContractUploadResponse:
-    """直接从内存字节解析PI文件，支持 .xlsx / .xls / .pdf"""
+    """从内存字节解析PI文件，AI优先，Regex兜底，支持 .xlsx / .xls / .pdf"""
     ext = os.path.splitext(filename)[1].lower() if filename else ""
 
     if ext == ".xlsx":
         rows = _read_xlsx_bytes(content)
+        # 1. 尝试AI解析（主路径）
+        ai_result = _call_deepseek_api(rows, filename)
+        if ai_result:
+            print(f"[AI Parse] 成功解析PI: {ai_result.pi_no}, {len(ai_result.items)}个产品")
+            return ai_result
+        # 2. AI失败，fallback到Regex
+        print("[AI Parse] AI解析失败，使用Regex兜底")
         return _auto_parse_rows(rows)
     elif ext == ".xls":
         rows = _read_xls_bytes(content)
+        # 1. 尝试AI解析（主路径）
+        ai_result = _call_deepseek_api(rows, filename)
+        if ai_result:
+            print(f"[AI Parse] 成功解析PI: {ai_result.pi_no}, {len(ai_result.items)}个产品")
+            return ai_result
+        # 2. AI失败，fallback到Regex
+        print("[AI Parse] AI解析失败，使用Regex兜底")
         return _auto_parse_rows(rows)
     elif ext == ".pdf":
         text = _extract_text_from_pdf_bytes(content)

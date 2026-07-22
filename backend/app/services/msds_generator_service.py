@@ -513,50 +513,80 @@ class MSDSGeneratorService:
     def parse_components(self, components_str: str) -> list[dict]:
         """
         解析 components 字段，生成成分表格数据。
-        输入示例："柔软吸湿排汗整理剂9016-88-0：90％+水：10％"
+        支持多种格式：
+        - "成分名CAS号：含量%+成分名CAS号：含量%"（+ 分隔）
+        - "成分名 CAS号 35% 成分名 CAS号 35%"（空格分隔，2+空格分块）
+        - "成分名：CAS号：含量% 成分名：CAS号：含量%"（空格分隔）
         返回：[{"component_cn": "", "cas": "", "percentage": "", "verified": bool}, ...]
         """
         if not components_str:
             return []
 
-        results = []
-        # 按 + 拆分多个组分
-        parts = components_str.split("+")
+        # CAS pattern: 2-7 digits, dash, 1-2 digits, dash, 1-3 digits
+        cas_pattern = re.compile(r"(\d{2,7}-\d{1,2}-\d{1,3})")
+        # Percentage pattern: comma/semicolon before digits+percent
+        pct_pattern = re.compile(r"[,;]\s*(\d+(?:\.\d+)?)\s*[%％]")
+        # Fallback: digits immediately followed by %
+        pct_pattern2 = re.compile(r"(\d+(?:\.\d+)?)\s*[%％]")
 
-        for part in parts:
-            part = part.strip()
-            if not part:
+        # Step 1: Split into blocks
+        if "+" in components_str:
+            blocks = [b.strip() for b in components_str.split("+") if b.strip()]
+        else:
+            blocks = [b.strip() for b in re.split(r"\s{2,}", components_str) if b.strip()]
+
+        results = []
+
+        for block in blocks:
+            if not block:
                 continue
 
-            # 按 ：或 : 拆分成分名和含量
-            # 格式可能是 "成分名CAS号：含量%" 或 "成分名：含量%"
-            # CAS号格式：连续数字加连字符，如 9016-88-0
+            cas_matches = list(cas_pattern.finditer(block))
 
-            # 先尝试提取 CAS 号
-            cas_match = re.search(r"(\d{4,7}-\d{2}-\d)", part)
-            cas = ""
-            component_name = part
+            if cas_matches:
+                for i, m in enumerate(cas_matches):
+                    cas = m.group(1)
+                    cas_start = m.start()
+                    cas_end = m.end()
 
-            if cas_match:
-                cas = cas_match.group(1)
-                # 去掉 CAS 号部分，得到成分名
-                component_name = part[:cas_match.start()].strip()
+                    # Component name: text before this CAS (or after previous CAS)
+                    name_start = 0 if i == 0 else cas_matches[i - 1].end()
+                    name = block[name_start:cas_start]
+                    name = re.sub(r"[,;:]\s*$", "", name).strip()
+                    name = re.sub(r"^\s*[,;:]\s*", "", name).strip()
 
-            # 提取含量（最后一个出现的百分比）
-            pct_match = re.search(r"(\d+(?:\.\d+)?)\s*％", part)
-            percentage = ""
-            if pct_match:
-                percentage = pct_match.group(1) + "%"
+                    # Percentage: text after this CAS until next CAS or end
+                    after_cas = block[cas_end:]
+                    next_boundary = (
+                        cas_matches[i + 1].start() if i < len(cas_matches) - 1 else len(after_cas)
+                    )
+                    pct_segment = after_cas[:next_boundary]
+                    pct_match = pct_pattern.search(pct_segment) or pct_pattern2.search(pct_segment)
+                    percentage = (pct_match.group(1) + "%") if pct_match else ""
 
-            # 验证成分名是否在对照表中
-            verified = self._verify_ingredient(component_name)
+                    verified = self._verify_ingredient(name)
+                    results.append({
+                        "component_cn": name,
+                        "cas": cas,
+                        "percentage": percentage,
+                        "verified": verified,
+                    })
+            else:
+                # No CAS found — treat entire block as one component
+                pct_match = pct_pattern.search(block) or pct_pattern2.search(block)
+                percentage = (pct_match.group(1) + "%") if pct_match else ""
+                name = block
+                if pct_match:
+                    name = block[: pct_match.start()]
+                    name = re.sub(r"[,;:]\s*$", "", name).strip()
 
-            results.append({
-                "component_cn": component_name,
-                "cas": cas,
-                "percentage": percentage,
-                "verified": verified,
-            })
+                verified = self._verify_ingredient(name)
+                results.append({
+                    "component_cn": name,
+                    "cas": "",
+                    "percentage": percentage,
+                    "verified": verified,
+                })
 
         return results
 

@@ -554,77 +554,79 @@ async function importAllFormulas() {
 
 function parseIngredients(ingredients: string): any[] {
   if (!ingredients) return []
-  
-  const result = []
-  
-  // Format 1: "成分名：CAS号，含量%" (space separated)
-  // Format 2: "成分名CAS号：含量%" (+ separated)
-  // First try space-separated format (more common)
-  const spaceParts = ingredients.split(/\s+/).filter(p => p.trim())
-  
-  // Check if it's space-separated with colons
-  if (ingredients.includes('：') && spaceParts.length > 1) {
-    // Space-separated format: "十二烷基苯磺酸钠：25155-30-0，40%"
-    for (const part of spaceParts) {
-      const trimmed = part.trim()
-      if (!trimmed || trimmed === '+') continue
-      
-      // Extract CAS number
-      const casMatch = trimmed.match(/(\d{2,7}-\d{1,2}-\d{1,2})/)
-      const cas = casMatch ? casMatch[1] : ''
-      
-      // Extract percentage (Chinese comma, regular comma, or semicolon)
-      const pctMatch = trimmed.match(/[，;,；]\s*(\d+(?:\.\d+)?)\s*[％%]/)
-      const percentage = pctMatch ? pctMatch[1] + '%' : ''
-      
-      // Extract component name (before colon)
-      let componentName = trimmed
-      const colonIdx = trimmed.indexOf('：')
-      if (colonIdx > 0) {
-        componentName = trimmed.substring(0, colonIdx).trim()
-      }
-      
-      if (componentName) {
-        result.push({
-          component_cn: componentName,
-          component_en: '',
-          cas: cas,
-          percentage: percentage,
-        })
-      }
-    }
+
+  const result: any[] = []
+
+  // Normalize Chinese punctuation
+  const normalized = ingredients
+    .replace(/，/g, ',')
+    .replace(/；/g, ';')
+    .replace(/：/g, ':')
+
+  // Step 1: Split into component blocks — by '+' first, then by 2+ spaces
+  let blocks: string[]
+  if (normalized.includes('+')) {
+    blocks = normalized.split('+').map(b => b.trim()).filter(Boolean)
   } else {
-    // Plus-separated format: "成分名CAS号：含量%+成分名CAS号：含量%"
-    const parts = ingredients.split('+')
-    for (const part of parts) {
-      const trimmed = part.trim()
-      if (!trimmed) continue
-      
-      const casMatch = trimmed.match(/(\d{2,7}-\d{1,2}-\d{1,2})/)
-      const cas = casMatch ? casMatch[1] : ''
-      
-      const pctMatch = trimmed.match(/(\d+(?:\.\d+)?)\s*[％%]/)
-      const percentage = pctMatch ? pctMatch[1] + '%' : ''
-      
-      let componentName = trimmed
-      if (casMatch) {
-        componentName = trimmed.substring(0, casMatch.index!).trim()
-      } else if (pctMatch) {
-        componentName = trimmed.substring(0, pctMatch.index!).trim()
+    // No '+' → split by 2+ consecutive spaces (single spaces are part of "Name CAS Pct")
+    blocks = normalized.split(/\s{2,}/).map(b => b.trim()).filter(Boolean)
+  }
+
+  // Step 2: For each block, extract Name / CAS / Percentage
+  // CAS pattern: 2-7 digits, dash, 1-2 digits, dash, 1-3 digits
+  const CAS_RE = /(\d{2,7}-\d{1,2}-\d{1,3})/
+  // Percentage pattern: optional comma/semicolon before digits+percent
+  const PCT_RE = /[,;]\s*(\d+(?:\.\d+)?)\s*%/
+  // Fallback percentage: digits immediately followed by % (no preceding separator)
+  const PCT_RE2 = /(\d+(?:\.\d+)?)\s*%/
+
+  for (const block of blocks) {
+    if (!block) continue
+
+    // Try to find all CAS occurrences — each CAS belongs to one component
+    const casMatches = [...block.matchAll(new RegExp(CAS_RE.source, 'g'))]
+
+    if (casMatches.length > 0) {
+      // Multiple components in one block separated by CAS numbers
+      for (let i = 0; i < casMatches.length; i++) {
+        const cas = casMatches[i][1]
+        const casStart = casMatches[i].index!
+        const casEnd = casStart + cas.length
+
+        // Component name: text before this CAS (or after previous CAS)
+        const nameStart = i === 0 ? 0 : casMatches[i - 1].index! + casMatches[i - 1][0].length
+        let name = block.substring(nameStart, casStart)
+          .replace(/[,;:]\s*$/, '')  // trim trailing separators
+          .trim()
+
+        // Percentage: text after this CAS until next CAS or end
+        const afterCas = block.substring(casEnd)
+        const nextBoundary = i < casMatches.length - 1 ? casMatches[i + 1].index! : afterCas.length
+        const pctSegment = afterCas.substring(0, nextBoundary)
+        const pctMatch = pctSegment.match(PCT_RE) || pctSegment.match(PCT_RE2)
+        const percentage = pctMatch ? pctMatch[1] + '%' : ''
+
+        // Clean component name: remove leading separators
+        name = name.replace(/^\s*[,;:]\s*/, '').trim()
+
+        if (name || cas) {
+          result.push({ component_cn: name, component_en: '', cas, percentage })
+        }
       }
-      componentName = componentName.replace(/[：:]\s*$/, '').trim()
-      
-      if (componentName) {
-        result.push({
-          component_cn: componentName,
-          component_en: '',
-          cas: cas,
-          percentage: percentage,
-        })
+    } else {
+      // No CAS found — treat entire block as one component (name + percentage only)
+      const pctMatch = block.match(PCT_RE) || block.match(PCT_RE2)
+      const percentage = pctMatch ? pctMatch[1] + '%' : ''
+      let name = block
+      if (pctMatch) {
+        name = block.substring(0, pctMatch.index).replace(/[,;:]\s*$/, '').trim()
+      }
+      if (name || percentage) {
+        result.push({ component_cn: name, component_en: '', cas: '', percentage })
       }
     }
   }
-  
+
   return result
 }
 

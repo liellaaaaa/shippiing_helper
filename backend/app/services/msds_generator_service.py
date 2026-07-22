@@ -610,6 +610,21 @@ class MSDSGeneratorService:
                     if en_names:
                         return en_names[0]
 
+        # 4. Space-normalized match: remove all spaces and compare
+        ingredient_no_space = ingredient_cn.replace(" ", "").replace("\u3000", "")
+        for item in self._ingredient_map:
+            for cn_name in item.get("cn_names", []):
+                cn_name_no_space = cn_name.replace(" ", "").replace("\u3000", "")
+                if ingredient_no_space == cn_name_no_space:
+                    en_names = item.get("en_names", [])
+                    if en_names:
+                        return en_names[0]
+                # Also check substring after removing spaces
+                if ingredient_no_space in cn_name_no_space or cn_name_no_space in ingredient_no_space:
+                    en_names = item.get("en_names", [])
+                    if en_names:
+                        return en_names[0]
+
         return None
 
     def translate_appearance(self, appearance_cn: str) -> Optional[str]:

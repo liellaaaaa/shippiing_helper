@@ -157,6 +157,64 @@ def _to_invoice_no(contract_no: str) -> str:
     return "IN" + contract_no
 
 
+def _amount_to_chinese_upper(amount: float) -> str:
+    """将金额转换为中文大写（元整）。
+    例: 49720 → '肆万玖仟柒佰贰拾元整'
+    """
+    digits = "零壹贰叁肆伍陆柒捌玖"
+    units = ["", "拾", "佰", "仟"]
+    big_units = ["", "万", "亿"]
+
+    if amount == 0:
+        return "零元整"
+
+    amount = round(amount, 2)
+    int_part = int(amount)
+    dec_part = round((amount - int_part) * 100)
+
+    if int_part > 0:
+        int_str = str(int_part)
+        length = len(int_str)
+        result = ""
+        prev_zero = False
+
+        for i, ch in enumerate(int_str):
+            digit = int(ch)
+            pos = length - 1 - i
+            big_unit_idx = pos // 4
+            unit_idx = pos % 4
+
+            if digit != 0:
+                if prev_zero:
+                    result += "零"
+                result += digits[digit] + units[unit_idx]
+                prev_zero = False
+            else:
+                prev_zero = True
+
+            if unit_idx == 0 and big_unit_idx > 0:
+                result = result.rstrip("零")
+                result += big_units[big_unit_idx]
+                prev_zero = False
+
+        result = result.rstrip("零")
+        result += "元"
+    else:
+        result = "零元"
+
+    if dec_part > 0:
+        jiao = dec_part // 10
+        fen = dec_part % 10
+        if jiao > 0:
+            result += digits[jiao] + "角"
+        if fen > 0:
+            result += digits[fen] + "分"
+    else:
+        result += "整"
+
+    return result
+
+
 class DocumentService:
     def __init__(self):
         self.msds_service = MSDSService()
@@ -627,6 +685,7 @@ class DocumentService:
                         price_term=first.price_term,
                         payment_terms=first.payment_terms,
                         pi_date=first.pi_date,
+                        currency=first.currency,
                         items=[
                             LedgerItemSchema(
                                 internal_code=r.internal_code,
@@ -833,7 +892,7 @@ class DocumentService:
                 ws.cell(helper_row, 22, pc)               # V: 件数
 
         # ══════════════════════════════════════════════════════════════
-        # Sheet 2: 发票 — 填充所有产品行（公式只覆盖第1行，其余需手动填）
+        # Sheet 2: 发票 — 填充所有产品行
         # ══════════════════════════════════════════════════════════════
         ws = ws_invoice
         # 发票号：去掉合同号的字母前缀（HT/HH/HTPK等），换成 IN
@@ -845,8 +904,7 @@ class DocumentService:
         # G6 成交方式由公式 =报关单!V4 自动填充
         # 币制显示：USD → USD，CNY/RMB → 人民币
         currency_label = "人民币" if currency in ("CNY", "RMB", None) else currency
-        # 填充所有产品行（行8开始，每品1行）
-        # 注意：箱单公式引用 发票!D11/D12/D13（产品2/3/4），需要写到正确行
+        # 填充所有产品行（行8开始，每品1行，完整填充所有列）
         total_amt_inv = 0
         for idx, item in enumerate(items):
             r = 8 + idx
@@ -854,22 +912,22 @@ class DocumentService:
                 break
             ws.cell(r, 1).value = "N/M"                       # A: 唛头
             ws.cell(r, 3).value = item.customs_name or ""     # C: 货物名称
+            ws.cell(r, 4).value = item.quantity_kg or 0       # D: 数量
             ws.cell(r, 5).value = "千克"                      # E: 单位
             ws.cell(r, 6).value = round(item.unit_price or 0, 2)  # F: 单价
             ws.cell(r, 7).value = currency_label              # G: 币制
             amt = round(item.total_amount or 0, 2)
             ws.cell(r, 8).value = amt                         # H: 总金额
             total_amt_inv += amt
-        # 箱单公式引用 发票!D11/D12/D13（偏移+3行），单独写入
-        for idx, item in enumerate(items):
-            if idx == 0:
-                continue  # 产品1由箱单直接引用
-            inv_row = 11 + (idx - 1)  # D11, D12, D13...
-            if inv_row <= 23:
-                ws.cell(inv_row, 4).value = item.quantity_kg or 0  # D: 数量
-        # 汇总行
-        ws["G24"].value = currency_label
-        ws["H24"].value = round(total_amt_inv, 2)
+        # 汇总行：直接写值（不依赖公式，避免缓存值问题）
+        total_words = _amount_to_chinese_upper(total_amt_inv)
+        ws["C24"].value = total_words                         # C: 中文大写金额
+        ws["G24"].value = currency_label                      # G: 币制
+        ws["H24"].value = round(total_amt_inv, 2)             # H: 数字金额
+        # 备用：替换模板占位符
+        replace_placeholder(ws, "{{TOTAL_AMOUNT_WORDS}}", total_words)
+        replace_placeholder(ws, "{{TOTAL_AMOUNT}}", round(total_amt_inv, 2))
+        replace_placeholder(ws, "{{CURRENCY}}", currency_label)
 
         # ── T/U/V 辅助列：供箱单公式引用 ──
         # 箱单公式: OFFSET(报关单!$V$1, ROW(报关单!V{N})*3+16, 0)
@@ -890,43 +948,66 @@ class DocumentService:
             ws.cell(helper_row, 22).value = pc               # V: 件数
 
         # ══════════════════════════════════════════════════════════════
-        # Sheet 3: 箱单 — 填充第1行产品的件数/数量/单位
-        # （产品2+ 通过公式引用报关单 T/U/V 辅助列）
+        # Sheet 3: 箱单 — 填充所有产品行
         # ══════════════════════════════════════════════════════════════
         ws = ws_packing
-        if items:
-            first = items[0]
-            first_pc = first.pallet_count or first.drum_count or 0
-            first_qty = first.quantity_kg or 0
-            first_gw = first.gross_weight_kg or 0
-            first_nw = first.quantity_kg or first.net_weight_kg or 0
-            # 件数单位：有托盘用"托"，否则用"桶"
-            first_unit = "托" if first.pallet_count else "桶"
-            # 填充第1行产品的所有列（覆盖模板中的公式和硬编码值）
-            ws.cell(10, 3).value = first_pc                     # C10: 件数
-            ws.cell(10, 4).value = first_unit                   # D10: 件数单位
-            ws.cell(10, 5).value = first_qty                    # E10: 数量
-            ws.cell(10, 6).value = "千克"                       # F10: 数量单位
-            ws.cell(10, 7).value = round(first_gw, 1)           # G10: 毛重
-            ws.cell(10, 8).value = round(first_nw, 1)           # H10: 净重
-            # 清除空行（行11-12是模板空行，不需要）
-            for r in range(11, 13):
-                for c in range(1, 9):
-                    ws.cell(r, c).value = None
+        # 先清除所有数据行（包括模板残留的公式和空行）
+        for r in range(10, 26):
+            for c in range(1, 9):
+                ws.cell(r, c).value = None
+        # 行7：船名/目的地 — C7 显示 "广州 至 {destination}"
+        if dest_raw:
+            ws.cell(7, 3).value = f"广州  至  {dest_raw}"    # C7: 船名+目的地
+        # 填充产品数据
+        for idx, item in enumerate(items):
+            if idx == 0:
+                # 产品1: 行10
+                r = 10
+            else:
+                # 产品2+: 行11, 12, 13, ...
+                r = 10 + idx
+            if r > 25:
+                break
+            pc = item.pallet_count or item.drum_count or 0
+            qty = item.quantity_kg or 0
+            gw = item.gross_weight_kg or 0
+            nw = item.quantity_kg or item.net_weight_kg or 0
+            unit = "托" if item.pallet_count else "桶"
+            qty_unit = "千克"
+            ws.cell(r, 1).value = "N/M" if idx == 0 else None   # A: 箱号（仅第1行）
+            ws.cell(r, 2).value = item.customs_name or ""       # B: 货物名称
+            ws.cell(r, 3).value = pc                            # C: 件数
+            ws.cell(r, 4).value = unit                          # D: 件数单位
+            ws.cell(r, 5).value = qty                           # E: 数量
+            ws.cell(r, 6).value = qty_unit                      # F: 数量单位
+            ws.cell(r, 7).value = round(gw, 1) if gw else None  # G: 毛重
+            ws.cell(r, 8).value = round(nw, 1) if nw else None  # H: 净重
 
         # ══════════════════════════════════════════════════════════════
         # Sheet 4: 合同 — 填充占位符 + 无公式的独立单元格
         # （产品数据通过公式引用发票，无需手动填充）
         # ══════════════════════════════════════════════════════════════
         ws = ws_contract
+        # 卖方名称（C2 已有公式 =报关单!A4，无需额外填充）
+        # 买方名称（C8 已有公式 =报关单!A6，无需额外填充）
         if consignee_addr:
             replace_placeholder(ws, "{{CONSIGNEE_ADDR}}", consignee_addr)
+            replace_placeholder(ws, "{{BUYER_ADDR}}", consignee_addr)
         # 固定值：G10 肇庆（模板中已预填，保持不变）
+        # 成交方式：从PI数据填充（CIF/EXW/FOB/C&F等）
         replace_placeholder(ws, "{{PRICE_TERM}}", price_term)
         replace_placeholder(ws, "{{DEST_PORT}}", dest_port)
         replace_placeholder(ws, "{{PRICE_TERM_V4}}", price_term)
+        # 日期：使用 PI 日期
         if pi_date:
-            ws["C37"] = _parse_date(pi_date)
+            ws["G7"] = _parse_date(pi_date)
+        # (9)装运口岸和目的地：广州---{destination}
+        if dest_raw:
+            ws["B39"] = f"(9)装运口岸和目的地           广州---{dest_raw}"
+        # 合同总值大写
+        total_amt_contract = sum(round(it.total_amount or 0, 2) for it in items)
+        if total_amt_contract > 0:
+            ws["D33"] = _amount_to_chinese_upper(total_amt_contract)
 
         # ══════════════════════════════════════════════════════════════
         # Sheet 5: 委托书 — 填充货物名称和HS编码（去重拼接）

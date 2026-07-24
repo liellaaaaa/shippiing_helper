@@ -9,7 +9,7 @@ class DocumentTemplate(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(100), nullable=False)
-    type = Column(String(20), nullable=False)  # booking|loi|msds
+    type = Column(String(20), nullable=False)  # booking|msds
     file_path = Column(String(500), nullable=False)
     placeholders = Column(JSON, default=list)
     version = Column(Integer, default=1)

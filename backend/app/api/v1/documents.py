@@ -103,22 +103,6 @@ async def generate_booking(fields: BookingFields = Body(...)):
     }
 
 
-@router.get("/loi")
-async def generate_loi(order_no: str = Query(...), pi_no: str = Query(...)):
-    svc = DocumentService()
-    content, doc_key, _ = svc.generate_loi(order_no, pi_no)
-    token, config, safe_key = oo_svc.create_config(doc_key, "docx")
-    _save_doc_to_db(doc_key, "loi", content, storage_key=safe_key)
-    api_base = os.getenv("API_BASE_URL", "http://localhost:8000")
-    callback_base = os.getenv("ONLYOFFICE_CALLBACK_BASE_URL", "http://host.docker.internal:8000")
-    return {
-        **config,
-        "url": f"{callback_base}/api/v1/onlyoffice/download/{safe_key}",
-        "downloadUrl": f"{api_base}/api/v1/onlyoffice/download/{safe_key}",
-        "callbackUrl": f"{callback_base}/api/v1/onlyoffice/callback?doc_key={safe_key}",
-    }
-
-
 @router.get("/msds")
 async def generate_msds(product: str = Query(...)):
     svc = DocumentService()
@@ -207,7 +191,7 @@ async def get_doc_history(order_id: int):
 
 @router.get("/template/{template_type}")
 async def open_blank_template(template_type: str):
-    if template_type not in ("booking", "loi", "msds"):
+    if template_type not in ("booking", "msds"):
         return {"error": "Invalid template type"}
     svc = DocumentService()
     try:

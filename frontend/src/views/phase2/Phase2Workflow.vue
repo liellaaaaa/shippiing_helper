@@ -37,15 +37,6 @@
             订舱单
           </el-button>
           <el-button
-            type="primary"
-            size="small"
-            :disabled="!selectedOrderId && !selectedLedgerId"
-            v-track="{ event: 'generate_document', module: 'phase2', detail: { doc_type: 'loi' } }"
-            @click="openDocument('loi')"
-          >
-            LOI保函
-          </el-button>
-          <el-button
             size="small"
             v-track="{ event: 'generate_document', module: 'phase2', detail: { doc_type: 'msds' } }"
             @click="showMsdsDialog = true"
@@ -60,7 +51,7 @@
           >
             报关资料
           </el-button>
-          <el-dropdown @command="(cmd: 'booking' | 'loi' | 'msds') => openBlankTemplate(cmd)" trigger="click">
+          <el-dropdown @command="(cmd: 'booking' | 'msds') => openBlankTemplate(cmd)" trigger="click">
             <el-button size="small">
               空白模板
               <el-icon class="el-icon--right"><arrow-down /></el-icon>
@@ -68,7 +59,6 @@
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item command="booking">订舱单 Booking</el-dropdown-item>
-                <el-dropdown-item command="loi">LOI保函</el-dropdown-item>
                 <el-dropdown-item command="msds">MSDS物质安全表</el-dropdown-item>
               </el-dropdown-menu>
             </template>
@@ -495,17 +485,6 @@ async function onOrderChange(orderId: number): Promise<void> {
   }
 }
 
-async function openDocument(type: 'booking' | 'loi') {
-  if (type === 'booking') return
-  try {
-    const res = await phase2Api.generateLoi(currentOrderInfo.value.order_no, selectedPiNo.value)
-    currentDocKey.value = res.data.documentKey || res.data.docKey
-    currentConfig.value = res.data
-  } catch (e: any) {
-    ElMessage.error('文档生成失败，请稍后重试')
-  }
-}
-
 async function openCustomsDocument() {
   if (!selectedLedgerId.value) {
     ElMessage.warning('请先从台账列表选择一条记录')
@@ -557,7 +536,7 @@ function onMsdsGenerated(config: any) {
   currentConfig.value = config
 }
 
-async function openBlankTemplate(type: 'booking' | 'loi' | 'msds') {
+async function openBlankTemplate(type: 'booking' | 'msds') {
   try {
     const res = await phase2Api.openBlankTemplate(type)
     currentDocKey.value = res.data.documentKey || res.data.docKey

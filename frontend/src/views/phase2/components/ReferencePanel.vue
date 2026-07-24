@@ -160,7 +160,6 @@
         <span>模板字段参考</span>
         <el-select v-model="selectedTemplateType" size="small" class="template-type-select">
           <el-option label="订舱单" value="booking" />
-          <el-option label="LOI保函" value="loi" />
           <el-option label="MSDS" value="msds" />
         </el-select>
       </div>

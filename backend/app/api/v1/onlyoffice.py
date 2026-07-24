@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 def infer_doc_type(doc_key: str) -> str:
     if doc_key.startswith("booking"): return "booking"
-    if doc_key.startswith("loi"): return "loi"
     return "msds"
 
 

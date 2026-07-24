@@ -10,7 +10,6 @@ TEMPLATES = {
     "booking_xlsx": str(ROOT / "references" / "长晟出口海运BOOKING模板.xlsx"),
     "booking_marked": str(ROOT / "references" / "长晟出口海运BOOKING模板-已标记.xlsx"),
     "booking_multi": str(ROOT / "references" / "长晟出口海运BOOKING模板-已标记.xlsx"),
-    "loi":     str(ROOT / "references" / "LOI-op-非危险品保函模板.docx"),
     "msds":    str(ROOT / "references" / "cnMSDS.docx"),
     "msds_en": str(ROOT / "references" / "enMSDS.docx"),
     "customs": str(ROOT / "references" / "出口报关资料-模板.xlsx"),

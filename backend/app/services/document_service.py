@@ -328,80 +328,6 @@ class DocumentService:
         doc_key = f"booking_{int(time.time())}"
         return content_xlsx, doc_key, base64.b64encode(content_xlsx).decode()
 
-    def generate_loi(self, order_no: str, pi_no: str) -> Tuple[bytes, str, str]:
-        """生成 LOI 保函：5 个字段来自运输鉴定报告 + 申报要素"""
-        from app.models.transport_report import TransportReport
-        from app.services.customs_declaration_service import CustomsDeclarationService
-
-        template_path = TEMPLATES["loi"]
-        if not os.path.exists(template_path):
-            raise FileNotFoundError(f"LOI template not found: {template_path}")
-        db = SessionLocal()
-        try:
-            records = db.query(OrderPiRecord).filter(OrderPiRecord.order_no == order_no).all()
-            if not records:
-                raise ValueError(f"Order not found: {order_no}")
-
-            first = records[0]
-            product_cn = first.product_cn or ""
-
-            # 从所有产品中找第一个非空 HS Code（LOI 是整单文档）
-            hs_code = ""
-            for r in records:
-                if r.hs_code:
-                    hs_code = r.hs_code
-                    break
-
-            # 1. 从运输鉴定报告获取前 4 个字段
-            transport_fields = {}
-            if product_cn:
-                # 模糊匹配运输鉴定报告（取最匹配的一条）
-                report = db.query(TransportReport).filter(
-                    TransportReport.product_name_cn.ilike(f"%{product_cn}%")
-                ).first()
-                if report:
-                    transport_fields = {
-                        "report_no": report.report_no or "",
-                        "product_name_en": report.product_name_en or "",
-                        "sample_desc_cn": report.sample_desc_cn or "",
-                        "product_name_cn": report.product_name_cn or product_cn,
-                    }
-
-            # 2. 从申报要素获取产品用途
-            product_usage = ""
-            if hs_code:
-                decl_svc = CustomsDeclarationService.get_instance()
-                elements_str = decl_svc.get_elements_str(hs_code, product_cn)
-                # 从字符串中提取"用途：xxx"
-                import re
-                usage_match = re.search(r'用途：([^|]+)', elements_str)
-                if usage_match:
-                    product_usage = usage_match.group(1).strip()
-
-            # 3. 填充模板
-            doc = Document(template_path)
-            replacements = {
-                "{{product_name_cn}}": transport_fields.get("product_name_cn", product_cn),
-                "{{product_name_en}}": transport_fields.get("product_name_en", ""),
-                "{{report_no}}": transport_fields.get("report_no", ""),
-                "{{sample_desc}}": transport_fields.get("sample_desc_cn", ""),
-                "{{product_usage}}": product_usage,
-                "{{date}}": time.strftime("%Y 年 %m 月 %d 日"),
-            }
-            for para in doc.paragraphs:
-                for key, val in replacements.items():
-                    if key in para.text:
-                        for run in para.runs:
-                            if key in run.text:
-                                run.text = run.text.replace(key, val)
-            buf = BytesIO()
-            doc.save(buf)
-            content = buf.getvalue()
-        finally:
-            db.close()
-        doc_key = f"loi_{first.id}_{int(time.time())}"
-        return content, doc_key, base64.b64encode(content).decode()
-
     def generate_msds(self, product_name: str) -> Tuple[bytes, str, str]:
         template_path = TEMPLATES["msds"]
         db = SessionLocal()
@@ -1031,7 +957,6 @@ class DocumentService:
         """加载空白模板（不填充 marker），返回 (content, doc_key, encoded_content)。"""
         type_map = {
             "booking": ("booking", "xlsx"),
-            "loi":     ("loi",     "docx"),
             "msds":    ("msds",    "docx"),
         }
         if template_type not in type_map:

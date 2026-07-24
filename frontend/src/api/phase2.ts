@@ -19,9 +19,6 @@ export const phase2Api = {
   }) {
     return apiClient.post('/documents/booking', fields)
   },
-  generateLoi(orderNo: string, piNo: string) {
-    return apiClient.get('/documents/loi', { params: { order_no: orderNo, pi_no: piNo } })
-  },
   generateMsds(product: string) {
     return apiClient.get('/documents/msds', { params: { product } })
   },
@@ -56,7 +53,7 @@ export const phase2Api = {
   getJwt(documentKey: string, fileType: string) {
     return apiClient.post('/onlyoffice/jwt', null, { params: { documentKey, fileType } })
   },
-  openBlankTemplate(type: 'booking' | 'loi' | 'msds') {
+  openBlankTemplate(type: 'booking' | 'msds') {
     return apiClient.get(`/documents/template/${type}`)
   },
   listMyTemplates() {

@@ -82,7 +82,6 @@
 | DELETE | `/api/v1/dashboard/records/{record_id}` | 删除订单 |
 | **文档生成** | | |
 | POST | `/api/v1/documents/booking` | 生成订舱单 |
-| GET | `/api/v1/documents/loi` | 生成 LOI |
 | GET | `/api/v1/documents/msds` | 生成 MSDS |
 | GET | `/api/v1/documents/msds/{msds_id}` | 加载指定 MSDS 文件 |
 | GET | `/api/v1/documents/customs` | 生成出口报关资料 |
@@ -449,10 +448,6 @@ Phase 1 核心落库接口。接收订单+PI+包装数据，写入 `order_pi_rec
 }
 ```
 
-### GET `/api/v1/documents/loi`
-
-生成 LOI。参数：`order_no`, `pi_no`。
-
 ### GET `/api/v1/documents/msds`
 
 生成 MSDS。参数：`product`。
@@ -463,7 +458,7 @@ Phase 1 核心落库接口。接收订单+PI+包装数据，写入 `order_pi_rec
 
 ### GET `/api/v1/documents/template/{template_type}
 
-打开空白模板。`template_type`: `booking` / `loi` / `msds`。
+打开空白模板。`template_type`: `booking` / `msds`。
 
 ### GET `/api/v1/documents/my-templates`
 
@@ -599,7 +594,7 @@ OnlyOffice Document Server 保存文档时的回调接口。
 |------|------|------|
 | id | INTEGER | 主键 |
 | doc_key | TEXT | 文档键 |
-| doc_type | TEXT | booking / loi / msds / customs |
+| doc_type | TEXT | booking / msds / customs |
 | order_id | INTEGER | 关联订单 ID |
 | file_blob | TEXT | Base64 编码的文件内容 |
 | content_hash | TEXT | MD5 哈希（用于去重） |

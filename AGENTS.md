@@ -13,7 +13,7 @@ ShippingHelper is a shipping efficiency tool for the shipping department. It was
 **Legacy Reference**: The `参考/` folder contains the mature PyQt5 implementation that should be referenced for business logic:
 - `参考/core/` - Core business logic (order_parser, pi_extractor, package_calculator, etc.)
 - `参考/knowledge/` - Product knowledge and packaging data (JSON)
-- `参考/phase2/` - Phase 2 document generation (booking, LOI, MSDS)
+- `参考/phase2/` - Phase 2 document generation (booking, MSDS)
 
 ---
 
@@ -218,7 +218,7 @@ The `参考/` folder contains the Python implementation that should inform imple
 **Phase 2** (Document Generation):
 1. ~~Shipment data management~~ ✅
 2. ~~Template management~~ ✅
-3. ~~Document generation (Booking, MSDS, LOI via OnlyOffice)~~ ✅
+3. ~~Document generation (Booking, MSDS via OnlyOffice)~~ ✅
 4. ~~Data display (left dashboard, right editor)~~ ✅
 5. ~~Blank template and My Templates support~~ ✅
 
@@ -228,7 +228,7 @@ The `参考/` folder contains the Python implementation that should inform imple
 
 1. **OnlyOffice Integration**: All Excel and Word documents use OnlyOffice. Document Server URL configured via environment variable.
 
-2. **Frontend Component Reuse**: A single shared `OnlyOfficeEditor.vue` component must be used for ALL document types (Booking, MSDS, LOI). Do NOT create separate editor components per page. The component accepts `config`, `documentServerUrl`, and `events` as props.
+2. **Frontend Component Reuse**: A single shared `OnlyOfficeEditor.vue` component must be used for ALL document types (Booking, MSDS). Do NOT create separate editor components per page. The component accepts `config`, `documentServerUrl`, and `events` as props.
 
 3. **Internal Code Location**: `internal_code` is stored ONLY in `order_items` (product-level). The `orders` table does NOT contain `internal_code`.
 
@@ -306,7 +306,7 @@ docker run -d -p 8080:80 onlyoffice/documentserver
 | Module | Status | Notes |
 |--------|--------|-------|
 | Phase 2 API routes | ✅ done | All endpoints registered in main.py |
-| OnlyOfficeService | ✅ done | Document generation (Booking/LOI/MSDS), marker-based filling |
+| OnlyOfficeService | ✅ done | Document generation (Booking/MSDS), marker-based filling |
 | DocumentService | ✅ done | Template copying, BLOB storage, version management |
 | ShipmentDoc model | ✅ done | Document version storage with content_hash idempotency |
 | ExportCodesService | ✅ done | HS code lookup service |

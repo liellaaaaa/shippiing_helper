@@ -13,7 +13,7 @@ ShippingHelper 是一款外贸船务效率工具。
 **旧版参考**：`参考/` 文件夹包含旧版 PyQt5 实现，业务逻辑以此为准：
 - `参考/core/` - 核心业务逻辑（order_parser, pi_extractor, package_calculator 等）
 - `参考/knowledge/` - 产品知识和包装数据（JSON）
-- `参考/phase2/` - Phase 2 单证生成（booking, LOI, MSDS）
+- `参考/phase2/` - Phase 2 单证生成（booking, MSDS）
 
 ---
 
@@ -118,7 +118,7 @@ shipping_helper/
 │       │   │   ├── packages.py   # GET /api/v1/packages/calculate (sea/air/land)
 │       │   │   ├── packaging.py  # POST /api/v1/packaging/calculate, /calculate-schemes
 │       │   │   ├── dashboard.py  # GET /api/v1/dashboard/orders, POST /records
-│       │   │   ├── documents.py  # POST /api/v1/documents/booking, /loi, /msds, /customs
+│       │   │   ├── documents.py  # POST /api/v1/documents/booking, /msds, /customs
 │       │   │   ├── onlyoffice.py # POST /api/v1/onlyoffice/callback, GET /download
 │       │   │   ├── msds.py       # GET /api/v1/msds/, /content, /reindex
 │       │   │   ├── transport.py  # POST /api/v1/transport/upload (PDF)
@@ -288,7 +288,6 @@ shipping_helper/
 
 ### 文档生成
 - `POST /api/v1/documents/booking` — 生成订舱单
-- `GET /api/v1/documents/loi` — 生成 LOI
 - `GET /api/v1/documents/msds` — 生成 MSDS
 - `GET /api/v1/documents/customs` — 生成报关资料
 - `GET /api/v1/documents/template/{type}` — 空白模板
@@ -349,7 +348,7 @@ shipping_helper/
 **Phase 2**（单证生成）：
 1. ~~船务数据管理~~ ✅
 2. ~~模板管理~~ ✅
-3. ~~单证生成（Booking, MSDS, LOI via OnlyOffice）~~ ✅
+3. ~~单证生成（Booking, MSDS via OnlyOffice）~~ ✅
 4. ~~数据展示（左侧看板、右侧编辑器）~~ ✅
 5. ~~空白模板和我的模板支持~~ ✅
 6. ~~数据中心（MSDS 搜索、运输鉴定报告）~~ ✅
@@ -364,7 +363,7 @@ shipping_helper/
 
 1. **OnlyOffice 集成**：所有 Excel 和 Word 文档使用 OnlyOffice。Document Server URL 通过环境变量配置。
 
-2. **前端组件复用**：所有文档类型（Booking, MSDS, LOI）共用一个 `OnlyOfficeEditor.vue` 组件，不应为每种页面创建单独的编辑器组件。组件接收 `config`、`documentServerUrl`、`events` 作为 props。
+2. **前端组件复用**：所有文档类型（Booking, MSDS）共用一个 `OnlyOfficeEditor.vue` 组件，不应为每种页面创建单独的编辑器组件。组件接收 `config`、`documentServerUrl`、`events` 作为 props。
 
 3. **Internal Code 位置**：`internal_code` 仅存储在 `order_items`（产品级），`orders` 表不包含此字段。
 
@@ -494,7 +493,7 @@ docker run -d -p 8080:80 onlyoffice/documentserver
 |------|------|------|
 | JWT 登录认证 | ✅ 完成 | AuthService、登录页面、路由守卫、Axios 拦截器 |
 | Phase 2 API 路由 | ✅ 完成 | 所有端点已在 main.py 注册 |
-| OnlyOfficeService | ✅ 完成 | 单证生成（Booking/LOI/MSDS）、基于标记填充 |
+| OnlyOfficeService | ✅ 完成 | 单证生成（Booking/MSDS）、基于标记填充 |
 | DocumentService | ✅ 完成 | 模板复制、BLOB 存储、版本管理 |
 | ShipmentDoc 模型 | ✅ 完成 | 文档版本存储（含 content_hash 去重） |
 | ExportCodesService | ✅ 完成 | HS code 查询服务 |

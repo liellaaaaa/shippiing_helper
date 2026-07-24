@@ -56,10 +56,6 @@
             @parse="handlePiContractParse"
             @clear="piContractText = ''; piContractParsed = false; piContractOrders = []"
           />
-          <div v-if="piContractOrders.length > 0" class="parse-summary">
-            <span>订单号：{{ piContractOrders[0]?.order_no }}</span>
-            <span>，产品 {{ piContractOrders[0]?.items?.length || 0 }} 种</span>
-          </div>
         </el-card>
       </div>
 
@@ -77,10 +73,6 @@
             @parse="handleSalesOrderParse"
             @clear="salesOrderText = ''; salesOrderParsed = false; salesOrderOrders = []"
           />
-          <div v-if="salesOrderOrders.length > 0" class="parse-summary">
-            <span>订单号：{{ salesOrderOrders[0]?.order_no }}</span>
-            <span>，产品 {{ salesOrderOrders[0]?.items?.length || 0 }} 种</span>
-          </div>
         </el-card>
       </div>
 
@@ -143,42 +135,42 @@
           </div>
         </template>
 
-        <!-- 头部信息 -->
+        <!-- 头部信息（可编辑） -->
         <div class="preview-header">
           <div class="preview-section">
             <h4 class="section-title">PI合同表信息</h4>
             <div class="field-grid">
-              <div class="field-item"><span class="label">订单号</span><span class="value">{{ mergePreviewData.order_no }}</span></div>
-              <div class="field-item"><span class="label">客户编码</span><span class="value">{{ mergePreviewData.customer_code || '-' }}</span></div>
-              <div class="field-item"><span class="label">业务员</span><span class="value">{{ mergePreviewData.sales_person || '-' }}</span></div>
-              <div class="field-item"><span class="label">PI日期</span><span class="value">{{ mergePreviewData.pi_date || '-' }}</span></div>
-              <div class="field-item"><span class="label">出货抬头</span><span class="value">{{ mergePreviewData.pi_contract_shipment_title || '-' }}</span></div>
-              <div class="field-item"><span class="label">运输方式</span><span class="value">{{ mergePreviewData.pi_contract_shipment_method || '-' }}</span></div>
+              <div class="field-item"><span class="label">订单号</span><el-input v-model="mergePreviewData.order_no" size="small" /></div>
+              <div class="field-item"><span class="label">客户编码</span><el-input v-model="mergePreviewData.customer_code" size="small" clearable /></div>
+              <div class="field-item"><span class="label">业务员</span><el-input v-model="mergePreviewData.sales_person" size="small" clearable /></div>
+              <div class="field-item"><span class="label">PI日期</span><el-input v-model="mergePreviewData.pi_date" size="small" clearable /></div>
+              <div class="field-item"><span class="label">出货抬头</span><el-input v-model="mergePreviewData.pi_contract_shipment_title" size="small" clearable /></div>
+              <div class="field-item"><span class="label">运输方式</span><el-input v-model="mergePreviewData.pi_contract_shipment_method" size="small" clearable /></div>
             </div>
           </div>
 
           <div class="preview-section">
             <h4 class="section-title">销售订单表信息</h4>
             <div class="field-grid">
-              <div class="field-item"><span class="label">PI号</span><span class="value">{{ mergePreviewData.sales_order_no || '-' }}</span></div>
-              <div class="field-item"><span class="label">出货抬头</span><span class="value">{{ mergePreviewData.shipment_title || '-' }}</span></div>
-              <div class="field-item"><span class="label">跟单员</span><span class="value">{{ mergePreviewData.merchandiser || '-' }}</span></div>
-              <div class="field-item"><span class="label">交货日期</span><span class="value">{{ mergePreviewData.delivery_date || '-' }}</span></div>
-              <div class="field-item"><span class="label">运输方式</span><span class="value">{{ mergePreviewData.shipment_method || '-' }}</span></div>
+              <div class="field-item"><span class="label">PI号</span><el-input v-model="mergePreviewData.sales_order_no" size="small" clearable /></div>
+              <div class="field-item"><span class="label">出货抬头</span><el-input v-model="mergePreviewData.shipment_title" size="small" clearable /></div>
+              <div class="field-item"><span class="label">跟单员</span><el-input v-model="mergePreviewData.merchandiser" size="small" clearable /></div>
+              <div class="field-item"><span class="label">交货日期</span><el-input v-model="mergePreviewData.delivery_date" size="small" clearable /></div>
+              <div class="field-item"><span class="label">运输方式</span><el-input v-model="mergePreviewData.shipment_method" size="small" clearable /></div>
             </div>
           </div>
 
           <div class="preview-section">
             <h4 class="section-title">PI合同文件信息</h4>
             <div class="field-grid">
-              <div class="field-item"><span class="label">收货人</span><span class="value">{{ mergePreviewData.consignee_name || '-' }}</span></div>
-              <div class="field-item"><span class="label">收货地址</span><span class="value">{{ mergePreviewData.consignee_address || '-' }}</span></div>
-              <div class="field-item"><span class="label">电话</span><span class="value">{{ mergePreviewData.consignee_tel || '-' }}</span></div>
-              <div class="field-item"><span class="label">目的港</span><span class="value">{{ mergePreviewData.destination || '-' }}</span></div>
-              <div class="field-item"><span class="label">装货港</span><span class="value">{{ mergePreviewData.loading_port || '-' }}</span></div>
-              <div class="field-item"><span class="label">价格条款</span><span class="value">{{ mergePreviewData.price_term || '-' }}</span></div>
-              <div class="field-item"><span class="label">币制</span><span class="value">{{ mergePreviewData.currency || '-' }}</span></div>
-              <div class="field-item"><span class="label">付款方式</span><span class="value">{{ mergePreviewData.payment_terms || '-' }}</span></div>
+              <div class="field-item"><span class="label">收货人</span><el-input v-model="mergePreviewData.consignee_name" size="small" clearable /></div>
+              <div class="field-item"><span class="label">收货地址</span><el-input v-model="mergePreviewData.consignee_address" size="small" clearable /></div>
+              <div class="field-item"><span class="label">电话</span><el-input v-model="mergePreviewData.consignee_tel" size="small" clearable /></div>
+              <div class="field-item"><span class="label">目的港</span><el-input v-model="mergePreviewData.destination" size="small" clearable /></div>
+              <div class="field-item"><span class="label">装货港</span><el-input v-model="mergePreviewData.loading_port" size="small" clearable /></div>
+              <div class="field-item"><span class="label">价格条款</span><el-input v-model="mergePreviewData.price_term" size="small" clearable /></div>
+              <div class="field-item"><span class="label">币制</span><el-input v-model="mergePreviewData.currency" size="small" clearable /></div>
+              <div class="field-item"><span class="label">付款方式</span><el-input v-model="mergePreviewData.payment_terms" size="small" clearable /></div>
             </div>
           </div>
         </div>
@@ -191,50 +183,87 @@
           <el-tag type="danger" size="small" style="margin-left:8px" v-if="(mergePreviewData.sales_only_count ?? 0) > 0">仅销售订单表 {{ mergePreviewData.sales_only_count }} 个</el-tag>
         </div>
 
-        <!-- 产品明细表 -->
-        <el-table :data="mergePreviewData.items" border stripe size="small" max-height="350" style="margin-top: 16px">
-          <el-table-column prop="internal_code" label="内部编码" width="110" fixed />
-          <el-table-column prop="product_cn" label="产品名称" min-width="130" show-overflow-tooltip />
-          <el-table-column prop="spec_kg" label="规格kg" width="80" align="center">
-            <template #default="{ row }">{{ row.spec_kg ?? '-' }}</template>
+        <!-- 产品明细表（可编辑） -->
+        <el-table :data="mergePreviewData.items" border stripe size="small" max-height="400" style="margin-top: 16px">
+          <el-table-column prop="internal_code" label="内部编码" width="110" fixed>
+            <template #default="{ row }">
+              <el-input v-model="row.internal_code" size="small" />
+            </template>
           </el-table-column>
-          <el-table-column prop="quantity_kg" label="数量(kg)" width="90" align="center" />
-          <el-table-column prop="unit_price" label="单价" width="80" align="center">
-            <template #default="{ row }">{{ row.unit_price ?? '-' }}</template>
+          <el-table-column prop="product_cn" label="产品名称" min-width="130">
+            <template #default="{ row }">
+              <el-input v-model="row.product_cn" size="small" />
+            </template>
           </el-table-column>
-          <el-table-column prop="total_amount" label="金额" width="90" align="center">
-            <template #default="{ row }">{{ row.total_amount ?? '-' }}</template>
+          <el-table-column prop="spec_kg" label="规格kg" width="90" align="center">
+            <template #default="{ row }">
+              <el-input-number v-model="row.spec_kg" size="small" :controls="false" :precision="2" style="width:100%" />
+            </template>
+          </el-table-column>
+          <el-table-column prop="quantity_kg" label="数量(kg)" width="100" align="center">
+            <template #default="{ row }">
+              <el-input-number v-model="row.quantity_kg" size="small" :controls="false" :precision="2" style="width:100%" @change="calcRowAmount(row)" />
+            </template>
+          </el-table-column>
+          <el-table-column prop="unit_price" label="单价" width="90" align="center">
+            <template #default="{ row }">
+              <el-input-number v-model="row.unit_price" size="small" :controls="false" :precision="2" style="width:100%" @change="calcRowAmount(row)" />
+            </template>
+          </el-table-column>
+          <el-table-column prop="total_amount" label="金额" width="100" align="center">
+            <template #default="{ row }">
+              <el-input-number v-model="row.total_amount" size="small" :controls="false" :precision="2" style="width:100%" />
+            </template>
           </el-table-column>
           <el-table-column prop="hs_code" label="H.S.Code" width="110">
             <template #default="{ row }">
-              <span :class="{ 'text-warning': !row.hs_code }">{{ row.hs_code || '待填充' }}</span>
+              <el-input v-model="row.hs_code" size="small" :class="{ 'is-warning': !row.hs_code }" />
             </template>
           </el-table-column>
-          <el-table-column prop="customs_name" label="报关品名" min-width="130" show-overflow-tooltip>
+          <el-table-column prop="customs_name" label="报关品名" min-width="130">
             <template #default="{ row }">
-              <span :class="{ 'text-warning': !row.customs_name }">{{ row.customs_name || '待填充' }}</span>
+              <el-input v-model="row.customs_name" size="small" :class="{ 'is-warning': !row.customs_name }" />
             </template>
           </el-table-column>
-          <el-table-column prop="customs_ingredients" label="报关成分" min-width="150" show-overflow-tooltip>
-            <template #default="{ row }">{{ row.customs_ingredients || '-' }}</template>
+          <el-table-column prop="customs_ingredients" label="报关成分" min-width="150">
+            <template #default="{ row }">
+              <el-input v-model="row.customs_ingredients" size="small" />
+            </template>
           </el-table-column>
-          <el-table-column prop="product_appearance" label="产品外观" min-width="100" show-overflow-tooltip>
-            <template #default="{ row }">{{ row.product_appearance || '-' }}</template>
+          <el-table-column prop="product_appearance" label="产品外观" min-width="100">
+            <template #default="{ row }">
+              <el-input v-model="row.product_appearance" size="small" />
+            </template>
           </el-table-column>
           <el-table-column label="来源" width="130" align="center">
             <template #default="{ row }">
-              <el-tag v-if="row.source_note === '匹配'" size="small" type="success">匹配</el-tag>
-              <el-tag v-else-if="row.source_note === '仅PI合同表'" size="small" type="warning">仅PI合同表</el-tag>
-              <el-tag v-else-if="row.source_note === '仅销售订单表'" size="small" type="danger">仅订单表</el-tag>
-              <el-tag v-else-if="row.source_pi_file" size="small" type="info">PI文件</el-tag>
+              <el-select v-model="row.source_note" size="small" style="width:100%">
+                <el-option label="匹配" value="匹配" />
+                <el-option label="仅PI合同表" value="仅PI合同表" />
+                <el-option label="仅销售订单表" value="仅销售订单表" />
+                <el-option label="PI文件" value="PI文件" />
+              </el-select>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="60" fixed="right" align="center">
+            <template #default="{ $index }">
+              <el-button type="danger" text size="small" @click="removeMergeItem($index)">
+                <el-icon><Delete /></el-icon>
+              </el-button>
             </template>
           </el-table-column>
         </el-table>
+        <el-button size="small" type="primary" text @click="addMergeItem" style="margin-top: 8px">
+          <el-icon><Plus /></el-icon> 添加产品
+        </el-button>
+        <div style="display:flex; justify-content:flex-end; margin-top: 12px">
+          <el-button type="primary" size="small" @click="handleShowPackaging">包装计算</el-button>
+        </div>
       </el-card>
     </div>
 
-    <!-- 包装计算（入库前可选） -->
-    <div v-if="mergePreviewData" class="packaging-section">
+    <!-- 包装计算（点击按钮后展开） -->
+    <div v-if="showPackaging" class="packaging-section">
       <el-card>
         <template #header>
           <div class="card-header">
@@ -250,7 +279,7 @@
 <script setup lang="ts">
 import { ref, computed, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Document } from '@element-plus/icons-vue'
+import { Document, Delete, Plus } from '@element-plus/icons-vue'
 import PasteTextarea from '@/components/phase1/PasteTextarea.vue'
 import PiUploadDragger from '@/components/phase1/PiUploadDragger.vue'
 import PackagingCalculator from '@/components/phase1/PackagingCalculator.vue'
@@ -298,6 +327,7 @@ const pendingSaveRequest = ref<LedgerWriteRequest | null>(null)
 
 // 包装计算
 const calcRef = ref<InstanceType<typeof PackagingCalculator>>()
+const showPackaging = ref(false)
 
 // ── Computed ─────────────────────────────────────────────────────────────────
 
@@ -379,15 +409,7 @@ async function handlePreview() {
 
     const result = await ordersApi.mergePreview(formData)
     mergePreviewData.value = result
-
-    // 等待 DOM 更新后同步到包装计算器（v-if="mergePreviewData" 导致组件延迟挂载）
-    await nextTick()
-    if (calcRef.value && result.items.length > 0) {
-      calcRef.value.clearRows()
-      for (const item of result.items) {
-        calcRef.value.addRow(item.internal_code, item.product_cn || '', item.quantity_kg || 0)
-      }
-    }
+    showPackaging.value = false
 
     if (result.validation_status === 'ok') {
       ElMessage.success('三源合并完成，校验通过')
@@ -553,6 +575,50 @@ function buildSalesOrderFields(): Partial<LedgerWriteRequest> {
   }
 }
 
+function calcRowAmount(row: any) {
+  const qty = Number(row.quantity_kg) || 0
+  const price = Number(row.unit_price) || 0
+  row.total_amount = Math.round(qty * price * 100) / 100
+}
+
+async function handleShowPackaging() {
+  showPackaging.value = true
+  await nextTick()
+  if (calcRef.value && mergePreviewData.value?.items.length) {
+    calcRef.value.clearRows()
+    for (const item of mergePreviewData.value.items) {
+      calcRef.value.addRow(item.internal_code, item.product_cn || '', item.quantity_kg || 0)
+    }
+  }
+}
+
+function addMergeItem() {
+  if (!mergePreviewData.value) return
+  mergePreviewData.value.items.push({
+    internal_code: '',
+    source_pi_contract: false,
+    source_sales_order: false,
+    source_pi_file: false,
+    source_note: '',
+    product_cn: '',
+    spec_kg: undefined,
+    quantity_kg: undefined,
+    unit_price: undefined,
+    total_amount: undefined,
+    hs_code: '',
+    customs_name: '',
+    customs_ingredients: '',
+    product_appearance: '',
+    validation_status: 'ok',
+    warnings: [],
+  })
+}
+
+function removeMergeItem(index: number) {
+  if (!mergePreviewData.value) return
+  mergePreviewData.value.items.splice(index, 1)
+}
+
 function handleReset() {
   piContractText.value = ''
   piContractParsed.value = false
@@ -565,6 +631,7 @@ function handleReset() {
   piFileData.value = null
   piFileForUpload.value = null
   mergePreviewData.value = null
+  showPackaging.value = false
   savedRecordId.value = null
   calcRef.value?.clearRows()
 }
@@ -604,9 +671,12 @@ function handleReset() {
 .preview-section { flex: 1; }
 .section-title { font-size: 14px; font-weight: 600; margin: 0 0 12px 0; color: #303133; }
 .field-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
-.field-item { display: flex; gap: 8px; font-size: 13px; }
-.field-item .label { color: #909399; min-width: 60px; }
-.field-item .value { color: #303133; }
+.field-item { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.field-item .label { color: #909399; min-width: 60px; flex-shrink: 0; }
+.field-item :deep(.el-input) { flex: 1; min-width: 0; }
+
+/* 编辑表格中的警告输入框 */
+.is-warning :deep(.el-input__wrapper) { box-shadow: 0 0 0 1px #e6a23c inset; }
 
 /* 包装区 */
 .packaging-section { margin-top: 16px; }

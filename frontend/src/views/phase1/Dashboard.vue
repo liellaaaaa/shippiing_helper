@@ -56,7 +56,7 @@
         <el-table-column prop="destination" label="目的港" min-width="100" />
         <el-table-column prop="items.length" label="产品数" width="80" align="center">
           <template #default="{ row }">
-            <el-tag type="info" size="small">{{ row.items?.length || 0 }}</el-tag>
+            <el-tag type="info" size="small">{{ visibleItemCount(row.items) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="created_at" label="录入时间" min-width="160">
@@ -200,6 +200,12 @@ const formatDate = (dateStr: string) => {
   } catch {
     return dateStr
   }
+}
+
+/** 统计可见产品数（组头+独立项，不含子项） */
+function visibleItemCount(items: any[] | undefined): number {
+  if (!items) return 0
+  return items.filter((it: any) => !(it.group_id != null && !it.is_group_header)).length
 }
 
 const handleExportExcel = () => {

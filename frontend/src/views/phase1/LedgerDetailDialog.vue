@@ -162,139 +162,227 @@
             <el-button type="primary" size="small" icon="Plus" @click="addProductRow">添加产品</el-button>
           </div>
           <el-table
-            :data="editData.items || []"
+            :data="treeItems"
+            row-key="rowUid"
+            :tree-props="{ children: 'children' }"
+            default-expand-all
             border
             class="product-table"
           >
             <el-table-column v-if="isEditing" label="" width="50" fixed align="center">
-              <template #default="{ $index }">
-                <el-button type="danger" link @click="removeProductRow($index)">
+              <template #default="{ row }">
+                <el-button type="danger" link @click="removeProductRow(row)">
                   <span style="font-size: 20px; font-weight: bold;">×</span>
                 </el-button>
               </template>
             </el-table-column>
-            <el-table-column prop="internal_code" label="内部编码" width="120" fixed>
+            <el-table-column label="内部编码" width="130" fixed>
               <template #default="{ row }">
-                <template v-if="isEditing"><el-input v-model="row.internal_code" size="small" /></template>
-                <template v-else>{{ row.internal_code || '-' }}</template>
+                <template v-if="row.isGroup">
+                  <el-tag size="small" type="warning" style="margin-right:4px">组</el-tag>
+                  <span v-if="isEditing"><el-input v-model="row.groupName" size="small" style="width:80px" /></span>
+                  <span v-else class="group-name">{{ row.groupName || '-' }}</span>
+                  <span style="color:#909399;font-size:12px;margin-left:4px">{{ row.children?.length || 0 }}项</span>
+                </template>
+                <template v-else>
+                  <template v-if="isEditing"><el-input v-model="row.internal_code" size="small" /></template>
+                  <template v-else>{{ row.internal_code || '-' }}</template>
+                </template>
               </template>
             </el-table-column>
             <el-table-column prop="product_cn" label="产品名称" min-width="130" show-overflow-tooltip>
               <template #default="{ row }">
-                <template v-if="isEditing"><el-input v-model="row.product_cn" size="small" /></template>
-                <template v-else>{{ row.product_cn || '-' }}</template>
+                <span v-if="row.isGroup" style="color:#909399">—</span>
+                <template v-else>
+                  <template v-if="isEditing"><el-input v-model="row.product_cn" size="small" /></template>
+                  <template v-else>{{ row.product_cn || '-' }}</template>
+                </template>
               </template>
             </el-table-column>
             <el-table-column prop="product_en" label="英文名" min-width="130" show-overflow-tooltip>
               <template #default="{ row }">
-                <template v-if="isEditing"><el-input v-model="row.product_en" size="small" /></template>
-                <template v-else>{{ row.product_en || '-' }}</template>
+                <span v-if="row.isGroup && !isEditing" style="color:#909399">—</span>
+                <template v-else-if="!row.isGroup">
+                  <template v-if="isEditing"><el-input v-model="row.product_en" size="small" /></template>
+                  <template v-else>{{ row.product_en || '-' }}</template>
+                </template>
               </template>
             </el-table-column>
-            <el-table-column prop="spec_kg" label="规格kg" width="90" align="right" header-align="left">
+            <el-table-column prop="spec_kg" label="规格kg" width="80" align="center">
               <template #default="{ row }">
-                <template v-if="isEditing"><el-input v-model.number="row.spec_kg" size="small" type="number" /></template>
-                <template v-else>{{ row.spec_kg ?? '-' }}</template>
+                <span v-if="row.isGroup" style="color:#909399">—</span>
+                <template v-else>
+                  <template v-if="isEditing"><el-input v-model.number="row.spec_kg" size="small" type="number" /></template>
+                  <template v-else>{{ row.spec_kg ?? '-' }}</template>
+                </template>
               </template>
             </el-table-column>
-            <el-table-column prop="quantity_kg" label="数量kg" width="110" align="right" header-align="left">
+            <el-table-column prop="quantity_kg" label="数量kg" width="100" align="center">
               <template #default="{ row }">
-                <template v-if="isEditing"><el-input v-model.number="row.quantity_kg" size="small" type="number" /></template>
-                <template v-else>{{ row.quantity_kg ?? '-' }}</template>
+                <template v-if="row.isGroup">
+                  <span class="group-summary">{{ row.quantity_kg ?? '-' }}</span>
+                </template>
+                <template v-else>
+                  <template v-if="isEditing"><el-input v-model.number="row.quantity_kg" size="small" type="number" /></template>
+                  <template v-else>{{ row.quantity_kg ?? '-' }}</template>
+                </template>
               </template>
             </el-table-column>
-            <el-table-column prop="unit_price" label="单价" width="90" align="right" header-align="left">
+            <el-table-column prop="unit_price" label="单价" width="90" align="center">
               <template #default="{ row }">
-                <template v-if="isEditing"><el-input v-model.number="row.unit_price" size="small" type="number" /></template>
-                <template v-else>{{ row.unit_price != null ? row.unit_price.toFixed(2) : '-' }}</template>
+                <span v-if="row.isGroup" style="color:#909399">—</span>
+                <template v-else>
+                  <template v-if="isEditing"><el-input v-model.number="row.unit_price" size="small" type="number" /></template>
+                  <template v-else>{{ row.unit_price != null ? row.unit_price.toFixed(2) : '-' }}</template>
+                </template>
               </template>
             </el-table-column>
-            <el-table-column prop="total_amount" label="金额" width="110" align="right" header-align="left">
+            <el-table-column prop="total_amount" label="金额" width="100" align="center">
               <template #default="{ row }">
-                <template v-if="isEditing"><el-input v-model.number="row.total_amount" size="small" type="number" /></template>
-                <template v-else>{{ row.total_amount != null ? row.total_amount.toFixed(2) : '-' }}</template>
+                <template v-if="row.isGroup">
+                  <span class="group-summary">{{ row.total_amount != null ? row.total_amount.toFixed(2) : '-' }}</span>
+                </template>
+                <template v-else>
+                  <template v-if="isEditing"><el-input v-model.number="row.total_amount" size="small" type="number" /></template>
+                  <template v-else>{{ row.total_amount != null ? row.total_amount.toFixed(2) : '-' }}</template>
+                </template>
               </template>
             </el-table-column>
             <el-table-column prop="hs_code" label="H.S.Code" width="120">
               <template #default="{ row }">
-                <template v-if="isEditing"><el-input v-model="row.hs_code" size="small" /></template>
-                <template v-else>{{ row.hs_code || '-' }}</template>
+                <template v-if="row.isGroup">
+                  <template v-if="isEditing"><el-input v-model="row.hs_code" size="small" /></template>
+                  <template v-else>{{ row.hs_code || '-' }}</template>
+                </template>
+                <template v-else>
+                  <template v-if="isEditing"><el-input v-model="row.hs_code" size="small" /></template>
+                  <template v-else>{{ row.hs_code || '-' }}</template>
+                </template>
               </template>
             </el-table-column>
             <el-table-column prop="customs_name" label="报关品名" min-width="150" show-overflow-tooltip>
               <template #default="{ row }">
-                <template v-if="isEditing"><el-input v-model="row.customs_name" size="small" /></template>
-                <template v-else>{{ row.customs_name || '-' }}</template>
+                <template v-if="row.isGroup">
+                  <span v-if="!isEditing" style="color:#909399">见子项</span>
+                  <el-input v-else v-model="row.customs_name" size="small" />
+                </template>
+                <template v-else>
+                  <template v-if="isEditing"><el-input v-model="row.customs_name" size="small" /></template>
+                  <template v-else>{{ row.customs_name || '-' }}</template>
+                </template>
               </template>
             </el-table-column>
             <el-table-column prop="customs_ingredients" label="报关成分" min-width="150" show-overflow-tooltip>
               <template #default="{ row }">
-                <template v-if="isEditing"><el-input v-model="row.customs_ingredients" size="small" /></template>
-                <template v-else>{{ row.customs_ingredients || '-' }}</template>
+                <span v-if="row.isGroup && !isEditing" style="color:#909399">—</span>
+                <template v-else-if="!row.isGroup">
+                  <template v-if="isEditing"><el-input v-model="row.customs_ingredients" size="small" /></template>
+                  <template v-else>{{ row.customs_ingredients || '-' }}</template>
+                </template>
               </template>
             </el-table-column>
             <el-table-column prop="product_appearance" label="产品外观" min-width="110" show-overflow-tooltip>
               <template #default="{ row }">
-                <template v-if="isEditing"><el-input v-model="row.product_appearance" size="small" /></template>
-                <template v-else>{{ row.product_appearance || '-' }}</template>
-              </template>
-            </el-table-column>
-            <el-table-column prop="packaging_type_id" label="包装类型" width="150" header-align="left">
-              <template #default="{ row }">
-                <template v-if="isEditing">
-                  <el-select v-model="row.packaging_type_id" size="small" placeholder="选择包装类型" clearable filterable style="width: 130px;">
-                    <el-option v-for="[id, name] in pkgTypeOptions" :key="id" :label="name" :value="id" />
-                  </el-select>
+                <span v-if="row.isGroup && !isEditing" style="color:#909399">—</span>
+                <template v-else-if="!row.isGroup">
+                  <template v-if="isEditing"><el-input v-model="row.product_appearance" size="small" /></template>
+                  <template v-else>{{ row.product_appearance || '-' }}</template>
                 </template>
-                <template v-else>{{ pkgTypeName(row.packaging_type_id) }}</template>
               </template>
             </el-table-column>
-            <el-table-column prop="pallet_spec" label="托盘规格" width="90">
+            <el-table-column prop="packaging_type_id" label="包装类型" width="150">
               <template #default="{ row }">
-                <template v-if="isEditing"><el-input v-model="row.pallet_spec" size="small" /></template>
-                <template v-else>{{ row.pallet_spec || '-' }}</template>
+                <span v-if="row.isGroup && !isEditing" style="color:#909399">—</span>
+                <template v-else-if="!row.isGroup">
+                  <template v-if="isEditing">
+                    <el-select v-model="row.packaging_type_id" size="small" placeholder="选择包装类型" clearable filterable style="width: 130px;">
+                      <el-option v-for="[id, name] in pkgTypeOptions" :key="id" :label="name" :value="id" />
+                    </el-select>
+                  </template>
+                  <template v-else>{{ pkgTypeName(row.packaging_type_id) }}</template>
+                </template>
               </template>
             </el-table-column>
-            <el-table-column prop="drums_per_pallet" label="每托桶数" width="90" align="center" header-align="left">
+            <el-table-column prop="pallet_spec" label="托盘规格" width="90" align="center">
               <template #default="{ row }">
-                <template v-if="isEditing"><el-input v-model.number="row.drums_per_pallet" size="small" type="number" /></template>
-                <template v-else>{{ row.drums_per_pallet ?? '-' }}</template>
+                <span v-if="row.isGroup && !isEditing" style="color:#909399">—</span>
+                <template v-else-if="!row.isGroup">
+                  <template v-if="isEditing"><el-input v-model="row.pallet_spec" size="small" /></template>
+                  <template v-else>{{ row.pallet_spec || '-' }}</template>
+                </template>
               </template>
             </el-table-column>
-            <el-table-column prop="drum_count" label="总桶数" width="80" align="center" header-align="left">
+            <el-table-column prop="drums_per_pallet" label="每托桶数" width="90" align="center">
               <template #default="{ row }">
-                <template v-if="isEditing"><el-input v-model.number="row.drum_count" size="small" type="number" /></template>
-                <template v-else>{{ row.drum_count ?? '-' }}</template>
+                <span v-if="row.isGroup && !isEditing" style="color:#909399">—</span>
+                <template v-else-if="!row.isGroup">
+                  <template v-if="isEditing"><el-input v-model.number="row.drums_per_pallet" size="small" type="number" /></template>
+                  <template v-else>{{ row.drums_per_pallet ?? '-' }}</template>
+                </template>
               </template>
             </el-table-column>
-            <el-table-column prop="pallet_count" label="总托数" width="80" align="center" header-align="left">
+            <el-table-column prop="drum_count" label="总桶数" width="80" align="center">
               <template #default="{ row }">
-                <template v-if="isEditing"><el-input v-model.number="row.pallet_count" size="small" type="number" /></template>
-                <template v-else>{{ row.pallet_count ?? '-' }}</template>
+                <template v-if="row.isGroup">
+                  <span class="group-summary">{{ row.drum_count ?? '-' }}</span>
+                </template>
+                <template v-else>
+                  <template v-if="isEditing"><el-input v-model.number="row.drum_count" size="small" type="number" /></template>
+                  <template v-else>{{ row.drum_count ?? '-' }}</template>
+                </template>
               </template>
             </el-table-column>
-            <el-table-column prop="net_weight_kg" label="净重kg" width="100" align="right" header-align="left">
+            <el-table-column prop="pallet_count" label="总托数" width="80" align="center">
               <template #default="{ row }">
-                <template v-if="isEditing"><el-input v-model.number="row.net_weight_kg" size="small" type="number" /></template>
-                <template v-else>{{ row.net_weight_kg ?? '-' }}</template>
+                <template v-if="row.isGroup">
+                  <span class="group-summary">{{ row.pallet_count ?? '-' }}</span>
+                </template>
+                <template v-else>
+                  <template v-if="isEditing"><el-input v-model.number="row.pallet_count" size="small" type="number" /></template>
+                  <template v-else>{{ row.pallet_count ?? '-' }}</template>
+                </template>
               </template>
             </el-table-column>
-            <el-table-column prop="gross_weight_kg" label="毛重kg" width="100" align="right" header-align="left">
+            <el-table-column prop="net_weight_kg" label="净重kg" width="100" align="center">
               <template #default="{ row }">
-                <template v-if="isEditing"><el-input v-model.number="row.gross_weight_kg" size="small" type="number" /></template>
-                <template v-else>{{ row.gross_weight_kg ?? '-' }}</template>
+                <template v-if="row.isGroup">
+                  <span class="group-summary">{{ row.net_weight_kg ?? '-' }}</span>
+                </template>
+                <template v-else>
+                  <template v-if="isEditing"><el-input v-model.number="row.net_weight_kg" size="small" type="number" /></template>
+                  <template v-else>{{ row.net_weight_kg ?? '-' }}</template>
+                </template>
               </template>
             </el-table-column>
-            <el-table-column prop="volume_cbm" label="体积CBM" width="100" align="right" header-align="left">
+            <el-table-column prop="gross_weight_kg" label="毛重kg" width="100" align="center">
               <template #default="{ row }">
-                <template v-if="isEditing"><el-input v-model.number="row.volume_cbm" size="small" type="number" /></template>
-                <template v-else>{{ row.volume_cbm ?? '-' }}</template>
+                <template v-if="row.isGroup">
+                  <span class="group-summary">{{ row.gross_weight_kg ?? '-' }}</span>
+                </template>
+                <template v-else>
+                  <template v-if="isEditing"><el-input v-model.number="row.gross_weight_kg" size="small" type="number" /></template>
+                  <template v-else>{{ row.gross_weight_kg ?? '-' }}</template>
+                </template>
               </template>
             </el-table-column>
-            <el-table-column prop="fits_20gp" label="货柜选择" width="100" align="center" header-align="left">
+            <el-table-column prop="volume_cbm" label="体积CBM" width="100" align="center">
               <template #default="{ row }">
-                <template v-if="isEditing"><el-input v-model="row.fits_20gp" size="small" /></template>
-                <template v-else>{{ row.fits_20gp || '-' }}</template>
+                <template v-if="row.isGroup">
+                  <span class="group-summary">{{ row.volume_cbm ?? '-' }}</span>
+                </template>
+                <template v-else>
+                  <template v-if="isEditing"><el-input v-model.number="row.volume_cbm" size="small" type="number" /></template>
+                  <template v-else>{{ row.volume_cbm ?? '-' }}</template>
+                </template>
+              </template>
+            </el-table-column>
+            <el-table-column prop="fits_20gp" label="货柜选择" width="100" align="center">
+              <template #default="{ row }">
+                <span v-if="row.isGroup && !isEditing" style="color:#909399">—</span>
+                <template v-else-if="!row.isGroup">
+                  <template v-if="isEditing"><el-input v-model="row.fits_20gp" size="small" /></template>
+                  <template v-else>{{ row.fits_20gp || '-' }}</template>
+                </template>
               </template>
             </el-table-column>
           </el-table>
@@ -323,7 +411,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { ordersApi, type LedgerRecord, type LedgerItem } from '@/api/orders'
 import { getPackagingTypes } from '@/api/packages'
@@ -374,6 +462,50 @@ const editData = ref({
   payment_terms: '',
   bank_info: '',
   items: [] as LedgerItem[],
+})
+
+/** 将平铺 items 转为树形结构（组头包裹子项，独立项直接展示） */
+interface TreeRow extends LedgerItem {
+  rowUid: string
+  isGroup: boolean
+  groupName?: string
+  children?: TreeRow[]
+}
+const treeItems = computed<TreeRow[]>(() => {
+  const items = editData.value.items || []
+  const result: TreeRow[] = []
+  let currentGroup: TreeRow | null = null
+  for (const item of items) {
+    if (item.is_group_header) {
+      const group: TreeRow = {
+        ...item,
+        rowUid: crypto.randomUUID(),
+        isGroup: true,
+        groupName: item.group_name || item.product_cn || '分组',
+        children: [],
+        internal_code: '', // 组头无内编
+      }
+      result.push(group)
+      currentGroup = group
+    } else if (currentGroup && item.group_id != null && item.group_id === currentGroup.group_id) {
+      // 子项：添加到当前组
+      const child: TreeRow = {
+        ...item,
+        rowUid: crypto.randomUUID(),
+        isGroup: false,
+      }
+      currentGroup.children!.push(child)
+    } else {
+      // 独立项
+      currentGroup = null
+      result.push({
+        ...item,
+        rowUid: crypto.randomUUID(),
+        isGroup: false,
+      })
+    }
+  }
+  return result
 })
 
 function cloneRecord(r: LedgerRecord) {
@@ -462,8 +594,30 @@ function addProductRow() {
   })
 }
 
-function removeProductRow(index: number) {
-  editData.value.items.splice(index, 1)
+function removeProductRow(row: any) {
+  const items = editData.value.items
+  if (row.isGroup && row.group_id != null) {
+    // 删除组头：子项释放为独立项（清除分组关联）
+    const gid = row.group_id
+    for (const item of items) {
+      if (!item.is_group_header && item.group_id === gid) {
+        item.group_id = undefined
+        item.group_name = undefined
+        item.is_group_header = false
+      }
+    }
+    // 删除组头本身
+    const headerIdx = items.findIndex((it: any) =>
+      it.is_group_header && it.group_id === gid
+    )
+    if (headerIdx !== -1) items.splice(headerIdx, 1)
+  } else if (!row.isGroup) {
+    // 删除子项或独立项
+    const idx = items.findIndex((it: any) =>
+      !it.is_group_header && it.internal_code === row.internal_code
+    )
+    if (idx !== -1) items.splice(idx, 1)
+  }
 }
 
 async function handleSave() {
@@ -523,6 +677,8 @@ const formatDate = (dateStr: string) => {
 .product-table { width: 100%; }
 .dialog-footer { display: flex; justify-content: flex-end; gap: 8px; }
 .product-toolbar { margin-bottom: 8px; }
+.group-summary { font-weight: 600; color: #e6a23c; font-size: 13px; }
+.group-name { font-weight: 600; color: #e6a23c; }
 </style>
 
 <style>

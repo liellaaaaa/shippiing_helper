@@ -202,7 +202,7 @@
     />
 
     <!-- ── MSDS Generator Dialog ──────────────────── -->
-    <MSDSGeneratorDialog v-model="showMsdsDialog" :order-items="currentOrderItems" @generated="onMsdsGenerated" />
+    <MSDSGeneratorDialog v-model="showMsdsDialog" :order-items="allLedgerItems" @generated="onMsdsGenerated" />
 
     <MyDocumentsDrawer v-model="showMyDocuments" @open-doc="onOpenMyDoc" />
 
@@ -232,6 +232,11 @@ const SHIPPER_MAP: Record<string, string> = {
   '广东宏昊化工': SHIPPER_OPTIONS[0],
 }
 
+/** 过滤子项，只保留组头行和独立行（用于非 MSDS 文档的汇总计算） */
+function getVisibleItems(items: any[]): any[] {
+  return items.filter((it: any) => !(it.group_id != null && !it.is_group_header))
+}
+
 function getShipperFromTitle(title?: string | null): string {
   if (!title) return SHIPPER_OPTIONS[0]
   const t = title.trim()
@@ -252,6 +257,8 @@ const selectedPiNo = ref<string>('')
 const orderList = ref<DashboardOrder[]>([])
 const piList = ref<any[]>([])
 const currentOrderItems = ref<any[]>([])
+/** 未过滤的全部台账产品（含子项，用于MSDS等需要全部项的场合） */
+const allLedgerItems = ref<any[]>([])
 const currentDocKey = ref('')
 const currentConfig = ref<any>({})
 const leftWidth = ref(400)
@@ -335,18 +342,20 @@ async function onOrderChange(orderId: number): Promise<void> {
     const ledgerRecord = await ordersApi.getLedgerRecordByOrderNo(orderNo)
     if (ledgerRecord) {
       // 用 loadLedgerRecord 相同的逻辑填充数据
-      const items = ledgerRecord.items || []
+      const allItems = ledgerRecord.items || []
+      // 过滤子项：汇总、显示、名称拼接均使用可见项（组头+独立行）
+      const visibleItems = getVisibleItems(allItems)
 
-      const totalNw = items.reduce((sum: number, it: any) => sum + (it.net_weight_kg || 0), 0)
-      const totalGw = items.reduce((sum: number, it: any) => sum + (it.gross_weight_kg || 0), 0)
-      const totalVol = items.reduce((sum: number, it: any) => sum + (it.volume_cbm || 0), 0)
-      const totalDrums = items.reduce((sum: number, it: any) => sum + (it.drum_count || 0), 0)
-      const totalPallets = items.reduce((sum: number, it: any) => sum + (it.pallet_count || 0), 0)
+      const totalNw = visibleItems.reduce((sum: number, it: any) => sum + (it.net_weight_kg || 0), 0)
+      const totalGw = visibleItems.reduce((sum: number, it: any) => sum + (it.gross_weight_kg || 0), 0)
+      const totalVol = visibleItems.reduce((sum: number, it: any) => sum + (it.volume_cbm || 0), 0)
+      const totalDrums = visibleItems.reduce((sum: number, it: any) => sum + (it.drum_count || 0), 0)
+      const totalPallets = visibleItems.reduce((sum: number, it: any) => sum + (it.pallet_count || 0), 0)
 
-      const customsNameAll = items.map((it: any) => it.customs_name).filter(Boolean).join(' / ')
-      const hsCodeAll = items.map((it: any) => it.hs_code).filter(Boolean).join(' / ')
+      const customsNameAll = visibleItems.map((it: any) => it.customs_name).filter(Boolean).join(' / ')
+      const hsCodeAll = visibleItems.map((it: any) => it.hs_code).filter(Boolean).join(' / ')
 
-      const mappedItems = items.map((it: any) => ({
+      const mappedItems = visibleItems.map((it: any) => ({
         internal_code: it.internal_code,
         customs_name: it.customs_name,
         product_en: it.product_en || '',
@@ -360,6 +369,7 @@ async function onOrderChange(orderId: number): Promise<void> {
         },
       }))
       currentOrderItems.value = mappedItems
+      allLedgerItems.value = allItems.filter((it: any) => !it.is_group_header)  // 不含组头
 
       for (const item of currentOrderItems.value) {
         const cn = item.customs_name || ''
@@ -372,14 +382,14 @@ async function onOrderChange(orderId: number): Promise<void> {
       }
 
       let productEn = ''
-      const firstCustomsName = items[0]?.customs_name || ''
+      const firstCustomsName = visibleItems[0]?.customs_name || ''
       if (firstCustomsName) {
         try {
           const res = await nameMappingApi.lookupByCn(firstCustomsName)
           productEn = res.data.en || ''
         } catch { /* ignore */ }
       }
-      const productEnAll = items.map((it: any) => it.product_en).filter(Boolean).join(' / ')
+      const productEnAll = visibleItems.map((it: any) => it.product_en).filter(Boolean).join(' / ')
 
       const consigneeFull = [ledgerRecord.consignee_name, ledgerRecord.consignee_address].filter(Boolean).join('\n')
 
@@ -401,7 +411,7 @@ async function onOrderChange(orderId: number): Promise<void> {
         gross_weight_kg: totalGw ? String(Math.round(totalGw * 10) / 10) : '',
         volume_cbm: totalVol ? String(Math.round(totalVol * 1000) / 1000) : '',
         drum_count: totalDrums ? String(totalDrums) : '',
-        pallet_count: totalPallets ? String(totalPallets) : (items[0]?.pallet_count != null ? String(items[0].pallet_count) : ''),
+        pallet_count: totalPallets ? String(totalPallets) : (visibleItems[0]?.pallet_count != null ? String(visibleItems[0].pallet_count) : ''),
       }
       selectedPiNo.value = ledgerRecord.pi_no || ledgerRecord.order_no || ''
       selectedLedgerId.value = ledgerRecord.id
@@ -574,23 +584,24 @@ async function loadLedgerRecord(ledgerId: number) {
   try {
     const record = await ordersApi.getLedgerRecord(ledgerId)
     if (!record) return
-    const items = record.items || []
+    const allItems = record.items || []
+    const visibleItems = getVisibleItems(allItems)
 
-    // 汇总多产品的包装数据
-    const totalNw = items.reduce((sum: number, it: any) => sum + (it.net_weight_kg || 0), 0)
-    const totalGw = items.reduce((sum: number, it: any) => sum + (it.gross_weight_kg || 0), 0)
-    const totalVol = items.reduce((sum: number, it: any) => sum + (it.volume_cbm || 0), 0)
-    const totalDrums = items.reduce((sum: number, it: any) => sum + (it.drum_count || 0), 0)
-    const totalPallets = items.reduce((sum: number, it: any) => sum + (it.pallet_count || 0), 0)
+    // 汇总多产品的包装数据（仅可见项，不含子项避免重复加算）
+    const totalNw = visibleItems.reduce((sum: number, it: any) => sum + (it.net_weight_kg || 0), 0)
+    const totalGw = visibleItems.reduce((sum: number, it: any) => sum + (it.gross_weight_kg || 0), 0)
+    const totalVol = visibleItems.reduce((sum: number, it: any) => sum + (it.volume_cbm || 0), 0)
+    const totalDrums = visibleItems.reduce((sum: number, it: any) => sum + (it.drum_count || 0), 0)
+    const totalPallets = visibleItems.reduce((sum: number, it: any) => sum + (it.pallet_count || 0), 0)
 
     // 多产品报关名称/HS Code 用 / 拼接（使用报关名称而非产品中文名）
-    const customsNameAll = items.map((it: any) => it.customs_name).filter(Boolean).join(' / ')
-    const hsCodeAll = items.map((it: any) => it.hs_code).filter(Boolean).join(' / ')
+    const customsNameAll = visibleItems.map((it: any) => it.customs_name).filter(Boolean).join(' / ')
+    const hsCodeAll = visibleItems.map((it: any) => it.hs_code).filter(Boolean).join(' / ')
     // 收货人 = 名称 + 地址（与 onOrderChange 保持一致）
     const consigneeFull = [record.consignee_name, record.consignee_address].filter(Boolean).join('\n')
 
     // 构造与 onOrderChange 相同结构的 items（表格列引用 order.hs_code 等嵌套字段）
-    const mappedItems = items.map((it: any) => ({
+    const mappedItems = visibleItems.map((it: any) => ({
       internal_code: it.internal_code,
       customs_name: it.customs_name,
       product_en: it.product_en || '',
@@ -604,6 +615,7 @@ async function loadLedgerRecord(ledgerId: number) {
       },
     }))
     currentOrderItems.value = mappedItems
+    allLedgerItems.value = allItems  // 保存原始全部项（含子项，供MSDS使用）
     
     // Look up English names
     for (const item of currentOrderItems.value) {
@@ -618,14 +630,14 @@ async function loadLedgerRecord(ledgerId: number) {
 
     // 查询英文名（取第一个报关名称做映射）
     let productEn = ''
-    const firstCustomsName = items[0]?.customs_name || ''
+    const firstCustomsName = visibleItems[0]?.customs_name || ''
     if (firstCustomsName) {
       try {
         const res = await nameMappingApi.lookupByCn(firstCustomsName)
         productEn = res.data.en || ''
       } catch { /* ignore */ }
     }
-    const productEnAll = items.map((it: any) => it.product_en).filter(Boolean).join(' / ')
+    const productEnAll = visibleItems.map((it: any) => it.product_en).filter(Boolean).join(' / ')
 
     // 填充 currentOrderInfo（使用报关名称）
     currentOrderInfo.value = {
@@ -646,7 +658,7 @@ async function loadLedgerRecord(ledgerId: number) {
       gross_weight_kg: totalGw ? String(Math.round(totalGw * 10) / 10) : '',
       volume_cbm: totalVol ? String(Math.round(totalVol * 1000) / 1000) : '',
       drum_count: totalDrums ? String(totalDrums) : '',
-      pallet_count: totalPallets ? String(totalPallets) : (items[0]?.pallet_count != null ? String(items[0].pallet_count) : ''),
+      pallet_count: totalPallets ? String(totalPallets) : (visibleItems[0]?.pallet_count != null ? String(visibleItems[0].pallet_count) : ''),
     }
     selectedPiNo.value = record.pi_no || record.order_no || ''
     // 设置 selectedOrderId 使顶部按钮可操作

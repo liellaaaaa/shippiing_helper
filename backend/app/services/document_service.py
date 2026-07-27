@@ -693,6 +693,11 @@ class DocumentService:
 
         items = record.items or []
 
+        # 过滤：对于分组的，只保留组头行和独立行，不包含子项
+        # 子项判断：is_group_header=False 且 group_id 不为 null
+        doc_items = [it for it in items if not (it.group_id is not None and not it.is_group_header)]
+        items = doc_items
+
         # ── 基本信息（从台账提取）──────────────────────────────────
         pi_no = record.order_no or ""
         consignee = record.consignee_name or ""

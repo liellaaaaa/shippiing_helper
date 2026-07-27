@@ -28,6 +28,10 @@ class LedgerItemSchema(BaseModel):
     gross_weight_kg: Optional[float] = None
     volume_cbm: Optional[float] = None
     fits_20gp: Optional[str] = None
+    # 分组字段
+    group_id: Optional[int] = None
+    group_name: Optional[str] = None
+    is_group_header: bool = False
 
     class Config:
         from_attributes = True

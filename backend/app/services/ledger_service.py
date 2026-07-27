@@ -376,6 +376,10 @@ class LedgerService:
                     customs_name=item.customs_name,
                     components=item.customs_ingredients,
                     product_appearance=item.product_appearance,
+                    # 分组字段
+                    group_id=item.group_id,
+                    group_name=item.group_name,
+                    is_group_header=1 if item.is_group_header else 0,
                     # 包装（从计算服务填充）
                     packaging_type_id=pkg_type_id,
                     pallet_spec=item.pallet_spec,
@@ -494,6 +498,10 @@ class LedgerService:
                     customs_name=item.customs_name,
                     components=item.customs_ingredients,
                     product_appearance=item.product_appearance,
+                    # 分组字段
+                    group_id=item.group_id,
+                    group_name=item.group_name,
+                    is_group_header=1 if item.is_group_header else 0,
                     packaging_type_id=pkg_type_id,
                     pallet_spec=item.pallet_spec,
                     drums_per_pallet=item.drums_per_pallet,
@@ -531,8 +539,17 @@ class LedgerService:
             if not record:
                 return None
 
-            # 读取同 order_no 的所有产品行
-            records = db.query(OrderPiRecord).filter_by(order_no=record.order_no).all()
+            # 读取同 order_no 的所有产品行，按分组排序（组头先行，子项随后，独立项最后）
+            records = (
+                db.query(OrderPiRecord)
+                .filter_by(order_no=record.order_no)
+                .order_by(
+                    OrderPiRecord.group_id.asc().nullslast(),
+                    OrderPiRecord.is_group_header.desc(),
+                    OrderPiRecord.id.asc(),
+                )
+                .all()
+            )
             items = [
                 LedgerItemSchema(
                     internal_code=r.internal_code,
@@ -555,6 +572,10 @@ class LedgerService:
                     gross_weight_kg=r.gross_weight_kg,
                     volume_cbm=r.volume_cbm,
                     fits_20gp=r.fits_20gp,
+                    # 分组字段
+                    group_id=r.group_id,
+                    group_name=r.group_name,
+                    is_group_header=bool(r.is_group_header),
                 )
                 for r in records
             ]
@@ -691,7 +712,12 @@ class LedgerService:
             all_records = (
                 db.query(OrderPiRecord)
                 .filter(OrderPiRecord.order_no.in_(order_no_list))
-                .order_by(OrderPiRecord.order_no, OrderPiRecord.id)
+                .order_by(
+                    OrderPiRecord.order_no,
+                    OrderPiRecord.group_id.asc().nullslast(),
+                    OrderPiRecord.is_group_header.desc(),
+                    OrderPiRecord.id.asc(),
+                )
                 .all()
             )
 
@@ -728,6 +754,10 @@ class LedgerService:
                         gross_weight_kg=ri.gross_weight_kg,
                         volume_cbm=ri.volume_cbm,
                         fits_20gp=ri.fits_20gp,
+                        # 分组字段
+                        group_id=ri.group_id,
+                        group_name=ri.group_name,
+                        is_group_header=bool(ri.is_group_header),
                     )
                     for ri in records
                 ]

@@ -70,4 +70,9 @@ class OrderPiRecord(Base):
     shipment_title = Column(String(200))   # 出货抬头
     document_type = Column(String(50))     # 单据类型
 
+    # --- 分组字段 ---
+    group_id = Column(Integer, nullable=True)        # 组内唯一标识（同一订单内）
+    group_name = Column(String(200), nullable=True)  # 组名称（用户编辑）
+    is_group_header = Column(Integer, default=0)     # 是否为组头行
+
     packaging_type = relationship("PackagingType")

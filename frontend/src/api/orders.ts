@@ -87,6 +87,10 @@ export interface LedgerItem {
   gross_weight_kg?: number
   volume_cbm?: number
   fits_20gp?: string
+  // 分组字段
+  group_id?: number
+  group_name?: string
+  is_group_header?: boolean
 }
 
 export interface ValidationWarning {

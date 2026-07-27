@@ -183,69 +183,122 @@
           <el-tag type="danger" size="small" style="margin-left:8px" v-if="(mergePreviewData.sales_only_count ?? 0) > 0">仅销售订单表 {{ mergePreviewData.sales_only_count }} 个</el-tag>
         </div>
 
-        <!-- 产品明细表（可编辑） -->
-        <el-table :data="mergePreviewData.items" border stripe size="small" max-height="400" style="margin-top: 16px">
-          <el-table-column prop="internal_code" label="内部编码" width="110" fixed>
+        <!-- 产品明细表（树形可编辑） -->
+        <div class="merge-toolbar" style="margin: 12px 0 8px; display: flex; gap: 8px; align-items: center;">
+          <el-button size="small" type="primary" text @click="addMergeItem">
+            <el-icon><Plus /></el-icon> 添加产品
+          </el-button>
+          <el-button
+            size="small"
+            type="warning"
+            :disabled="selectedRows.filter(r => !r.isGroup).length < 2"
+            @click="mergeSelected"
+          >
+            合并选中项
+          </el-button>
+          <span v-if="selectedRows.filter(r => !r.isGroup).length >= 2" style="font-size:12px;color:#909399">
+            已选 {{ selectedRows.filter(r => !r.isGroup).length }} 个产品
+          </span>
+        </div>
+        <el-table
+          :data="treeData"
+          row-key="rowUid"
+          :tree-props="{ children: 'children' }"
+          default-expand-all
+          border stripe size="small"
+          max-height="400"
+          style="margin-top: 4px"
+          @selection-change="onSelectionChange"
+        >
+          <el-table-column type="selection" width="40" :selectable="(row: MergeTableRow) => !row.isGroup" />
+          <el-table-column label="内部编码/组名称" width="160">
             <template #default="{ row }">
-              <el-input v-model="row.internal_code" size="small" />
+              <template v-if="row.isGroup">
+                <el-tag size="small" type="warning" style="margin-right:4px">组</el-tag>
+                <el-input v-model="row.groupName" size="small" style="width:100px" @input="recalcGroup(row)" />
+                <span style="color:#909399;font-size:12px;margin-left:4px">{{ row.children?.length || 0 }}项</span>
+              </template>
+              <el-input v-else v-model="row.internal_code" size="small" />
             </template>
           </el-table-column>
-          <el-table-column prop="product_cn" label="产品名称" min-width="130">
+          <el-table-column prop="product_cn" label="产品名称" min-width="120">
             <template #default="{ row }">
-              <el-input v-model="row.product_cn" size="small" />
+              <span v-if="row.isGroup" style="color:#909399">—</span>
+              <el-input v-else v-model="row.product_cn" size="small" />
             </template>
           </el-table-column>
-          <el-table-column prop="spec_kg" label="规格kg" width="90" align="center">
+          <el-table-column prop="spec_kg" label="规格kg" width="80" align="center">
             <template #default="{ row }">
-              <el-input-number v-model="row.spec_kg" size="small" :controls="false" :precision="2" style="width:100%" />
+              <span v-if="row.isGroup" style="color:#909399">—</span>
+              <el-input-number v-else v-model="row.spec_kg" size="small" :controls="false" :precision="2" style="width:100%" />
             </template>
           </el-table-column>
           <el-table-column prop="quantity_kg" label="数量(kg)" width="100" align="center">
             <template #default="{ row }">
-              <el-input-number v-model="row.quantity_kg" size="small" :controls="false" :precision="2" style="width:100%" @change="calcRowAmount(row)" />
+              <template v-if="row.isGroup">
+                <span class="group-summary">{{ row.quantity_kg }}</span>
+              </template>
+              <el-input-number v-else v-model="row.quantity_kg" size="small" :controls="false" :precision="2" style="width:100%" @change="recalcGroupFromChild(row)" />
             </template>
           </el-table-column>
           <el-table-column prop="unit_price" label="单价" width="90" align="center">
             <template #default="{ row }">
-              <el-input-number v-model="row.unit_price" size="small" :controls="false" :precision="2" style="width:100%" @change="calcRowAmount(row)" />
+              <span v-if="row.isGroup" style="color:#909399">—</span>
+              <el-input-number v-else v-model="row.unit_price" size="small" :controls="false" :precision="2" style="width:100%" @change="recalcGroupFromChild(row)" />
             </template>
           </el-table-column>
           <el-table-column prop="total_amount" label="金额" width="100" align="center">
             <template #default="{ row }">
-              <el-input-number v-model="row.total_amount" size="small" :controls="false" :precision="2" style="width:100%" />
+              <template v-if="row.isGroup">
+                <span class="group-summary">{{ row.total_amount }}</span>
+              </template>
+              <el-input-number v-else v-model="row.total_amount" size="small" :controls="false" :precision="2" style="width:100%" @change="recalcGroupFromChild(row)" />
             </template>
           </el-table-column>
-          <el-table-column prop="hs_code" label="H.S.Code" width="110">
+          <el-table-column prop="hs_code" label="H.S.Code" width="120">
             <template #default="{ row }">
-              <el-input v-model="row.hs_code" size="small" :class="{ 'is-warning': !row.hs_code }" />
+              <template v-if="row.isGroup && row.children && row.children.length > 0">
+                <el-select v-model="row.hs_code" size="small" placeholder="选子项编码" style="width:100%">
+                  <el-option
+                    v-for="child in row.children"
+                    :key="child.internal_code + (child.hs_code || '')"
+                    :label="(child.hs_code || '') + ' · ' + (child.internal_code || '')"
+                    :value="child.hs_code || ''"
+                  />
+                </el-select>
+              </template>
+              <el-input v-else v-model="row.hs_code" size="small" :class="{ 'is-warning': !row.hs_code }" />
             </template>
           </el-table-column>
           <el-table-column prop="customs_name" label="报关品名" min-width="130">
             <template #default="{ row }">
-              <el-input v-model="row.customs_name" size="small" :class="{ 'is-warning': !row.customs_name }" />
+              <span v-if="row.isGroup" style="color:#909399">见子项</span>
+              <el-input v-else v-model="row.customs_name" size="small" :class="{ 'is-warning': !row.customs_name }" />
             </template>
           </el-table-column>
           <el-table-column prop="customs_ingredients" label="报关成分" min-width="150">
             <template #default="{ row }">
-              <el-input v-model="row.customs_ingredients" size="small" />
+              <span v-if="row.isGroup" style="color:#909399">见子项</span>
+              <el-input v-else v-model="row.customs_ingredients" size="small" />
             </template>
           </el-table-column>
           <el-table-column prop="product_appearance" label="产品外观" min-width="100">
             <template #default="{ row }">
-              <el-input v-model="row.product_appearance" size="small" />
+              <span v-if="row.isGroup" style="color:#909399">—</span>
+              <el-input v-else v-model="row.product_appearance" size="small" />
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="60" fixed="right" align="center">
-            <template #default="{ $index }">
-              <el-button type="danger" text size="small" @click="removeMergeItem($index)">
+          <el-table-column label="操作" width="70" fixed="right" align="center">
+            <template #default="{ row }">
+              <el-button v-if="row.isGroup" type="warning" text size="small" @click="ungroup(row)">
+                解组
+              </el-button>
+              <el-button v-else type="danger" text size="small" @click="removeMergeItem(row)">
                 <el-icon><Delete /></el-icon>
               </el-button>
             </template>
           </el-table-column>
         </el-table>
-        <el-button size="small" type="primary" text @click="addMergeItem" style="margin-top: 8px">
-          <el-icon><Plus /></el-icon> 添加产品
-        </el-button>
         <div style="display:flex; justify-content:flex-end; margin-top: 12px">
           <el-button type="primary" size="small" @click="handleShowPackaging">包装计算</el-button>
         </div>
@@ -267,7 +320,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Document, Delete, Plus } from '@element-plus/icons-vue'
 import PasteTextarea from '@/components/phase1/PasteTextarea.vue'
@@ -278,11 +331,39 @@ import {
   ordersApi,
   type ParsedOrderSchema,
   type MergePreviewResponse,
+  type MergePreviewItem,
   type LedgerWriteRequest,
   type DuplicateItem,
 } from '@/api/orders'
 import { uploadPiFile, type PiUploadResponse } from '@/api/pi'
 import { nameMappingApi } from '@/api/name_mapping'
+
+// ── 树形表行类型 ──────────────────────────────────────────────────────────────
+
+interface MergeTableRow {
+  rowUid: string
+  isGroup: boolean
+  groupName?: string
+  groupId?: number
+  children?: MergeTableRow[]
+  // MergePreviewItem 字段
+  internal_code: string
+  product_cn?: string
+  spec_kg?: number
+  quantity_kg?: number
+  unit_price?: number
+  total_amount?: number
+  hs_code?: string
+  customs_name?: string
+  customs_ingredients?: string
+  product_appearance?: string
+  source_pi_contract: boolean
+  source_sales_order: boolean
+  source_pi_file: boolean
+  source_note?: string
+  validation_status: string
+  warnings: any[]
+}
 
 // ── State ────────────────────────────────────────────────────────────────────
 
@@ -306,6 +387,11 @@ const piFileForUpload = ref<File | null>(null)
 const mergePreviewData = ref<MergePreviewResponse | null>(null)
 const previewing = ref(false)
 
+// 分组相关
+const treeData = ref<MergeTableRow[]>([])
+const selectedRows = ref<MergeTableRow[]>([])
+let mergeGroupCounter = 1
+
 // 保存
 const saving = ref(false)
 const savedRecordId = ref<number | null>(null)
@@ -328,7 +414,142 @@ const canPreview = computed(() =>
 
 const canSave = computed(() => mergePreviewData.value !== null)
 
-// ── Handlers ─────────────────────────────────────────────────────────────────
+// ── 树形数据同步 ──────────────────────────────────────────────────────────────
+
+watch(() => mergePreviewData.value, (val) => {
+  if (!val) {
+    treeData.value = []
+    return
+  }
+  treeData.value = val.items.map(item => ({
+    rowUid: crypto.randomUUID(),
+    isGroup: false,
+    ...item,
+  }))
+}, { immediate: true })
+
+// ── 分组操作 ──────────────────────────────────────────────────────────────────
+
+function onSelectionChange(rows: MergeTableRow[]) {
+  selectedRows.value = rows
+}
+
+function mergeSelected() {
+  const selected = selectedRows.value
+  if (selected.length < 2) {
+    ElMessage.warning('请至少选择两个产品进行合并')
+    return
+  }
+  // 检查选中的是否包含已分组的行
+  const alreadyGrouped = selected.filter(r => !r.isGroup).some(r =>
+    treeData.value.find(g => g.isGroup && g.children?.includes(r))
+  )
+  if (alreadyGrouped) {
+    ElMessage.warning('选中的产品中有些已在分组中，请先解组')
+    return
+  }
+
+  const groupId = -mergeGroupCounter++  // 使用负整数作为本地组ID
+  const first = selected[0]
+  const totalQty = selected.reduce((s, r) => s + (r.quantity_kg || 0), 0)
+  const totalAmt = selected.reduce((s, r) => s + (r.total_amount || 0), 0)
+  const calcPrice = totalQty > 0 ? Math.round((totalAmt / totalQty) * 100) / 100 : 0
+
+  // 从 treeData 中移除选中的行
+  const remaining = treeData.value.filter(r => !selected.includes(r))
+
+  // 创建组头行
+  const groupRow: MergeTableRow = {
+    rowUid: crypto.randomUUID(),
+    isGroup: true,
+    groupName: `合并组 ${mergeGroupCounter - 1}`,
+    groupId,
+    children: [...selected],
+    internal_code: '',
+    product_cn: '',
+    spec_kg: undefined,
+    quantity_kg: totalQty,
+    unit_price: calcPrice,
+    total_amount: totalAmt,
+    hs_code: first.hs_code || '',
+    customs_name: first.customs_name || '',
+    customs_ingredients: first.customs_ingredients || '',
+    product_appearance: first.product_appearance || '',
+    source_pi_contract: first.source_pi_contract,
+    source_sales_order: first.source_sales_order,
+    source_pi_file: first.source_pi_file,
+    source_note: first.source_note,
+    validation_status: first.validation_status,
+    warnings: [],
+  }
+
+  // 将组头插入到第一个选中项的位置
+  const firstIdx = treeData.value.indexOf(first)
+  treeData.value = remaining
+  treeData.value.splice(Math.max(0, firstIdx), 0, groupRow)
+  selectedRows.value = []
+}
+
+function ungroup(row: MergeTableRow) {
+  if (!row.isGroup || !row.children) return
+  const idx = treeData.value.indexOf(row)
+  if (idx === -1) return
+  // 用子项替换组头
+  treeData.value.splice(idx, 1, ...row.children)
+}
+
+function recalcGroup(row: MergeTableRow) {
+  if (!row.isGroup || !row.children) return
+  const totalQty = row.children.reduce((s, c) => s + (c.quantity_kg || 0), 0)
+  const totalAmt = row.children.reduce((s, c) => s + (c.total_amount || 0), 0)
+  row.quantity_kg = totalQty
+  row.total_amount = totalAmt
+  row.unit_price = totalQty > 0 ? Math.round((totalAmt / totalQty) * 100) / 100 : 0
+}
+
+function flattenTreeData(): any[] {
+  const result: any[] = []
+  for (const row of treeData.value) {
+    if (row.isGroup && row.children) {
+      // 组头行
+      result.push({
+        internal_code: '',  // 组头无内部编码
+        product_cn: row.groupName || row.product_cn,
+        spec_kg: undefined,
+        quantity_kg: row.quantity_kg,
+        unit_price: row.unit_price,
+        total_amount: row.total_amount,
+        hs_code: row.hs_code,
+        customs_name: row.customs_name,
+        customs_ingredients: undefined,
+        product_appearance: undefined,
+        source_pi_contract: row.source_pi_contract,
+        source_sales_order: row.source_sales_order,
+        source_pi_file: row.source_pi_file,
+        source_note: row.source_note,
+        validation_status: row.validation_status,
+        warnings: row.warnings || [],
+        // 分组字段通过额外属性传递
+        _group_id: row.groupId,
+        _group_name: row.groupName,
+        _is_group_header: true,
+      })
+
+      // 子项行
+      for (const child of row.children) {
+        result.push({
+          ...child,
+          _group_id: row.groupId,
+          _group_name: row.groupName,
+          _is_group_header: false,
+        })
+      }
+    } else if (!row.isGroup) {
+      result.push(row)
+    }
+  }
+  return result
+}
 
 async function handlePiContractParse(text: string) {
   if (!text.trim()) {
@@ -421,6 +642,9 @@ async function handleSaveLedger() {
   saving.value = true
   try {
     const preview = mergePreviewData.value
+    // 从树形数据展平，保留分组结构
+    const flatItems = flattenTreeData()
+
     // 从计算器获取包装数据
     const calcSummary = calcRef.value?.getSummary()
     const calcRows = calcRef.value?.getRows() || []
@@ -433,37 +657,73 @@ async function handleSaveLedger() {
     }
 
     // 只写入包装计算器中有数据的产品（以包装计算结果为准）
-    const items = preview.items
-      .filter(item => calcMap[item.internal_code])
-      .map(item => {
-        const rowCalc = calcMap[item.internal_code] || {}
-        return {
-          internal_code: item.internal_code,
-          product_cn: item.product_cn,
-          product_en: '',
-          spec_kg: item.spec_kg ?? undefined,
-          quantity_kg: item.quantity_kg,
-          unit_price: item.unit_price,
-          total_amount: item.total_amount,
-          hs_code: item.hs_code,
-          customs_name: item.customs_name,
-          customs_ingredients: item.customs_ingredients,
-          product_appearance: item.product_appearance,
-          packaging_name: rowCalc.packaging_name || undefined,
-          drum_count: rowCalc.drums ?? undefined,
-          pallet_count: rowCalc.pallets ?? (rowCalc.drums && rowCalc.drums_per_pallet ? Math.ceil(rowCalc.drums / rowCalc.drums_per_pallet) : undefined),
-          net_weight_kg: rowCalc.net_weight_kg ?? undefined,
-          gross_weight_kg: rowCalc.gross_weight_kg ?? undefined,
-          volume_cbm: rowCalc.volume_cbm ?? undefined,
-          fits_20gp: rowCalc.fits_20gp || undefined,
-          packaging_type_id: undefined,
-          pallet_spec: rowCalc.pallet_spec || undefined,
-          drums_per_pallet: rowCalc.drums_per_pallet ?? undefined,
-        }
+    const processedItems: any[] = []
+    for (const item of flatItems) {
+      const rowCalc = calcMap[item.internal_code]
+      const ext = item as any
+      const isHeader = ext._is_group_header ?? false
+      const groupId = ext._group_id
+      processedItems.push({
+        internal_code: item.internal_code || `_group_${groupId ?? 0}`,
+        product_cn: isHeader ? (ext._group_name || item.product_cn) : item.product_cn,
+        product_en: '',
+        spec_kg: isHeader ? undefined : (item.spec_kg ?? undefined),
+        quantity_kg: item.quantity_kg,
+        unit_price: item.unit_price,
+        total_amount: item.total_amount,
+        hs_code: item.hs_code,
+        customs_name: item.customs_name,
+        customs_ingredients: isHeader ? undefined : item.customs_ingredients,
+        product_appearance: isHeader ? undefined : item.product_appearance,
+        // 分组字段
+        group_id: groupId ?? undefined,
+        group_name: ext._group_name ?? undefined,
+        is_group_header: isHeader,
+        packaging_name: rowCalc?.packaging_name || undefined,
+        drum_count: rowCalc?.drums ?? undefined,
+        pallet_count: rowCalc?.pallets ?? (rowCalc?.drums && rowCalc?.drums_per_pallet ? Math.ceil(rowCalc.drums / rowCalc.drums_per_pallet) : undefined),
+        net_weight_kg: rowCalc?.net_weight_kg ?? undefined,
+        gross_weight_kg: rowCalc?.gross_weight_kg ?? undefined,
+        volume_cbm: rowCalc?.volume_cbm ?? undefined,
+        fits_20gp: rowCalc?.fits_20gp || undefined,
+        packaging_type_id: undefined,
+        pallet_spec: rowCalc?.pallet_spec || undefined,
+        drums_per_pallet: rowCalc?.drums_per_pallet ?? undefined,
       })
+    }
 
-    // 查询英文名
+    // 对组头行：从子项聚合包装数据（组头可能没有匹配包装计算，需要从子项累计）
+    const childrenByGroup: Record<number, any[]> = {}
+    for (const item of processedItems) {
+      if (item.group_id != null && !item.is_group_header) {
+        (childrenByGroup[item.group_id] = childrenByGroup[item.group_id] || []).push(item)
+      }
+    }
+    for (const item of processedItems) {
+      if (item.is_group_header && item.group_id != null) {
+        const children = childrenByGroup[item.group_id] || []
+        if (children.length > 0) {
+          item.drum_count = children.reduce((s: number, c: any) => s + (c.drum_count || 0), 0)
+          item.pallet_count = children.reduce((s: number, c: any) => s + (c.pallet_count || 0), 0)
+          item.net_weight_kg = children.reduce((s: number, c: any) => s + (c.net_weight_kg || 0), 0)
+          item.gross_weight_kg = children.reduce((s: number, c: any) => s + (c.gross_weight_kg || 0), 0)
+          item.volume_cbm = children.reduce((s: number, c: any) => s + (c.volume_cbm || 0), 0)
+        }
+      }
+    }
+
+    // 检查是否有产品被写入（至少需要非组头行有数据）
+    const hasContent = processedItems.some(item => !item.is_group_header)
+    if (!hasContent) {
+      ElMessage.warning('请先在包装计算器中添加产品并完成计算')
+      return
+    }
+
+    const items = processedItems
+
+    // 查询英文名（跳过组头行）
     for (const item of items) {
+      if (item.is_group_header) continue
       const cn = item.customs_name || item.product_cn || ''
       if (cn) {
         try {
@@ -471,12 +731,6 @@ async function handleSaveLedger() {
           if (res.data.en) item.product_en = res.data.en
         } catch { /* ignore */ }
       }
-    }
-
-    // 检查是否有产品被写入
-    if (items.length === 0) {
-      ElMessage.warning('请先在包装计算器中添加产品并完成计算')
-      return
     }
 
     const request: LedgerWriteRequest = {
@@ -571,25 +825,38 @@ function calcRowAmount(row: any) {
   row.total_amount = Math.round(qty * price * 100) / 100
 }
 
+function recalcGroupFromChild(row: MergeTableRow) {
+  if (row.isGroup) return
+  // 计算本行金额
+  calcRowAmount(row)
+  // 查找并更新父组
+  for (const group of treeData.value) {
+    if (group.isGroup && group.children?.includes(row)) {
+      recalcGroup(group)
+      break
+    }
+  }
+}
+
 async function handleShowPackaging() {
   showPackaging.value = true
   await nextTick()
-  if (calcRef.value && mergePreviewData.value?.items.length) {
+  if (calcRef.value && treeData.value.length) {
     calcRef.value.clearRows()
-    for (const item of mergePreviewData.value.items) {
+    const flat = flattenTreeData()
+    // 只添加子项（跳过组头行，组头数据从子项聚合）
+    for (const item of flat) {
+      if (item._is_group_header) continue
       calcRef.value.addRow(item.internal_code, item.product_cn || '', item.quantity_kg || 0)
     }
   }
 }
 
 function addMergeItem() {
-  if (!mergePreviewData.value) return
-  mergePreviewData.value.items.push({
+  const newRow: MergeTableRow = {
+    rowUid: crypto.randomUUID(),
+    isGroup: false,
     internal_code: '',
-    source_pi_contract: false,
-    source_sales_order: false,
-    source_pi_file: false,
-    source_note: '',
     product_cn: '',
     spec_kg: undefined,
     quantity_kg: undefined,
@@ -599,14 +866,21 @@ function addMergeItem() {
     customs_name: '',
     customs_ingredients: '',
     product_appearance: '',
+    source_pi_contract: false,
+    source_sales_order: false,
+    source_pi_file: false,
+    source_note: '',
     validation_status: 'ok',
     warnings: [],
-  })
+  }
+  treeData.value.push(newRow)
 }
 
-function removeMergeItem(index: number) {
-  if (!mergePreviewData.value) return
-  mergePreviewData.value.items.splice(index, 1)
+function removeMergeItem(row: MergeTableRow) {
+  const idx = treeData.value.indexOf(row)
+  if (idx !== -1) {
+    treeData.value.splice(idx, 1)
+  }
 }
 
 function handleReset() {
@@ -621,6 +895,9 @@ function handleReset() {
   piFileData.value = null
   piFileForUpload.value = null
   mergePreviewData.value = null
+  treeData.value = []
+  selectedRows.value = []
+  mergeGroupCounter = 1
   showPackaging.value = false
   savedRecordId.value = null
   calcRef.value?.clearRows()
@@ -667,6 +944,9 @@ function handleReset() {
 
 /* 编辑表格中的警告输入框 */
 .is-warning :deep(.el-input__wrapper) { box-shadow: 0 0 0 1px #e6a23c inset; }
+
+/* 分组汇总值 */
+.group-summary { font-weight: 600; color: #e6a23c; font-size: 13px; }
 
 /* 包装区 */
 .packaging-section { margin-top: 16px; }

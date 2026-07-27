@@ -1,9 +1,14 @@
 <template>
   <div class="packaging-calculator">
     <div class="calc-table-wrapper">
-      <!-- 表头工具栏 -->
-      <div class="calc-toolbar">
-        <el-button size="small" @click="addRow">+ 添加产品</el-button>
+      <!-- 货柜选择栏 -->
+      <div class="container-selector-bar">
+        <span class="toolbar-label">货柜选择：</span>
+        <el-radio-group v-model="containerType" size="small">
+          <el-radio-button value="none">不装柜</el-radio-button>
+          <el-radio-button value="20gp">20GP</el-radio-button>
+          <el-radio-button value="40gp">40GP</el-radio-button>
+        </el-radio-group>
       </div>
 
       <!-- 多行计算表格 -->
@@ -108,9 +113,15 @@
         <el-table-column label="总毛重" width="90" align="center">
           <template #default="{ row }"><span>{{ row.total_weight_kg ? row.total_weight_kg.toFixed(1) : '-' }}</span></template>
         </el-table-column>
-        <el-table-column label="20GP" width="70" align="center">
+        <el-table-column :label="containerType === 'none' ? '货柜' : containerType.toUpperCase()" width="70" align="center">
           <template #default="{ row }">
-            <el-tag :type="row.fits_20gp ? 'success' : 'info'" size="small">{{ row.fits_20gp ? '✅' : '❌' }}</el-tag>
+            <el-tag v-if="containerType === 'none'" type="info" size="small">—</el-tag>
+            <el-tag v-else-if="containerType === '20gp'" :type="row.fits_20gp ? 'success' : 'info'" size="small">
+              {{ row.fits_20gp ? '✅' : '❌' }}
+            </el-tag>
+            <el-tag v-else :type="row.fits_40gp ? 'success' : 'warning'" size="small">
+              {{ row.fits_40gp ? '✅' : '❌' }}
+            </el-tag>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="60">
@@ -119,6 +130,11 @@
           </template>
         </el-table-column>
       </el-table>
+
+      <!-- 添加产品 -->
+      <div class="calc-toolbar">
+        <el-button size="small" @click="addRow">+ 添加产品</el-button>
+      </div>
 
       <!-- 汇总行 -->
       <div v-if="rows.length > 0" class="calc-summary">
@@ -129,9 +145,7 @@
           <el-descriptions-item label="总体积(CBM)"><strong>{{ summary.total_cbm.toFixed(3) }}</strong></el-descriptions-item>
           <el-descriptions-item label="总毛重(kg)"><strong>{{ summary.total_weight_kg.toFixed(1) }}</strong></el-descriptions-item>
           <el-descriptions-item label="货柜判断">
-            <el-tag :type="summary.fits_20gp ? 'success' : summary.fits_40gp ? 'warning' : 'danger'" size="small">
-              {{ summary.fits_20gp ? '20GP ✅' : summary.fits_40gp ? '40GP ✅' : '超出' }}
-            </el-tag>
+            <el-tag :type="getContainerTagType()" size="small">{{ getContainerLabel() }}</el-tag>
           </el-descriptions-item>
         </el-descriptions>
       </div>
@@ -207,6 +221,19 @@ const rows = ref<PackingRow[]>([])
 const summary = ref({ total_drums: 0, total_pallets: 0, total_cbm: 0, total_weight_kg: 0, fits_20gp: false, fits_40gp: false })
 const remainder_mode = ref<'full_pallet_merge' | 'full_pallet_independent' | 'no_pallet'>('full_pallet_merge')
 const showRemainderSection = ref('remainder')
+const containerType = ref<'none' | '20gp' | '40gp'>('20gp')
+
+function getContainerTagType(): string {
+  if (containerType.value === 'none') return 'info'
+  if (containerType.value === '20gp') return summary.value.fits_20gp ? 'success' : 'danger'
+  return summary.value.fits_40gp ? 'success' : 'warning'
+}
+
+function getContainerLabel(): string {
+  if (containerType.value === 'none') return '不装柜 ✅'
+  if (containerType.value === '20gp') return summary.value.fits_20gp ? '20GP ✅' : '20GP ❌'
+  return summary.value.fits_40gp ? '40GP ✅' : '40GP ❌'
+}
 
 const remainderRows = computed(() => rows.value.filter(r => r.remainder > 0 && r.is_auto))
 const hasAutoRemainderRows = computed(() => rows.value.some(r => r.remainder > 0 && r.is_auto))
@@ -539,7 +566,7 @@ function clearRows() {
 }
 
 function getSummary() {
-  return summary.value
+  return { ...summary.value, container_type: containerType.value }
 }
 
 function getRows() {
@@ -555,7 +582,7 @@ function getRows() {
     net_weight_kg: r.quantity_kg,
     gross_weight_kg: r.total_weight_kg,
     volume_cbm: r.total_cbm,
-    fits_20gp: r.fits_20gp ? '适合' : '超出',
+    fits_20gp: containerType.value === 'none' ? '不装柜' : containerType.value.toUpperCase(),
     actual_fill_kg: r.actual_fill_kg,
   }))
 }
@@ -585,6 +612,7 @@ defineExpose({ addRow, clearRows, setQuantity, selectPackage, getSummary, getRow
 .packaging-calculator { padding: 4px 0; }
 .calc-table-wrapper { padding: 4px 0; overflow-x: auto; }
 .calc-toolbar { margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+.toolbar-label { font-size: 13px; color: #606266; white-space: nowrap; }
 .calc-table { margin-bottom: 12px; }
 .calc-summary { margin-top: 8px; }
 .pkg-select-popper { min-width: 320px !important; }

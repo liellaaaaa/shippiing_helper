@@ -287,7 +287,7 @@
                 <template v-else>{{ row.volume_cbm ?? '-' }}</template>
               </template>
             </el-table-column>
-            <el-table-column prop="fits_20gp" label="20GP适配" width="100" align="center" header-align="left">
+            <el-table-column prop="fits_20gp" label="货柜选择" width="100" align="center" header-align="left">
               <template #default="{ row }">
                 <template v-if="isEditing"><el-input v-model="row.fits_20gp" size="small" /></template>
                 <template v-else>{{ row.fits_20gp || '-' }}</template>

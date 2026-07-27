@@ -1,5 +1,6 @@
 """PI contract service — transactional save with pi_data Upsert."""
 
+from app.core.pi_parser import _clean_price_term
 from app.database import SessionLocal
 from app.models.pi_contract import PiContract, PiContractItem, PiData
 from app.schemas.pi_contract import PiContractSaveRequest
@@ -39,7 +40,7 @@ class PiService:
                 contract.consignee_address = request.consignee_address
                 contract.destination = request.destination
                 contract.loading_port = request.loading_port
-                contract.price_term = request.price_term
+                contract.price_term = _clean_price_term(request.price_term)
                 contract.invoice_to = request.invoice_to
             else:
                 # Create new contract
@@ -54,7 +55,7 @@ class PiService:
                     consignee_address=request.consignee_address,
                     destination=request.destination,
                     loading_port=request.loading_port,
-                    price_term=request.price_term,
+                    price_term=_clean_price_term(request.price_term),
                     invoice_to=request.invoice_to,
                 )
                 self.db.add(contract)

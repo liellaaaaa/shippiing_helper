@@ -579,6 +579,40 @@ def _is_product_description_row(row_text: str) -> bool:
     return False
 
 
+# ── 已知价格条款前缀列表 ──────────────────────────────────────
+_KNOWN_PRICE_TERMS = [
+    r'C\s*&\s*F',  # must come before plain C
+    r'CIF',
+    r'FOB',
+    r'CFR',
+    r'EXW',
+    r'FCA',
+    r'CPT',
+    r'CIP',
+    r'DAP',
+    r'DPU',
+]
+
+def _clean_price_term(raw: str | None) -> str | None:
+    """
+    从原始价格条款字符串中提取已知前缀（去掉后面跟随的国家/地区等冗余信息）。
+    例如: "CIF Izmit" → "CIF", "FOB Shanghai" → "FOB", "C&F" → "C&F"
+    若无法匹配已知前缀，返回原字符串。
+    """
+    if not raw:
+        return None
+    raw = raw.strip()
+    for pattern in _KNOWN_PRICE_TERMS:
+        m = re.match(pattern, raw, re.IGNORECASE)
+        if m:
+            term = m.group(0).upper()
+            # 标准化 C&F（可能写成 C & F、C&F、c&f 等）
+            if re.match(r'C\s*&\s*F', m.group(0), re.IGNORECASE):
+                return 'C&F'
+            return term
+    return raw
+
+
 def _extract_price_term_from_rows(rows: list[list[str]]) -> str | None:
     """
     从行结构中提取完整的价格条款。
@@ -592,9 +626,10 @@ def _extract_price_term_from_rows(rows: list[list[str]]) -> str | None:
             if m:
                 term = m.group(1).strip()
                 if term:
-                    return term
+                    return _clean_price_term(term)
 
     # 策略2: 从表头中提取价格条款（如 "CIF Jakarta(USD/Kg)" 或 "CIF KLANG( USD/kg)"）
+    # 只保留前缀（FOB/CIF/C&F 等），去掉后面跟随的国家/地区名
     for row in rows:
         for cell in row:
             cell_str = str(cell).strip()
@@ -604,11 +639,8 @@ def _extract_price_term_from_rows(rows: list[list[str]]) -> str | None:
                 cell_str, re.IGNORECASE
             )
             if m:
-                term_type = m.group(1).upper()
-                location = m.group(2).strip()
-                if location:
-                    return f"{term_type} {location}"
-                return term_type
+                term = m.group(1)
+                return _clean_price_term(term)
 
     # 策略3: 兜底，只找 CIF/FOB 等关键字
     for row in rows:
@@ -1201,6 +1233,7 @@ def parse_proforma_invoice_from_text(text: str, filename: str = "") -> PiContrac
     if not price_term:
         m = re.search(r"\b(CIF|FOB|CFR|C\s*&\s*F|EXW|FCA|CPT|CIP|DAP|DPU)\b", text)
         price_term = m.group(0) if m else None
+    price_term = _clean_price_term(price_term)
 
     # 8) Invoice To
     invoice_to = scan(r"INVOICE\s+TO\s*[:.]?\s*NAME\s*:") or scan(r"INVOICE\s+TO\s*:")
@@ -1361,7 +1394,7 @@ def _build_response_from_ai(ai_data: dict) -> PiContractUploadResponse:
         consignee_tel=ai_data.get("consignee_tel"),
         destination=ai_data.get("destination"),
         loading_port=ai_data.get("loading_port"),
-        price_term=ai_data.get("price_term"),
+        price_term=_clean_price_term(ai_data.get("price_term")),
         payment_terms=ai_data.get("payment_terms"),
         invoice_to=ai_data.get("invoice_to"),
         currency=ai_data.get("currency"),

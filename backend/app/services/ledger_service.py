@@ -1,5 +1,6 @@
 """台账服务 — 三源合并预览 + 台账读写"""
 
+from app.core.pi_parser import _clean_price_term
 from app.database import SessionLocal
 from app.models.order_pi_record import OrderPiRecord
 from app.schemas.ledger import (
@@ -359,7 +360,7 @@ class LedgerService:
                     consignee_tel=req.consignee_tel,
                     destination=req.destination,
                     loading_port=req.loading_port,
-                    price_term=req.price_term,
+                    price_term=_clean_price_term(req.price_term),
                     payment_terms=req.payment_terms,
                     bank_info=req.bank_info,
                     currency=req.currency,
@@ -478,7 +479,7 @@ class LedgerService:
                     consignee_tel=req.consignee_tel,
                     destination=req.destination,
                     loading_port=req.loading_port,
-                    price_term=req.price_term,
+                    price_term=_clean_price_term(req.price_term),
                     payment_terms=req.payment_terms,
                     bank_info=req.bank_info,
                     currency=req.currency,

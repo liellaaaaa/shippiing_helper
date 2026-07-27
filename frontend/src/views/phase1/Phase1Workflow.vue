@@ -235,16 +235,6 @@
               <el-input v-model="row.product_appearance" size="small" />
             </template>
           </el-table-column>
-          <el-table-column label="来源" width="130" align="center">
-            <template #default="{ row }">
-              <el-select v-model="row.source_note" size="small" style="width:100%">
-                <el-option label="匹配" value="匹配" />
-                <el-option label="仅PI合同表" value="仅PI合同表" />
-                <el-option label="仅销售订单表" value="仅销售订单表" />
-                <el-option label="PI文件" value="PI文件" />
-              </el-select>
-            </template>
-          </el-table-column>
           <el-table-column label="操作" width="60" fixed="right" align="center">
             <template #default="{ $index }">
               <el-button type="danger" text size="small" @click="removeMergeItem($index)">

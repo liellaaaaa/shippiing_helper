@@ -239,10 +239,14 @@
                 <template v-else>{{ row.product_appearance || '-' }}</template>
               </template>
             </el-table-column>
-            <el-table-column prop="packaging_type_id" label="包装类型" width="90" align="center" header-align="left">
+            <el-table-column prop="packaging_type_id" label="包装类型" width="150" header-align="left">
               <template #default="{ row }">
-                <template v-if="isEditing"><el-input v-model.number="row.packaging_type_id" size="small" type="number" /></template>
-                <template v-else>{{ row.packaging_type_id ?? '-' }}</template>
+                <template v-if="isEditing">
+                  <el-select v-model="row.packaging_type_id" size="small" placeholder="选择包装类型" clearable filterable style="width: 130px;">
+                    <el-option v-for="[id, name] in pkgTypeOptions" :key="id" :label="name" :value="id" />
+                  </el-select>
+                </template>
+                <template v-else>{{ pkgTypeName(row.packaging_type_id) }}</template>
               </template>
             </el-table-column>
             <el-table-column prop="pallet_spec" label="托盘规格" width="90">
@@ -319,9 +323,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { ordersApi, type LedgerRecord, type LedgerItem } from '@/api/orders'
+import { getPackagingTypes } from '@/api/packages'
 
 const props = defineProps<{
   modelValue: boolean
@@ -475,6 +480,29 @@ async function handleSave() {
   } finally {
     saving.value = false
   }
+}
+
+const pkgTypeMap = ref<Record<number, string>>({})
+const pkgTypeOptions = ref<[number, string][]>([])
+
+onMounted(async () => {
+  try {
+    const resp = await getPackagingTypes()
+    const types = resp.types || []
+    const map: Record<number, string> = {}
+    const opts: [number, string][] = []
+    for (const t of types) {
+      map[t.id] = t.name
+      opts.push([t.id, t.name])
+    }
+    pkgTypeMap.value = map
+    pkgTypeOptions.value = opts
+  } catch { /* ignore */ }
+})
+
+function pkgTypeName(id: number | undefined | null): string {
+  if (id == null) return '-'
+  return pkgTypeMap.value[id] ?? `未知(${id})`
 }
 
 const formatDate = (dateStr: string) => {

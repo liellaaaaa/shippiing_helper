@@ -129,7 +129,7 @@ class ProductPackagingItem(BaseModel):
     drums: int
     drums_per_pallet: int
     pallets: int
-    pallet_spec: str
+    pallet_spec: Optional[str]
     net_weight_kg: float
     gross_weight_kg: float
     volume_cbm: float

@@ -151,7 +151,7 @@ class OrderProductItem(BaseModel):
     quantity_kg: float
     specification_kg: float
     barrel_type: str = "胶桶"
-    pallet_spec: str = "1.1*1.1m"
+    pallet_spec: Optional[str] = None  # None 或 "" = 不打板
     actual_fill_kg: Optional[float] = None
 
 

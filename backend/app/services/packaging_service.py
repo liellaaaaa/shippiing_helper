@@ -339,6 +339,32 @@ def calculate_single_product(
     fill_kg = actual_fill_kg if actual_fill_kg and actual_fill_kg > 0 else specification_kg
     drums = math.ceil(quantity_kg / fill_kg)
 
+    # 不打卡板模式：当 pallet_spec 为空/None 时，直接计算桶数体积毛重，无卡板贡献
+    if not pallet_spec:
+        drum_tare = drums * pkg.tare_kg
+        drum_cbm = drums * pkg.cbm
+        total_volume = drum_cbm
+        gross_weight = drums * pkg.gross_kg
+
+        return ProductPackagingResult(
+            product_name=packaging_name,
+            packaging_name=packaging_name,
+            specification_kg=specification_kg,
+            drums=drums,
+            drums_per_pallet=0,
+            pallets=0,
+            pallet_spec="",
+            full_pallets=0,
+            remainder=0,
+            net_weight_kg=quantity_kg,
+            drum_tare_kg=round(drum_tare, 1),
+            pallet_tare_kg=0,
+            gross_weight_kg=round(gross_weight, 1),
+            drum_cbm=round(drum_cbm, 4),
+            pallet_cbm=0,
+            total_volume_cbm=round(total_volume, 4),
+        )
+
     # 确定每托盘桶数
     if "1.0*1.0" in pallet_spec:
         drums_per_pallet = pkg.pallet_qty_1x1 or 0
@@ -438,7 +464,7 @@ def calculate_order_packaging(products: list[OrderProductInput]) -> OrderPackagi
     # 按卡板规格分组
     pallet_groups: dict[str, dict] = {}
     for prod_result in product_details:
-        if prod_result.pallets > 0:
+        if prod_result.pallets > 0 and prod_result.pallet_spec:
             spec = prod_result.pallet_spec
             if spec not in pallet_groups:
                 pallet_groups[spec] = {"count": 0, "drums": 0, "volume": 0.0, "weight": 0.0}

@@ -32,7 +32,9 @@
         </el-table-column>
         <el-table-column label="卡板规格" width="140">
           <template #default="{ row }">
-            <el-select v-if="isPalletizable(row.packaging_name)" v-model="row.pallet_spec" placeholder="选择托盘" size="small" :disabled="!row.packaging_name" @change="() => onRowPackageChange(row, row.packaging_name)">
+            <el-select v-model="row.pallet_spec" placeholder="选择托盘/不打卡板" size="small" :disabled="!row.packaging_name" @change="() => onRowPackageChange(row, row.packaging_name)">
+              <!-- "不打卡板"选项，始终可用，value="" -->
+              <el-option label="不打卡板" value="" />
               <el-option
                 v-for="p in palletTypes"
                 :key="p.name"
@@ -41,7 +43,6 @@
                 :disabled="isPalletUnsupported(row.packaging_name, p.name)"
               />
             </el-select>
-            <span v-else class="muted" style="font-size:12px;color:#999">不需要卡板</span>
           </template>
         </el-table-column>
         <el-table-column label="数量(kg)" width="120">
@@ -64,7 +65,7 @@
         </el-table-column>
         <el-table-column label="每卡板桶数" width="100">
           <template #default="{ row }">
-            <template v-if="isPalletizable(row.packaging_name)">
+            <template v-if="isPalletizable(row.packaging_name) && row.pallet_spec !== ''">
               <el-input-number
                 v-model="row.drums_per_pallet"
                 size="small"
@@ -82,7 +83,7 @@
         </el-table-column>
         <el-table-column label="板数" width="130" align="center">
           <template #default="{ row }">
-            <template v-if="isPalletizable(row.packaging_name)">
+            <template v-if="isPalletizable(row.packaging_name) && row.pallet_spec !== ''">
               <div class="pallets-cell">
                 <el-input-number
                   v-model="row.pallets"

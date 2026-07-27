@@ -45,7 +45,8 @@ class PiContractUploadResponse(BaseModel):
     destination: Optional[str] = None
     loading_port: Optional[str] = None # 装货地
     price_term: Optional[str] = None          # 价格条款 (FOB/C&F/CIF等)
-    payment_terms: Optional[str] = None       # 付款方式
+    payment_terms: Optional[str] = None       # 付款条款原文
+    payment_method: Optional[str] = None      # 付款方式分类: "TT" 电汇 / "LC" 信用证
     invoice_to: Optional[str] = None          # 发票抬头
     currency: Optional[str] = None            # 币制：USD / CNY / RMB
     items: list[PiContractItemRow] = []
@@ -88,6 +89,8 @@ class PiContractSaveRequest(BaseModel):
     loading_port: Optional[str] = None # 装货地
     price_term: Optional[str] = None          # 价格条款 (FOB/C&F/CIF等)
     invoice_to: Optional[str] = None          # 发票抬头
+    payment_terms: Optional[str] = None       # 付款条款原文
+    payment_method: Optional[str] = None      # 付款方式分类: "TT" 电汇 / "LC" 信用证
     items: list[PiContractSaveItem] = []
 
     class Config:

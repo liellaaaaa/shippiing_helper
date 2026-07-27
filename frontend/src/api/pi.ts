@@ -36,6 +36,8 @@ export interface PiUploadResponse {
   destination?: string
   loading_port?: string
   price_term?: string
+  payment_terms?: string
+  payment_method?: string
   invoice_to?: string
   currency?: string
   items: PiContractItem[]
@@ -62,6 +64,14 @@ export interface PiSaveRequest {
   pi_date?: string
   is_ordered: string
   order_id?: number
+  consignee_name?: string
+  consignee_address?: string
+  destination?: string
+  loading_port?: string
+  price_term?: string
+  payment_terms?: string
+  payment_method?: string
+  invoice_to?: string
   items: PiSaveItem[]
 }
 

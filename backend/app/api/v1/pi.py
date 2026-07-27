@@ -78,6 +78,9 @@ async def upload_pi_file(
                 consignee_name=result.consignee_name,
                 consignee_address=result.consignee_address,
                 destination=result.destination,
+                price_term=result.price_term,
+                payment_terms=result.payment_terms,
+                payment_method=result.payment_method,
                 items=[PiContractSaveItem(
                     internal_code=item.internal_code,
                     quantity=item.quantity,

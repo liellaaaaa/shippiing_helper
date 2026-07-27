@@ -593,6 +593,35 @@ _KNOWN_PRICE_TERMS = [
     r'DPU',
 ]
 
+def _classify_payment_method(raw: str | None) -> str | None:
+    """
+    从付款条款原文中分类付款方式：
+    - 匹配 TT/T/T/Telegraphic Transfer/电汇 → "TT"（电汇）
+    - 匹配 LC/L/C/Letter of Credit/信用证 → "LC"（信用证）
+    - 无法识别 → None
+    """
+    if not raw:
+        return None
+
+    text = raw.upper().strip()
+
+    # 检测 TT（电汇）
+    # 常见变体：TT, T/T, T-T, TELEGRAPHIC TRANSFER, 电汇
+    if re.search(r'(?i)\bT\s*[ /-]?\s*T\b', text) or \
+       re.search(r'(?i)\bTELEGRAPHIC\s+TRANSFER\b', text) or \
+       re.search(r'电汇', text):
+        return "TT"
+
+    # 检测 L/C（信用证）
+    # 常见变体：LC, L/C, L-C, LETTER OF CREDIT, 信用证
+    if re.search(r'(?i)\bL\s*[ /-]?\s*C\b', text) or \
+       re.search(r'(?i)\bLETTER\s+OF\s+CREDIT\b', text) or \
+       re.search(r'信用证', text):
+        return "LC"
+
+    return None
+
+
 def _clean_price_term(raw: str | None) -> str | None:
     """
     从原始价格条款字符串中提取已知前缀（去掉后面跟随的国家/地区等冗余信息）。
@@ -779,8 +808,35 @@ def parse_proforma_invoice(rows: list[list[str]]) -> PiContractUploadResponse:
     invoice_to = None
     in_payment_section = False
 
+    def _extract_value_after_label(cell_str: str, label: str) -> str | None:
+        """从单元格中提取 Label: Value 中的 Value"""
+        m = re.search(rf'(?i){label}\s*[:：]\s*(.+)', cell_str)
+        if m:
+            val = m.group(1).strip()
+            if val and val != cell_str:
+                return val
+        return None
+
+    def _find_value_in_cell_or_next(rows: list[list[str]], ri: int, ci: int, cell_str: str, label: str) -> str | None:
+        """在当前单元格找 Label:Value，如果只有Label则查同行下一列或下一行同列"""
+        # 先试当前格
+        val = _extract_value_after_label(cell_str, label)
+        if val and not re.match(r'(?i)^(T/T|L/C|LETTER|Payment|Destination|Beneficiary|Port)\s*$', val):
+            return val
+        # 查同行下一列
+        if ci + 1 < len(rows[ri]):
+            next_cell_val = str(rows[ri][ci + 1]).strip()
+            if next_cell_val and not re.match(r'(?i)^(Payment|Destination|Beneficiary|Port|Terms)\s*$', next_cell_val):
+                return next_cell_val
+        # 查下一行同列
+        if ri + 1 < len(rows):
+            next_row_val = str(rows[ri + 1][ci]).strip() if ci < len(rows[ri + 1]) else ""
+            if next_row_val and not re.match(r'(?i)^(Payment|Destination|Beneficiary|Port|Terms|Conditions)\s*$', next_row_val):
+                return next_row_val
+        return val or None
+
     for ri, row in enumerate(rows):
-        for cell in row:
+        for ci, cell in enumerate(row):
             cell_str = str(cell).strip()
             # 检测 payment section 开始：
             # 1) 显式 "Payment terms and conditions" 标题
@@ -794,30 +850,38 @@ def parse_proforma_invoice(rows: list[list[str]]) -> PiContractUploadResponse:
             elif re.search(r'(?i)^\d+\.\s*Destination\s*[:：]', cell_str):
                 in_payment_section = True
 
-            if in_payment_section:
-                m = re.search(r'(?i)Payment\s+Terms?\s*[:：]\s*(.+)', cell_str)
-                if m:
-                    payment_terms = m.group(1).strip()
-                m = re.search(r'(?i)Destination\s*[:：]\s*(.+)', cell_str)
-                if m:
-                    destination = m.group(1).strip()
-                m = re.search(r'(?i)Beneficiary\s+Bank\s*[:：]\s*(.+)', cell_str)
-                if m:
-                    beneficiary_bank = m.group(1).strip()
+            if in_payment_section or re.search(r'(?i)\bPayment\s+Terms?\b', cell_str):
+                # Payment Terms — 支持编号格式如 "2. Payment Terms: TT, 100% against BL"
+                # 也支持无编号格式如 "Payment Terms: TT"
+                if re.search(r'(?i)(?:\d+\.?\s*)?Payment\s+Terms?\s*', cell_str):
+                    val = _find_value_in_cell_or_next(rows, ri, ci, cell_str, r'(?:\d+\.?\s*)?Payment\s+Terms?')
+                    if val:
+                        payment_terms = val
+                # Destination
+                if re.search(r'(?i)(?:\d+\.?\s*)?Destination\s*', cell_str):
+                    val = _find_value_in_cell_or_next(rows, ri, ci, cell_str, r'(?:\d+\.?\s*)?Destination')
+                    if val:
+                        destination = val
+                # Beneficiary Bank
+                if re.search(r'(?i)(?:\d+\.?\s*)?Beneficiary\s+Bank\s*', cell_str):
+                    val = _find_value_in_cell_or_next(rows, ri, ci, cell_str, r'(?:\d+\.?\s*)?Beneficiary\s+Bank')
+                    if val:
+                        beneficiary_bank = val
+
             # Port of loading（可能在 payment 区域之外）
-            m = re.search(r'(?i)Port\s+of\s+loading\s*[:：]\s*(.+)', cell_str)
-            if m:
-                loading_port = m.group(1).strip()
-            m = re.search(r'(?i)Loading\s+Port\s*[:：]\s*(.+)', cell_str)
-            if m:
-                loading_port = m.group(1).strip()
+            if re.search(r'(?i)(?:Port\s+of\s+loading|Loading\s+Port)\s*', cell_str):
+                val = _find_value_in_cell_or_next(rows, ri, ci, cell_str, r'(?:Port\s+of\s+loading|Loading\s+Port)')
+                if val:
+                    loading_port = val
+
             # Invoice To
-            m = re.search(r'(?i)INVOICE\s+TO\s*[:.]?\s*NAME\s*[:：]\s*(.+)', cell_str)
-            if m:
-                invoice_to = m.group(1).strip()
-            m = re.search(r'(?i)INVOICE\s+TO\s*[:：]\s*(.+)', cell_str)
-            if m:
-                invoice_to = m.group(1).strip()
+            if re.search(r'(?i)INVOICE\s+TO\s*', cell_str):
+                val = _find_value_in_cell_or_next(rows, ri, ci, cell_str, r'INVOICE\s+TO')
+                if val:
+                    invoice_to = val
+
+    # 付款方式分类
+    payment_method = _classify_payment_method(payment_terms)
 
     # ── 7. 提取产品明细 ──────────────────────────────────────────────
     items: list[PiContractItemRow] = []
@@ -1066,6 +1130,7 @@ def parse_proforma_invoice(rows: list[list[str]]) -> PiContractUploadResponse:
         loading_port=loading_port,
         price_term=price_term,
         payment_terms=payment_terms,
+        payment_method=payment_method,
         invoice_to=invoice_to,
         currency=currency,
         items=items,
@@ -1238,6 +1303,28 @@ def parse_proforma_invoice_from_text(text: str, filename: str = "") -> PiContrac
     # 8) Invoice To
     invoice_to = scan(r"INVOICE\s+TO\s*[:.]?\s*NAME\s*:") or scan(r"INVOICE\s+TO\s*:")
 
+    # 9) Payment Terms — 支持多种 OCR 变形
+    payment_terms = (
+        scan(r"(?:\d+\.?\s*)?Payment\s+Terms?\s*:") or
+        scan(r"(?:\d+\.?\s*)?PAYMENT\s+TERMS?\s*:") or
+        scan(r"(?:\d+\.?\s*)?Payment\s+Term\s*:") or
+        scan_next_line(r"Payment\s+Terms?\s*and\s+Conditions\s*:") or
+        None
+    )
+    if payment_terms:
+        # 清理多余前缀（如 "2. Payment Terms: " 的部分如果还没被剥离）
+        payment_terms = re.sub(r'(?i)^(?:\d+\.?\s*)?(?:Payment\s+Terms?\s*:?\s*)', '', payment_terms).strip()
+    # 兜底：在所有文本中找 Payment Terms 后面的值
+    if not payment_terms:
+        m = re.search(r'(?i)(?:\d+\.?\s*)?Payment\s+Terms?\s*[:：]?\s*(.+?)(?:\.\s*(?:\d+\.|$)|$)', text, re.DOTALL)
+        if m:
+            raw = m.group(1).strip()
+            # 截取到第一个编号或行尾
+            raw = raw.split('\n')[0].strip()
+            if raw and len(raw) < 200:
+                payment_terms = raw
+    payment_method = _classify_payment_method(payment_terms)
+
     # 产品明细行解析
     items = []
     lines = text.split(chr(10))
@@ -1320,6 +1407,8 @@ def parse_proforma_invoice_from_text(text: str, filename: str = "") -> PiContrac
         destination=destination,
         loading_port=loading_port,
         price_term=price_term,
+        payment_terms=payment_terms,
+        payment_method=payment_method,
         invoice_to=invoice_to,
         items=items,
         confidence=confidence,
@@ -1396,6 +1485,7 @@ def _build_response_from_ai(ai_data: dict) -> PiContractUploadResponse:
         loading_port=ai_data.get("loading_port"),
         price_term=_clean_price_term(ai_data.get("price_term")),
         payment_terms=ai_data.get("payment_terms"),
+        payment_method=_classify_payment_method(ai_data.get("payment_terms")),
         invoice_to=ai_data.get("invoice_to"),
         currency=ai_data.get("currency"),
         items=items,

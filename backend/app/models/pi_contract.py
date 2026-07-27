@@ -21,6 +21,8 @@ class PiContract(Base):
     loading_port = Column(String(200))         # 装货地
     price_term = Column(String(100))          # 价格条款 (FOB/C&F/CIF等)
     invoice_to = Column(String(200))          # 发票抬头 (另一收货人)
+    payment_terms = Column(Text)              # 付款条款原文 (如 "TT, 100% payment against BL copy")
+    payment_method = Column(String(20))       # 付款方式分类: "TT" 电汇 / "LC" 信用证
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

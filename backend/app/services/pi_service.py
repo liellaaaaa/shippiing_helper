@@ -42,6 +42,8 @@ class PiService:
                 contract.loading_port = request.loading_port
                 contract.price_term = _clean_price_term(request.price_term)
                 contract.invoice_to = request.invoice_to
+                contract.payment_terms = request.payment_terms
+                contract.payment_method = request.payment_method
             else:
                 # Create new contract
                 contract = PiContract(
@@ -57,6 +59,8 @@ class PiService:
                     loading_port=request.loading_port,
                     price_term=_clean_price_term(request.price_term),
                     invoice_to=request.invoice_to,
+                    payment_terms=request.payment_terms,
+                    payment_method=request.payment_method,
                 )
                 self.db.add(contract)
                 self.db.flush()  # Get the ID
@@ -151,6 +155,14 @@ class PiService:
                 "sales_person": c.sales_person,
                 "pi_date": c.pi_date,
                 "is_ordered": c.is_ordered,
+                "consignee_name": c.consignee_name,
+                "consignee_address": c.consignee_address,
+                "destination": c.destination,
+                "loading_port": c.loading_port,
+                "price_term": c.price_term,
+                "payment_terms": c.payment_terms,
+                "payment_method": c.payment_method,
+                "invoice_to": c.invoice_to,
                 "items": [],
             }
 

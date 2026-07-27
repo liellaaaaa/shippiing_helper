@@ -246,6 +246,7 @@ class LedgerService:
             loading_port=pi_file_data.loading_port if pi_file_data else None,
             price_term=pi_file_data.price_term if pi_file_data else None,
             payment_terms=getattr(pi_file_data, "payment_terms", None) if pi_file_data else None,
+            payment_method=getattr(pi_file_data, "payment_method", None) if pi_file_data else None,
             bank_info=getattr(pi_file_data, "beneficiary_bank", None) if pi_file_data else None,
             currency=getattr(pi_file_data, "currency", None) if pi_file_data else None,
             items=merged_items,

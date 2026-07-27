@@ -136,8 +136,16 @@
                 <template v-else>{{ record.currency || '-' }}</template>
               </el-descriptions-item>
               <el-descriptions-item label="付款方式" :span="2">
-                <template v-if="isEditing"><el-input v-model="editData.payment_terms" size="small" /></template>
-                <template v-else>{{ record.payment_terms || '-' }}</template>
+                <template v-if="isEditing">
+                  <el-tag v-if="classifyPayment(editData.payment_terms) === 'TT'" size="small" type="success" style="margin-right:6px">TT</el-tag>
+                  <el-tag v-else-if="classifyPayment(editData.payment_terms) === 'LC'" size="small" type="warning" style="margin-right:6px">LC</el-tag>
+                  <el-input v-model="editData.payment_terms" size="small" />
+                </template>
+                <template v-else>
+                  <el-tag v-if="classifyPayment(record.payment_terms) === 'TT'" size="small" type="success" style="margin-right:6px">TT</el-tag>
+                  <el-tag v-else-if="classifyPayment(record.payment_terms) === 'LC'" size="small" type="warning" style="margin-right:6px">LC</el-tag>
+                  {{ record.payment_terms || '-' }}
+                </template>
               </el-descriptions-item>
               <el-descriptions-item label="银行信息" :span="3">
                 <template v-if="isEditing"><el-input v-model="editData.bank_info" size="small" /></template>
@@ -416,6 +424,15 @@ import { ElMessage } from 'element-plus'
 import { ordersApi, type LedgerRecord, type LedgerItem } from '@/api/orders'
 import { getPackagingTypes } from '@/api/packages'
 import { generateUuid } from '@/utils/uid'
+
+/** 从付款条款原文分类付款方式 */
+function classifyPayment(terms: string | null | undefined): string | null {
+  if (!terms) return null
+  const t = terms.toUpperCase()
+  if (/\bT\s*[ /-]?\s*T\b/.test(t) || /TELEGRAPHIC\s+TRANSFER/.test(t) || /电汇/.test(t)) return 'TT'
+  if (/\bL\s*[ /-]?\s*C\b/.test(t) || /LETTER\s+OF\s+CREDIT/.test(t) || /信用证/.test(t)) return 'LC'
+  return null
+}
 
 const props = defineProps<{
   modelValue: boolean

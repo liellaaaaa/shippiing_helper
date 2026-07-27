@@ -170,7 +170,12 @@
               <div class="field-item"><span class="label">装货港</span><el-input v-model="mergePreviewData.loading_port" size="small" clearable /></div>
               <div class="field-item"><span class="label">价格条款</span><el-input v-model="mergePreviewData.price_term" size="small" clearable /></div>
               <div class="field-item"><span class="label">币制</span><el-input v-model="mergePreviewData.currency" size="small" clearable /></div>
-              <div class="field-item"><span class="label">付款方式</span><el-input v-model="mergePreviewData.payment_terms" size="small" clearable /></div>
+              <div class="field-item">
+                <span class="label">付款方式</span>
+                <el-tag v-if="mergePreviewData.payment_method === 'TT'" size="small" type="success" style="margin-right:6px">TT</el-tag>
+                <el-tag v-else-if="mergePreviewData.payment_method === 'LC'" size="small" type="warning" style="margin-right:6px">LC</el-tag>
+                <el-input v-model="mergePreviewData.payment_terms" size="small" clearable />
+              </div>
             </div>
           </div>
         </div>

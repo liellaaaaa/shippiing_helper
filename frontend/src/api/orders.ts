@@ -143,6 +143,7 @@ export interface MergePreviewResponse {
   loading_port?: string
   price_term?: string
   payment_terms?: string
+  payment_method?: string
   bank_info?: string
   currency?: string
   // 产品列表
@@ -189,6 +190,7 @@ export interface LedgerRecord {
   loading_port?: string
   price_term?: string
   payment_terms?: string
+  payment_method?: string
   bank_info?: string
   currency?: string
   items: LedgerItem[]
@@ -222,6 +224,7 @@ export interface LedgerWriteRequest {
   loading_port?: string
   price_term?: string
   payment_terms?: string
+  payment_method?: string
   bank_info?: string
   currency?: string
   items: LedgerItem[]

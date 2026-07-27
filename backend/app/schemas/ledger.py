@@ -71,6 +71,7 @@ class LedgerRecordSchema(BaseModel):
     loading_port: Optional[str] = None  # 装货港
     price_term: Optional[str] = None    # 价格条款
     payment_terms: Optional[str] = None  # 付款方式
+    payment_method: Optional[str] = None  # 付款方式分类: TT/LC
     bank_info: Optional[str] = None     # 银行信息
     currency: Optional[str] = None      # 币制：USD / CNY / RMB
 
@@ -156,6 +157,7 @@ class MergePreviewResponse(BaseModel):
     loading_port: Optional[str] = None
     price_term: Optional[str] = None
     payment_terms: Optional[str] = None
+    payment_method: Optional[str] = None
     bank_info: Optional[str] = None
     currency: Optional[str] = None      # 币制：USD / CNY / RMB
     # 合并后的产品列表
@@ -210,6 +212,7 @@ class LedgerWriteRequest(BaseModel):
     loading_port: Optional[str] = None
     price_term: Optional[str] = None
     payment_terms: Optional[str] = None
+    payment_method: Optional[str] = None
     bank_info: Optional[str] = None
     currency: Optional[str] = None      # 币制：USD / CNY / RMB
     # 产品明细

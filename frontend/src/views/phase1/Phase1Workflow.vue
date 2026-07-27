@@ -337,6 +337,7 @@ import {
 } from '@/api/orders'
 import { uploadPiFile, type PiUploadResponse } from '@/api/pi'
 import { nameMappingApi } from '@/api/name_mapping'
+import { generateUuid } from '@/utils/uid'
 
 // ── 树形表行类型 ──────────────────────────────────────────────────────────────
 
@@ -422,7 +423,7 @@ watch(() => mergePreviewData.value, (val) => {
     return
   }
   treeData.value = val.items.map(item => ({
-    rowUid: crypto.randomUUID(),
+    rowUid: generateUuid(),
     isGroup: false,
     ...item,
   }))
@@ -460,7 +461,7 @@ function mergeSelected() {
 
   // 创建组头行
   const groupRow: MergeTableRow = {
-    rowUid: crypto.randomUUID(),
+    rowUid: generateUuid(),
     isGroup: true,
     groupName: `合并组 ${mergeGroupCounter - 1}`,
     groupId,
@@ -854,7 +855,7 @@ async function handleShowPackaging() {
 
 function addMergeItem() {
   const newRow: MergeTableRow = {
-    rowUid: crypto.randomUUID(),
+    rowUid: generateUuid(),
     isGroup: false,
     internal_code: '',
     product_cn: '',

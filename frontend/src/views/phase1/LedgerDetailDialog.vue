@@ -415,6 +415,7 @@ import { ref, watch, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { ordersApi, type LedgerRecord, type LedgerItem } from '@/api/orders'
 import { getPackagingTypes } from '@/api/packages'
+import { generateUuid } from '@/utils/uid'
 
 const props = defineProps<{
   modelValue: boolean
@@ -479,7 +480,7 @@ const treeItems = computed<TreeRow[]>(() => {
     if (item.is_group_header) {
       const group: TreeRow = {
         ...item,
-        rowUid: crypto.randomUUID(),
+        rowUid: generateUuid(),
         isGroup: true,
         groupName: item.group_name || item.product_cn || '分组',
         children: [],
@@ -491,7 +492,7 @@ const treeItems = computed<TreeRow[]>(() => {
       // 子项：添加到当前组
       const child: TreeRow = {
         ...item,
-        rowUid: crypto.randomUUID(),
+        rowUid: generateUuid(),
         isGroup: false,
       }
       currentGroup.children!.push(child)
@@ -500,7 +501,7 @@ const treeItems = computed<TreeRow[]>(() => {
       currentGroup = null
       result.push({
         ...item,
-        rowUid: crypto.randomUUID(),
+        rowUid: generateUuid(),
         isGroup: false,
       })
     }

@@ -598,6 +598,8 @@ def _classify_payment_method(raw: str | None) -> str | None:
     从付款条款原文中分类付款方式：
     - 匹配 TT/T/T/Telegraphic Transfer/电汇 → "TT"（电汇）
     - 匹配 LC/L/C/Letter of Credit/信用证 → "LC"（信用证）
+    - 匹配 DA/D/A/Documents against Acceptance/承兑交单 → "DA"（承兑交单）
+    - 匹配 DP/D/P/Documents against Payment/付款交单 → "DP"（付款交单）
     - 无法识别 → None
     """
     if not raw:
@@ -605,19 +607,29 @@ def _classify_payment_method(raw: str | None) -> str | None:
 
     text = raw.upper().strip()
 
-    # 检测 TT（电汇）
-    # 常见变体：TT, T/T, T-T, TELEGRAPHIC TRANSFER, 电汇
+    # 检测 TT（电汇）— 须在 DA 之前，避免 "T/T" 尾部 T 干扰
     if re.search(r'(?i)\bT\s*[ /-]?\s*T\b', text) or \
        re.search(r'(?i)\bTELEGRAPHIC\s+TRANSFER\b', text) or \
        re.search(r'电汇', text):
         return "TT"
 
     # 检测 L/C（信用证）
-    # 常见变体：LC, L/C, L-C, LETTER OF CREDIT, 信用证
     if re.search(r'(?i)\bL\s*[ /-]?\s*C\b', text) or \
        re.search(r'(?i)\bLETTER\s+OF\s+CREDIT\b', text) or \
        re.search(r'信用证', text):
         return "LC"
+
+    # 检测 DA（承兑交单）— 注意不与 DAP/DPU 等价格条款冲突
+    if re.search(r'(?i)\bD\s*[ /-]?\s*A\b', text) or \
+       re.search(r'(?i)\bDOCUMENTS?\s+AGAINST\s+ACCEPTANCE\b', text) or \
+       re.search(r'承兑交单', text):
+        return "DA"
+
+    # 检测 DP（付款交单）
+    if re.search(r'(?i)\bD\s*[ /-]?\s*P\b', text) or \
+       re.search(r'(?i)\bDOCUMENTS?\s+AGAINST\s+PAYMENT\b', text) or \
+       re.search(r'付款交单', text):
+        return "DP"
 
     return None
 

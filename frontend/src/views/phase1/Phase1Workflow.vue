@@ -174,6 +174,8 @@
                 <span class="label">付款方式</span>
                 <el-tag v-if="mergePreviewData.payment_method === 'TT'" size="small" type="success" style="margin-right:6px">TT</el-tag>
                 <el-tag v-else-if="mergePreviewData.payment_method === 'LC'" size="small" type="warning" style="margin-right:6px">LC</el-tag>
+                <el-tag v-else-if="mergePreviewData.payment_method === 'DA'" size="small" type="primary" style="margin-right:6px">DA</el-tag>
+                <el-tag v-else-if="mergePreviewData.payment_method === 'DP'" size="small" type="info" style="margin-right:6px">DP</el-tag>
                 <el-input v-model="mergePreviewData.payment_terms" size="small" clearable />
               </div>
             </div>

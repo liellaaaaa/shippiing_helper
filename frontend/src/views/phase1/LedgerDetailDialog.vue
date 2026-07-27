@@ -139,11 +139,15 @@
                 <template v-if="isEditing">
                   <el-tag v-if="classifyPayment(editData.payment_terms) === 'TT'" size="small" type="success" style="margin-right:6px">TT</el-tag>
                   <el-tag v-else-if="classifyPayment(editData.payment_terms) === 'LC'" size="small" type="warning" style="margin-right:6px">LC</el-tag>
+                  <el-tag v-else-if="classifyPayment(editData.payment_terms) === 'DA'" size="small" type="primary" style="margin-right:6px">DA</el-tag>
+                  <el-tag v-else-if="classifyPayment(editData.payment_terms) === 'DP'" size="small" type="info" style="margin-right:6px">DP</el-tag>
                   <el-input v-model="editData.payment_terms" size="small" />
                 </template>
                 <template v-else>
                   <el-tag v-if="classifyPayment(record.payment_terms) === 'TT'" size="small" type="success" style="margin-right:6px">TT</el-tag>
                   <el-tag v-else-if="classifyPayment(record.payment_terms) === 'LC'" size="small" type="warning" style="margin-right:6px">LC</el-tag>
+                  <el-tag v-else-if="classifyPayment(record.payment_terms) === 'DA'" size="small" type="primary" style="margin-right:6px">DA</el-tag>
+                  <el-tag v-else-if="classifyPayment(record.payment_terms) === 'DP'" size="small" type="info" style="margin-right:6px">DP</el-tag>
                   {{ record.payment_terms || '-' }}
                 </template>
               </el-descriptions-item>
@@ -431,6 +435,8 @@ function classifyPayment(terms: string | null | undefined): string | null {
   const t = terms.toUpperCase()
   if (/\bT\s*[ /-]?\s*T\b/.test(t) || /TELEGRAPHIC\s+TRANSFER/.test(t) || /电汇/.test(t)) return 'TT'
   if (/\bL\s*[ /-]?\s*C\b/.test(t) || /LETTER\s+OF\s+CREDIT/.test(t) || /信用证/.test(t)) return 'LC'
+  if (/\bD\s*[ /-]?\s*A\b/.test(t) || /DOCUMENTS?\s+AGAINST\s+ACCEPTANCE/.test(t) || /承兑交单/.test(t)) return 'DA'
+  if (/\bD\s*[ /-]?\s*P\b/.test(t) || /DOCUMENTS?\s+AGAINST\s+PAYMENT/.test(t) || /付款交单/.test(t)) return 'DP'
   return null
 }
 

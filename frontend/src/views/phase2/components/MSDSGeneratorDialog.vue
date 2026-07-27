@@ -193,7 +193,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import { msdsLedgerApi, type MsdsLedgerItem, type CompositionItem } from '@/api/msds-ledger'
@@ -213,6 +213,7 @@ const newFormulas = ref<any[]>([])
 const generating = ref(false)
 const searchKeyword = ref('')
 const ledgerList = ref<MsdsLedgerItem[]>([])
+const tableRef = ref<any>(null)
 const selectedItem = ref<MsdsLedgerItem | null>(null)
 const showEditList = ref(false)
 
@@ -270,7 +271,7 @@ watch(() => props.modelValue, (v) => {
       orderItemsNames.value = []
       orderItemsWithIngredients.value = []
     }
-    loadLedger()
+    loadLedger().then(() => autoSelectMatchingItems())
   }
 })
 
@@ -549,7 +550,8 @@ async function importAllFormulas() {
   ElMessage.success(`已导入 ${newFormulas.value.length} 个新配方`)
   newFormulas.value = []
   showEditList.value = false
-  loadLedger()
+  await loadLedger()
+  autoSelectMatchingItems()
 }
 
 function parseIngredients(ingredients: string): any[] {
@@ -653,9 +655,76 @@ function showBatchGenerateDialog() {
 
 function onBatchGenerated() {
   showBatchGenerate.value = false
-  batchMode.value = false
   selectedItems.value = []
-  loadLedger()
+  loadLedger().then(() => autoSelectMatchingItems())
+}
+
+// Auto-select all ledger items matching current order in batch mode
+// Auto-select only the ledger items that precisely match each order item
+function autoSelectMatchingItems() {
+  if (ledgerList.value.length === 0 || orderItemsWithIngredients.value.length === 0) return
+
+  const normCas = (s: string) => s.replace(/(\b0+)(\d)/g, '$2')
+  const selectedIds = new Set<number>()
+  const itemsToSelect: MsdsLedgerItem[] = []
+
+  for (const orderItem of orderItemsWithIngredients.value) {
+    if (!orderItem.customs_name) continue
+
+    // Narrow down candidates by customs_name first
+    const candidates = ledgerList.value.filter(
+      (item: MsdsLedgerItem) => item.customs_name === orderItem.customs_name
+    )
+    if (candidates.length === 0) continue
+
+    let matched: MsdsLedgerItem | undefined
+
+    // Priority 1: match by internal_code (most reliable)
+    if (orderItem.internal_code) {
+      matched = candidates.find(
+        (item: MsdsLedgerItem) => item.internal_code === orderItem.internal_code
+      )
+    }
+
+    // Priority 2: match by CAS composition
+    if (!matched && orderItem.customs_ingredients) {
+      const casPattern = /\d{2,7}-\d{1,2}-\d{1,2}/g
+      const orderCasSet = [...new Set(
+        (orderItem.customs_ingredients.match(casPattern) || [])
+          .map((s: string) => normCas(s))
+          .filter(Boolean)
+      )].sort().join(',')
+
+      if (orderCasSet) {
+        matched = candidates.find((item: MsdsLedgerItem) => {
+          if (!item.composition || item.composition.length === 0) return false
+          const ledgerCasSet = [...new Set(
+            item.composition
+              .map((c: any) => normCas(c.cas || ''))
+              .filter((s: string) => s.trim())
+          )].sort().join(',')
+          return ledgerCasSet === orderCasSet
+        })
+      }
+    }
+
+    if (matched && !selectedIds.has(matched.id)) {
+      selectedIds.add(matched.id)
+      itemsToSelect.push(matched)
+    }
+  }
+
+  if (itemsToSelect.length === 0) return
+
+  batchMode.value = true
+  selectedItem.value = null
+  nextTick(() => {
+    if (tableRef.value) {
+      itemsToSelect.forEach(item => {
+        tableRef.value.toggleRowSelection(item, true)
+      })
+    }
+  })
 }
 
 function onClosed() {

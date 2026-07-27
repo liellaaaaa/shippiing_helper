@@ -26,10 +26,27 @@
         <el-input v-model="form.place_of_receipt" placeholder="如 GUANGZHOU,CHINA" />
       </el-form-item>
       <el-form-item label="装货港">
-        <el-select v-model="form.pol" placeholder="选择装货港" style="width: 100%">
-          <el-option label="NanSha, China (南沙)" value="NanSha, China" />
-          <el-option label="SheKou, China (蛇口)" value="SheKou, China" />
-          <el-option label="GuangZhou, China (广州)" value="GuangZhou, China" />
+        <template v-if="showCustomPortInput">
+          <el-input
+            v-model="customPortValue"
+            placeholder="输入自定义装货港名称"
+            style="width: 100%"
+            ref="customPortInputRef"
+          >
+            <template #suffix>
+              <el-button type="primary" link @click="confirmCustomPort">确定</el-button>
+              <el-button link @click="cancelCustomPort">取消</el-button>
+            </template>
+          </el-input>
+        </template>
+        <el-select v-else v-model="form.pol" placeholder="选择装货港" style="width: 100%" @change="onPortChange">
+          <el-option
+            v-for="opt in portOptions"
+            :key="opt.value"
+            :label="opt.label"
+            :value="opt.value"
+          />
+          <el-option label="✏️ 其他 (自定义)" value="__other__" />
         </el-select>
       </el-form-item>
       <el-form-item label="卸货港">
@@ -73,7 +90,43 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, nextTick } from 'vue'
+
+const LOCAL_STORAGE_KEY = 'shipping_helper_custom_ports'
+
+function loadCustomPorts(): string[] {
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch {
+    return []
+  }
+}
+
+function saveCustomPort(port: string) {
+  const ports = loadCustomPorts()
+  if (!ports.includes(port)) {
+    ports.push(port)
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(ports))
+  }
+}
+
+function buildPortOptions() {
+  const defaults = [
+    { label: 'NanSha, China (南沙)', value: 'NanSha, China' },
+    { label: 'SheKou, China (蛇口)', value: 'SheKou, China' },
+  ]
+  const customs = loadCustomPorts().map(p => ({
+    label: `${p} (自定义)`,
+    value: p,
+  }))
+  return [...defaults, ...customs]
+}
+
+const portOptions = ref(buildPortOptions())
+const showCustomPortInput = ref(false)
+const customPortValue = ref('')
+const customPortInputRef = ref<{ focus: () => void } | null>(null)
 
 export interface BookingForm {
   shipper: string
@@ -138,6 +191,31 @@ const loading = ref(false)
 const visible = ref(props.modelValue)
 const goodsRows = ref<GoodsRow[]>([])
 
+function onPortChange(val: string) {
+  if (val === '__other__') {
+    showCustomPortInput.value = true
+    customPortValue.value = ''
+    form.value.pol = ''
+    nextTick(() => customPortInputRef.value?.focus())
+  }
+}
+
+async function confirmCustomPort() {
+  const val = customPortValue.value.trim()
+  if (!val) return
+  saveCustomPort(val)
+  portOptions.value = buildPortOptions()
+  form.value.pol = val
+  showCustomPortInput.value = false
+  customPortValue.value = ''
+}
+
+function cancelCustomPort() {
+  showCustomPortInput.value = false
+  customPortValue.value = ''
+  form.value.pol = ''
+}
+
 watch(() => props.modelValue, (v) => {
   visible.value = v
   if (v) {
@@ -195,6 +273,9 @@ function onConfirm() {
 function onClosed() {
   form.value = defaultForm()
   loading.value = false
+  showCustomPortInput.value = false
+  customPortValue.value = ''
+  portOptions.value = buildPortOptions()
 }
 </script>
 

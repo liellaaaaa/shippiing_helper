@@ -873,8 +873,7 @@ class DocumentService:
         consignee = record.consignee_name or ""
         consignee_addr = record.consignee_address or ""
         dest_raw = record.destination or ""
-        dest_cn = cn_port(dest_raw)
-        dest_port = dest_raw
+        dest_city_cn, dest_country_cn = parse_destination(dest_raw)
         price_term = record.price_term or ""
         payment_terms = record.payment_terms or ""
         pi_date = record.pi_date or ""
@@ -895,9 +894,9 @@ class DocumentService:
         # 表头动态字段
         replace_placeholder(ws, "{{CONSIGNEE}}", consignee)
         replace_placeholder(ws, "{{CONTRACT_NO}}", pi_no)
-        replace_placeholder(ws, "{{DEST_COUNTRY_CN}}", dest_cn)
-        replace_placeholder(ws, "{{DEST_COUNTRY_CN_2}}", dest_cn)
-        replace_placeholder(ws, "{{DEST_PORT}}", dest_port)
+        replace_placeholder(ws, "{{DEST_COUNTRY_CN}}", dest_country_cn)
+        replace_placeholder(ws, "{{DEST_COUNTRY_CN_2}}", dest_country_cn)
+        replace_placeholder(ws, "{{DEST_PORT}}", dest_city_cn)
         replace_placeholder(ws, "{{TOTAL_PIECES}}", piece_count)
         replace_placeholder(ws, "{{TOTAL_GROSS_WEIGHT}}", round(total_gw, 1) if total_gw else None)
         replace_placeholder(ws, "{{TOTAL_NET_WEIGHT}}", round(total_nw, 1) if total_nw else None)
@@ -938,8 +937,8 @@ class DocumentService:
             if item.unit_price:
                 ws.cell(row, 9, item.unit_price)               # I: 单价
             ws.cell(row, 11, "中国")                            # K: 原产国
-            if dest_cn:
-                ws.cell(row, 13, dest_cn)                      # M: 最终目的国
+            if dest_country_cn:
+                ws.cell(row, 13, dest_country_cn)               # M: 最终目的国
             ws.cell(row, 16, "肇庆")                            # P: 境内货源地
             ws.cell(row, 19, "照章征税")                        # S: 征免
 
@@ -1097,7 +1096,7 @@ class DocumentService:
         # 固定值：G10 肇庆（模板中已预填，保持不变）
         # 成交方式：从PI数据填充（CIF/EXW/FOB/C&F等）
         replace_placeholder(ws, "{{PRICE_TERM}}", price_term)
-        replace_placeholder(ws, "{{DEST_PORT}}", dest_port)
+        replace_placeholder(ws, "{{DEST_PORT}}", dest_city_cn)
         replace_placeholder(ws, "{{PRICE_TERM_V4}}", price_term)
         # 日期：使用 PI 日期
         if pi_date:

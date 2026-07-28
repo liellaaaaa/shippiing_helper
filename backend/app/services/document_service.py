@@ -918,6 +918,9 @@ class DocumentService:
         replace_placeholder(ws, "{{PRICE_TERM_V4}}", price_term)
         # 币制：I22 单元格
         replace_placeholder(ws, "{{CURRENCY}}", currency)
+        # 运费/保费币制（金额由用户自行填写）
+        ws.cell(12, 11, currency)   # K12: 运费币制
+        ws.cell(12, 14, currency)   # N12: 保费币制
 
         # 产品明细：每品占 3 行（数据行 / 申报要素行 / 公式行）
         # 起始行 = 20 + idx * 3，模板最多支持到行 37（约 5-6 个产品）

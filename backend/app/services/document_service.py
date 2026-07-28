@@ -271,6 +271,13 @@ COUNTRY_CN_MAP: dict[str, str] = {
     "portugal": "葡萄牙",
     "greece": "希腊",
     "new zealand": "新西兰",
+    "uzbekistan": "乌兹别克斯坦",
+    "kazakhstan": "哈萨克斯坦",
+    "tajikistan": "塔吉克斯坦",
+    "kyrgyzstan": "吉尔吉斯斯坦",
+    "turkmenistan": "土库曼斯坦",
+    "mongolia": "蒙古",
+    "afghanistan": "阿富汗",
 }
 
 # 城市/港口名英文→中文翻译表
@@ -346,6 +353,12 @@ CITY_CN_MAP: dict[str, str] = {
     "alexandria": "亚历山大",
     "port said": "塞得港",
     "damietta": "达米埃塔",
+    "tashkent": "塔什干",
+    "almaty": "阿拉木图",
+    "astana": "阿斯塔纳",
+    "dushanbe": "杜尚别",
+    "bishkek": "比什凯克",
+    "ashgabat": "阿什哈巴德",
 }
 
 

@@ -972,6 +972,11 @@ class DocumentService:
             if item.total_amount:
                 ws.cell(row + 1, 9, item.total_amount)         # I21: 总价
 
+            # currency row (row+2) - quantity reference + unit + currency
+            ws.cell(row + 2, 7, item.quantity_kg)              # G: quantity reference
+            ws.cell(row + 2, 8, "千克")                         # H: unit
+            ws.cell(row + 2, 9, currency)                      # I: currency
+
         # ── T/U/V 辅助列：供箱单公式引用 ──
         # 箱单公式: OFFSET(报关单!$V$1, ROW(报关单!V{N})*3+16, 0)
         # 产品2: V23/U23/T23, 产品3: V26/U26/T26, ...

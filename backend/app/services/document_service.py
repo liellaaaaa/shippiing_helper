@@ -280,6 +280,9 @@ COUNTRY_CN_MAP: dict[str, str] = {
     "afghanistan": "阿富汗",
 }
 
+# 反向映射：国家中文→英文（可能有多个英文名对应同一中文，取第一个）
+COUNTRY_EN_REVERSE: dict[str, str] = {v: k for k, v in COUNTRY_CN_MAP.items()}
+
 # 城市/港口名英文→中文翻译表
 CITY_CN_MAP: dict[str, str] = {
     "izmit": "伊兹米特", "kocaeli": "科贾埃利",
@@ -380,6 +383,42 @@ def _lookup_country(dest_lower: str) -> str | None:
         if key in dest_lower or dest_lower in key:
             return val
     return None
+
+
+def _get_country_en(dest_raw: str) -> str:
+    """从 'Izmit,Turkiye' 或 'India' 格式中提取英文国家名"""
+    if not dest_raw:
+        return ""
+    if "," in dest_raw:
+        parts = [p.strip() for p in dest_raw.split(",", 1)]
+        return parts[1] if len(parts) > 1 else parts[0]
+    return dest_raw.strip()
+
+
+def _classify_payment_method_cn(payment_terms: str) -> str:
+    """将付款条款原始文本分类为中文名
+
+    规则：
+    - LC/信用证 → "信用证"
+    - TT/电汇/Telegraphic → "电汇"
+    - DP/付款交单 → "付款交单"
+    - DA/承兑交单 → "承兑交单"
+    - 未匹配 → 返回原始文本
+    """
+    if not payment_terms:
+        return ""
+    text = payment_terms.strip().upper()
+    # LC 须在 TT 前检测（避免 "T/T" 尾部干扰）
+    if re.search(r'\bLC\b|\bL/C\b|信用证', text):
+        return "信用证"
+    if re.search(r'\bTT\b|\bT/T\b|电汇|TELEGRAPHIC', text):
+        return "电汇"
+    if re.search(r'\bDP\b|\bD/P\b|付款交单', text):
+        return "付款交单"
+    if re.search(r'\bDA\b|\bD/A\b|承兑交单', text):
+        return "承兑交单"
+    # 未匹配到已知分类，回退原始文本
+    return payment_terms
 
 
 def parse_destination(dest: str) -> tuple[str, str]:
@@ -887,8 +926,15 @@ class DocumentService:
         consignee_addr = record.consignee_address or ""
         dest_raw = record.destination or ""
         dest_city_cn, dest_country_cn = parse_destination(dest_raw)
+        # 装货港：提取 loading_port 并翻译为中文
+        loading_port_raw = record.loading_port or ""
+        loading_port_cn = _lookup_city(loading_port_raw.lower()) if loading_port_raw else ""
+        # 目的国英文名（用于合同 B40 英文行）
+        dest_country_en = _get_country_en(dest_raw)
         price_term = record.price_term or ""
         payment_terms = record.payment_terms or ""
+        # 付款条件分类中文名
+        payment_method_cn = _classify_payment_method_cn(payment_terms)
         pi_date = record.pi_date or ""
         currency = getattr(record, "currency", None) or "CNY"  # 默认人民币
         total_pallets = sum(it.pallet_count or 0 for it in items)
@@ -1076,9 +1122,13 @@ class DocumentService:
         for r in range(10, 26):
             for c in range(1, 9):
                 ws.cell(r, c).value = None
-        # 行7：船名/目的地 — C7 显示 "广州 至 {destination}"
-        if dest_raw:
-            ws.cell(7, 3).value = f"广州  至  {dest_raw}"    # C7: 船名+目的地
+        # 行7：船名/目的地 — C7:F7 合并显示 "{装货港}  至  {目的国}"
+        # 装货港动态（不一定是广州），目的国显示中文名
+        if dest_country_cn:
+            left = loading_port_cn if loading_port_cn else ""
+            ws.cell(7, 3).value = f"{left}  至  {dest_country_cn}" if left else f"  至  {dest_country_cn}"
+        # H7: 付款条件 — 动态显示（不一定是电汇）
+        ws.cell(7, 8).value = payment_method_cn if payment_method_cn else "电汇"
         # 填充产品数据
         for idx, item in enumerate(items):
             if idx == 0:
@@ -1122,9 +1172,19 @@ class DocumentService:
         # 日期：使用 PI 日期
         if pi_date:
             ws["G7"] = _parse_date(pi_date)
-        # (9)装运口岸和目的地：广州---{destination}
-        if dest_raw:
-            ws["B39"] = f"(9)装运口岸和目的地           广州---{dest_raw}"
+        # (9)装运口岸和目的地：动态根据 loading_port 和目的国填充
+        if dest_country_cn or dest_country_en:
+            loading_port_b39 = loading_port_cn if loading_port_cn else ""
+            dest_b39 = dest_country_cn if dest_country_cn else ""
+            ws["B39"] = f"(9)装运口岸和目的地           {loading_port_b39}---{dest_b39}"
+            # B40 英文行
+            loading_port_b40 = loading_port_raw if loading_port_raw else "Guangzhou"
+            dest_b40 = dest_country_en if dest_country_en else ""
+            ws["B40"] = f"Loading Port & Destination: From {loading_port_b40} -- To {dest_b40} with transhipment and partial shipments allowed"
+        elif dest_raw:
+            # 向后兼容：有原始 destination 但无法解析时
+            ws["B39"] = f"(9)装运口岸和目的地           {loading_port_cn or ''}---{dest_raw}"
+            ws["B40"] = f"Loading Port & Destination: From {loading_port_raw or 'Guangzhou'} -- To {dest_raw} with transhipment and partial shipments allowed"
         # 合同总值大写
         total_amt_contract = sum(round(it.total_amount or 0, 2) for it in items)
         if total_amt_contract > 0:

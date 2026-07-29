@@ -1192,11 +1192,13 @@ class DocumentService:
         # (10)保险条款：根据成交方式变化（仅CIF=卖方，其他如FOB/C&F/EXW等均为买方）
         is_cif = price_term.upper() == "CIF"
         if is_cif:
+            # 英文条款中需要插入目的港（如 "Nhava Sheva,India"），中文留空供手动填写
+            ins_dest = dest_raw if dest_raw else "destination port"
             ws["B41"] = "(10)保险：由卖方按发票全部金额110%投保至   为止的    险。按中国海洋运输保险条款为理。"
-            ws["B42"] = "Insurance: To be covered by the Seller for 110% of full invoice value covering up to only, subject to the relevant Ocean Marine Cargo Clauses of the People's Insurance Company of China."
+            ws["B42"] = f"Insurance:To be covered by the Seller for 110% of full invoice value covering up to {ins_dest} only,subject to C.I.C."
         else:
             ws["B41"] = "(10)保险：由买方投保。"
-            ws["B42"] = "Insurance: To be covered by the Buyer."
+            ws["B42"] = "Insurance:To be covered by the Buyer."
         # 合同总值大写
         total_amt_contract = sum(round(it.total_amount or 0, 2) for it in items)
         if total_amt_contract > 0:

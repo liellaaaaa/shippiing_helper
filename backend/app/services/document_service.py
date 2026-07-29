@@ -536,7 +536,7 @@ class DocumentService:
                     # 单位后缀：如果值已包含单位则不追加
                     if field_key == "NO_KIND_PKG" and value:
                         val_upper = str(value).upper()
-                        if not any(unit in val_upper for unit in ["PALLETS", "DRUMS", "DRUM", "CTNS", "PCS", "BUNDLES"]):
+                        if not any(unit in val_upper for unit in ["PALLETS", "PALLET", "DRUMS", "DRUM", "CTNS", "PCS", "BUNDLES"]):
                             # 提取数值前缀判断单复数
                             num_match = re.match(r"^\s*(\d+(?:\.\d+)?)\s*", str(value))
                             if num_match and num_match.group(1) == "1":

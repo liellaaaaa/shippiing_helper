@@ -1180,7 +1180,7 @@ class DocumentService:
         # 日期：使用 PI 日期
         if pi_date:
             ws["G7"] = _parse_date(pi_date)
-            ws["G8"] = _parse_date(pi_date)
+            # G7:G8 是合并单元格，G7 的值会自动覆盖整个合并区域，不写 G8
         # (9)装运口岸和目的地：动态根据 loading_port 和目的国填充
         if dest_country_cn or dest_country_en:
             loading_port_b39 = loading_port_cn if loading_port_cn else ""

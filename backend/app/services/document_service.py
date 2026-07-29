@@ -537,7 +537,12 @@ class DocumentService:
                     if field_key == "NO_KIND_PKG" and value:
                         val_upper = str(value).upper()
                         if not any(unit in val_upper for unit in ["PALLETS", "DRUMS", "DRUM", "CTNS", "PCS", "BUNDLES"]):
-                            value = f"{value} PALLETS"
+                            # 提取数值前缀判断单复数
+                            num_match = re.match(r"^\s*(\d+(?:\.\d+)?)\s*", str(value))
+                            if num_match and num_match.group(1) == "1":
+                                value = f"{value} PALLET"
+                            else:
+                                value = f"{value} PALLETS"
                     elif field_key == "MEASUREMENT" and value:
                         if "CBM" not in str(value).upper():
                             value = f"{value} CBM"

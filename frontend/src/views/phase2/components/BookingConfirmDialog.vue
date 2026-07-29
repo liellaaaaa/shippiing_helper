@@ -245,13 +245,15 @@ watch(() => props.modelValue, (v) => {
       goodsRows.value[0].grossWeight = (initial as any).gross_weight || ''
       goodsRows.value[0].measurement = (initial as any).measurement || ''
     }
-    // 件数/柜型：根据托盘数和桶数决定单位
+    // 件数/柜型：根据托盘数和桶数决定单位（单数用单数形式）
     const palletCount = (initial as any).pallet_count
     const drumCount = (initial as any).drum_count
     if (palletCount && Number(palletCount) > 0) {
-      form.value.no_kind_pkg = `${palletCount} PALLETS`
+      const unit = Number(palletCount) === 1 ? 'PALLET' : 'PALLETS'
+      form.value.no_kind_pkg = `${palletCount} ${unit}`
     } else if (drumCount && Number(drumCount) > 0) {
-      form.value.no_kind_pkg = `${drumCount} DRUMS`
+      const unit = Number(drumCount) === 1 ? 'DRUM' : 'DRUMS'
+      form.value.no_kind_pkg = `${drumCount} ${unit}`
     }
   }
 })

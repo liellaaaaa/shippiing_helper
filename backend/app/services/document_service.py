@@ -1118,6 +1118,9 @@ class DocumentService:
         # Sheet 3: 箱单 — 填充所有产品行
         # ══════════════════════════════════════════════════════════════
         ws = ws_packing
+        # 第3行日期：台账 PI 日期
+        if pi_date:
+            ws["H3"] = _parse_date(pi_date)
         # 先清除所有数据行（包括模板残留的公式和空行）
         for r in range(10, 26):
             for c in range(1, 9):
@@ -1143,7 +1146,7 @@ class DocumentService:
             qty = item.quantity_kg or 0
             gw = item.gross_weight_kg or 0
             nw = item.quantity_kg or item.net_weight_kg or 0
-            unit = "托" if item.pallet_count else "桶"
+            unit = "件"
             qty_unit = "千克"
             ws.cell(r, 1).value = "N/M" if idx == 0 else None   # A: 箱号（仅第1行）
             ws.cell(r, 2).value = item.customs_name or ""       # B: 货物名称
@@ -1172,6 +1175,7 @@ class DocumentService:
         # 日期：使用 PI 日期
         if pi_date:
             ws["G7"] = _parse_date(pi_date)
+            ws["G8"] = _parse_date(pi_date)
         # (9)装运口岸和目的地：动态根据 loading_port 和目的国填充
         if dest_country_cn or dest_country_en:
             loading_port_b39 = loading_port_cn if loading_port_cn else ""
@@ -1185,6 +1189,14 @@ class DocumentService:
             # 向后兼容：有原始 destination 但无法解析时
             ws["B39"] = f"(9)装运口岸和目的地           {loading_port_cn or ''}---{dest_raw}"
             ws["B40"] = f"Loading Port & Destination: From {loading_port_raw or 'Guangzhou'} -- To {dest_raw} with transhipment and partial shipments allowed"
+        # (10)保险条款：根据成交方式变化（仅CIF=卖方，其他如FOB/C&F/EXW等均为买方）
+        is_cif = price_term.upper() == "CIF"
+        if is_cif:
+            ws["B41"] = "(10)保险：由卖方按发票全部金额110%投保至   为止的    险。按中国海洋运输保险条款为理。"
+            ws["B42"] = "Insurance: To be covered by the Seller for 110% of full invoice value covering up to only, subject to the relevant Ocean Marine Cargo Clauses of the People's Insurance Company of China."
+        else:
+            ws["B41"] = "(10)保险：由买方投保。"
+            ws["B42"] = "Insurance: To be covered by the Buyer."
         # 合同总值大写
         total_amt_contract = sum(round(it.total_amount or 0, 2) for it in items)
         if total_amt_contract > 0:

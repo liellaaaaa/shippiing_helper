@@ -19,11 +19,10 @@ BATCH_LIMIT = 50
 
 
 class LedgerCreate(BaseModel):
-    internal_code: str = ""
-    customs_name: str = ""
-    appearance: str = ""
-    ion_type: str = ""
-    ph: str = ""
+    customs_name: str
+    appearance: str
+    ion_type: str
+    ph: str
     composition: list = []
     product_name_en: str = ""
     appearance_en: str = ""
@@ -31,7 +30,6 @@ class LedgerCreate(BaseModel):
 
 
 class LedgerUpdate(BaseModel):
-    internal_code: Optional[str] = None
     customs_name: Optional[str] = None
     appearance: Optional[str] = None
     ion_type: Optional[str] = None
@@ -56,10 +54,10 @@ class BatchGenerateRequest(BaseModel):
 
 
 @router.get("")
-async def list_ledger(keyword: Optional[str] = None, internal_code: Optional[str] = None):
+async def list_ledger(keyword: Optional[str] = None):
     db = SessionLocal()
     try:
-        items = msds_ledger_svc.list_ledger(db, keyword, internal_code)
+        items = msds_ledger_svc.list_ledger(db, keyword)
         return {"items": [_to_dict(i) for i in items]}
     finally:
         db.close()
@@ -316,7 +314,6 @@ async def batch_generate(request: BatchGenerateRequest):
 def _to_dict(item):
     return {
         "id": item.id,
-        "internal_code": item.internal_code,
         "customs_name": item.customs_name or "",
         "appearance": item.appearance or "",
         "ion_type": item.ion_type or "",

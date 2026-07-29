@@ -2,7 +2,6 @@ import { apiClient } from '@/api/axios'
 
 export interface MsdsLedgerItem {
   id: number
-  internal_code: string
   customs_name: string
   appearance: string
   ion_type: string
@@ -35,7 +34,7 @@ export interface BatchGenerateMsdsRequest {
 }
 
 export const msdsLedgerApi = {
-  list(params?: { keyword?: string; internal_code?: string }) {
+  list(params?: { keyword?: string }) {
     return apiClient.get<{ items: MsdsLedgerItem[] }>('/msds-ledger', { params })
   },
 

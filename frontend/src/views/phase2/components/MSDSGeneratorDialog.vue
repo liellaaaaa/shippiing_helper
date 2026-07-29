@@ -63,8 +63,27 @@
           </div>
           <div class="formula-edit-row">
             <div class="formula-field formula-field-wide">
-              <label>成分</label>
-              <el-input v-model="formula.customs_ingredients" size="small" type="textarea" :rows="2" />
+              <label>成分表</label>
+              <table class="composition-table">
+                <thead>
+                  <tr>
+                    <th style="width:40%">组分</th>
+                    <th style="width:35%">CAS NO.</th>
+                    <th style="width:15%">含量</th>
+                    <th style="width:10%">操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(comp, ci) in formula.composition" :key="ci">
+                    <td><el-input v-model="comp.component_cn" size="small" placeholder="必填" /></td>
+                    <td><el-input v-model="comp.cas" size="small" placeholder="如 123-45-6" /></td>
+                    <td><el-input v-model="comp.percentage" size="small" placeholder="如 30%" /></td>
+                    <td><el-button size="small" type="danger" link @click="removeFormulaComp(formula, ci)">删除</el-button></td>
+                  </tr>
+                </tbody>
+              </table>
+              <el-button size="small" @click="addFormulaComp(formula)">+ 添加成分</el-button>
+              <div v-if="formula.composition.length === 0" class="form-error">至少添加一行成分</div>
             </div>
           </div>
           <div class="formula-actions">
@@ -117,35 +136,45 @@
     </div>
 
     <!-- 新增/编辑配方对话框 -->
-    <el-dialog v-model="showForm" :title="editingItem ? '编辑配方' : '新增配方'" width="600px" append-to-body>
-      <el-form :model="formData" label-width="100px">
-        <el-form-item label="内部编码">
-          <el-input v-model="formData.internal_code" placeholder="如 CF463" />
-        </el-form-item>
-        <el-form-item label="报关名称">
+    <el-dialog v-model="showForm" :title="editingItem ? '编辑配方' : '新增配方'" width="700px" append-to-body>
+      <el-form ref="formRef" :model="formData" :rules="formRules" label-width="100px">
+        <el-form-item label="报关名称" prop="customs_name">
           <el-input v-model="formData.customs_name" placeholder="中文报关名称" />
         </el-form-item>
-        <el-form-item label="外观">
+        <el-form-item label="外观" prop="appearance">
           <el-input v-model="formData.appearance" />
         </el-form-item>
-        <el-form-item label="离子性">
+        <el-form-item label="离子性" prop="ion_type">
           <el-select v-model="formData.ion_type" placeholder="请选择">
             <el-option label="阳离子" value="阳离子" />
             <el-option label="阴离子" value="阴离子" />
             <el-option label="非离子" value="非离子" />
           </el-select>
         </el-form-item>
-        <el-form-item label="pH值">
+        <el-form-item label="pH值" prop="ph">
           <el-input v-model="formData.ph" placeholder="如 5.0-7.0" />
         </el-form-item>
-        <el-form-item label="成分">
-          <div v-for="(item, idx) in formData.composition" :key="idx" class="composition-row">
-            <el-input v-model="item.component_cn" placeholder="成分名" style="width: 150px" />
-            <el-input v-model="item.cas" placeholder="CAS" style="width: 130px" />
-            <el-input v-model="item.percentage" placeholder="%" style="width: 70px" />
-            <el-button type="danger" link @click="removeComposition(idx)">删除</el-button>
-          </div>
-          <el-button size="small" @click="addComposition">+ 添加成分</el-button>
+        <el-form-item label="成分表" prop="composition">
+          <table class="composition-table">
+            <thead>
+              <tr>
+                <th style="width:40%">组分</th>
+                <th style="width:35%">CAS NO.</th>
+                <th style="width:15%">含量</th>
+                <th style="width:10%">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(item, idx) in formData.composition" :key="idx">
+                <td><el-input v-model="item.component_cn" placeholder="必填" size="small" /></td>
+                <td><el-input v-model="item.cas" placeholder="如 123-45-6" size="small" /></td>
+                <td><el-input v-model="item.percentage" placeholder="如 30%" size="small" /></td>
+                <td><el-button type="danger" link @click="removeComposition(idx)">删除</el-button></td>
+              </tr>
+            </tbody>
+          </table>
+          <el-button size="small" @click="addComposition()">+ 添加成分</el-button>
+          <div v-if="formData.composition.length === 0" class="form-error">至少添加一行成分</div>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -194,7 +223,7 @@
 
 <script setup lang="ts">
 import { ref, watch, nextTick } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import { msdsLedgerApi, type MsdsLedgerItem, type CompositionItem } from '@/api/msds-ledger'
 import BatchGenerateDialog from './BatchGenerateDialog.vue'
@@ -226,7 +255,6 @@ const showBatchGenerate = ref(false)
 const showForm = ref(false)
 const editingItem = ref<MsdsLedgerItem | null>(null)
 const formData = ref({
-  internal_code: '',
   customs_name: '',
   appearance: '',
   ion_type: '',
@@ -236,6 +264,27 @@ const formData = ref({
   ion_type_en: '',
   composition: [] as CompositionItem[],
 })
+
+const formRef = ref<FormInstance>()
+
+const formRules: FormRules = {
+  customs_name: [{ required: true, message: '请输入报关名称', trigger: 'blur' }],
+  appearance: [{ required: true, message: '请输入外观', trigger: 'blur' }],
+  ion_type: [{ required: true, message: '请选择离子性', trigger: 'change' }],
+  ph: [{ required: true, message: '请输入pH值', trigger: 'blur' }],
+  composition: [{
+    validator: (_rule: any, value: any[], callback: any) => {
+      if (!value || value.length === 0) {
+        callback(new Error('至少添加一行成分'))
+      } else if (value.some((v: any) => !v.component_cn?.trim())) {
+        callback(new Error('每行成分的「组分」为必填'))
+      } else {
+        callback()
+      }
+    },
+    trigger: 'change',
+  }],
+}
 
 // 生成相关
 const showGenerate = ref(false)
@@ -264,7 +313,6 @@ watch(() => props.modelValue, (v) => {
       orderItemsWithIngredients.value = props.orderItems.map((it: any) => ({
         customs_name: it.customs_name || it.order?.customs_name || '',
         customs_ingredients: it.customs_ingredients || '',
-        internal_code: it.internal_code || '',
         appearance: it.appearance || it.order?.appearance || '',
       }))
     } else {
@@ -327,10 +375,12 @@ async function loadLedger() {
             f.customs_name === orderItem.customs_name && f.customs_ingredients === orderItem.customs_ingredients
           )
           if (!exists) {
+            const parsedComp = parseIngredients(orderItem.customs_ingredients || '')
             newFormulas.value.push({
               ...orderItem,
               ion_type: '',
               ph: generateRandomPh(),
+              composition: parsedComp,
             })
           }
         }
@@ -356,6 +406,17 @@ function removeNewFormula(idx: number) {
   if (newFormulas.value.length === 0) {
     showEditList.value = false
   }
+}
+
+function addFormulaComp(formula: any) {
+  if (!formula.composition) {
+    formula.composition = []
+  }
+  formula.composition.push({ component_cn: '', component_en: '', cas: '', percentage: '' })
+}
+
+function removeFormulaComp(formula: any, idx: number) {
+  formula.composition.splice(idx, 1)
 }
 
 function onSearch() {
@@ -384,7 +445,6 @@ function getCompositionFull(composition: CompositionItem[] | null) {
 function showAddDialog() {
   editingItem.value = null
   formData.value = {
-    internal_code: '',
     customs_name: '',
     appearance: '',
     ion_type: '',
@@ -401,7 +461,6 @@ function showEditDialog() {
   if (!selectedItem.value) return
   editingItem.value = selectedItem.value
   formData.value = {
-    internal_code: selectedItem.value.internal_code,
     customs_name: selectedItem.value.customs_name,
     appearance: selectedItem.value.appearance,
     ion_type: selectedItem.value.ion_type,
@@ -423,6 +482,12 @@ function removeComposition(idx: number) {
 }
 
 async function onSaveForm() {
+  if (!formRef.value) return
+  try {
+    await formRef.value.validate()
+  } catch {
+    return
+  }
   try {
     if (editingItem.value) {
       await msdsLedgerApi.update(editingItem.value.id, formData.value)
@@ -510,20 +575,11 @@ async function onConfirmGenerate() {
 
 async function importAllFormulas() {
   for (const formula of newFormulas.value) {
-    // Parse ingredients string
-    const ingredients = formula.customs_ingredients || ''
-    const composition = parseIngredients(ingredients)
+    // composition already pre-parsed on init; use directly
+    const composition = formula.composition || []
     
     // Get appearance from orderItems (passed from Phase2Workflow)
     let appearance = formula.appearance || ''
-    if (!appearance && formula.internal_code) {
-      const orderItem = orderItemsWithIngredients.value.find((item: any) => 
-        item.internal_code === formula.internal_code
-      )
-      if (orderItem && orderItem.appearance) {
-        appearance = orderItem.appearance
-      }
-    }
     // Fallback: try by customs_name from existing ledger
     if (!appearance) {
       const existingItem = ledgerList.value.find((item: MsdsLedgerItem) => 
@@ -536,7 +592,6 @@ async function importAllFormulas() {
     
     try {
       await msdsLedgerApi.create({
-        internal_code: formula.internal_code || '',
         customs_name: formula.customs_name,
         appearance: appearance,
         ion_type: formula.ion_type || '',
@@ -559,73 +614,108 @@ function parseIngredients(ingredients: string): any[] {
 
   const result: any[] = []
 
-  // Normalize Chinese punctuation
-  const normalized = ingredients
-    .replace(/，/g, ',')
-    .replace(/；/g, ';')
-    .replace(/：/g, ':')
+  // Step 1: Normalize
+  let text = ingredients
+    .replace(/\r\n/g, '\n').replace(/\r/g, '\n')  // normalize line endings
+    .replace(/％/g, '%')         // normalize percent sign
+    .replace(/：/g, ':')         // normalize colon
+    .replace(/；/g, ';')         // normalize semicolon
+    .replace(/，/g, ',')         // normalize comma
+    .replace(/、/g, ',')         // normalize enum comma
+    .replace(/\s+/g, ' ')       // collapse whitespace
+    .trim()
 
-  // Step 1: Split into component blocks — by '+' first, then by 2+ spaces
-  let blocks: string[]
-  if (normalized.includes('+')) {
-    blocks = normalized.split('+').map(b => b.trim()).filter(Boolean)
-  } else {
-    // No '+' → split by 2+ consecutive spaces (single spaces are part of "Name CAS Pct")
-    blocks = normalized.split(/\s{2,}/).map(b => b.trim()).filter(Boolean)
+  // Remove parenthetical notes like （货源地：江西抚州）
+  text = text.replace(/[（(][^）)]*[）)]/g, '').trim()
+
+  // Replace newlines with commas (multi-line = component separators)
+  text = text.replace(/\n/g, ',')
+
+  // Step 2: Tokenize the text around CAS numbers and percentages
+  // Tokens are: { type: 'text' | 'cas' | 'pct', value: string }
+  const RE = /(\d{2,7}-\d{1,2}-\d{1,3})|(\d+(?:\.\d+)?%)/g
+  interface Token { type: 'text' | 'cas' | 'pct'; value: string }
+  const tokens: Token[] = []
+
+  let lastIdx = 0
+  let m: RegExpExecArray | null
+  while ((m = RE.exec(text)) !== null) {
+    if (m.index > lastIdx) {
+      tokens.push({ type: 'text', value: text.slice(lastIdx, m.index) })
+    }
+    tokens.push({ type: m[1] ? 'cas' : 'pct', value: m[1] || m[2] })
+    lastIdx = m.index + m[0].length
+  }
+  if (lastIdx < text.length) {
+    tokens.push({ type: 'text', value: text.slice(lastIdx) })
   }
 
-  // Step 2: For each block, extract Name / CAS / Percentage
-  // CAS pattern: 2-7 digits, dash, 1-2 digits, dash, 1-3 digits
-  const CAS_RE = /(\d{2,7}-\d{1,2}-\d{1,3})/
-  // Percentage pattern: optional comma/semicolon before digits+percent
-  const PCT_RE = /[,;]\s*(\d+(?:\.\d+)?)\s*%/
-  // Fallback percentage: digits immediately followed by % (no preceding separator)
-  const PCT_RE2 = /(\d+(?:\.\d+)?)\s*%/
+  // Helper: is a text token purely a separator (punctuation or whitespace)?
+  function isSep(val: string): boolean {
+    return /^[,:;.\s]+$/.test(val)
+  }
 
-  for (const block of blocks) {
-    if (!block) continue
+  // Step 3: Group tokens into components
+  let i = 0
+  while (i < tokens.length) {
+    const comp = { component_cn: '', component_en: '' as string, cas: '', percentage: '' }
 
-    // Try to find all CAS occurrences — each CAS belongs to one component
-    const casMatches = [...block.matchAll(new RegExp(CAS_RE.source, 'g'))]
+    // --- Extract name (first text token) ---
+    if (i < tokens.length && tokens[i].type === 'text') {
+      comp.component_cn = tokens[i].value
+      i++
+    }
 
-    if (casMatches.length > 0) {
-      // Multiple components in one block separated by CAS numbers
-      for (let i = 0; i < casMatches.length; i++) {
-        const cas = casMatches[i][1]
-        const casStart = casMatches[i].index!
-        const casEnd = casStart + cas.length
+    // Skip separator text between name and cas/pct
+    while (i < tokens.length && tokens[i].type === 'text' && isSep(tokens[i].value)) {
+      i++
+    }
 
-        // Component name: text before this CAS (or after previous CAS)
-        const nameStart = i === 0 ? 0 : casMatches[i - 1].index! + casMatches[i - 1][0].length
-        let name = block.substring(nameStart, casStart)
-          .replace(/[,;:]\s*$/, '')  // trim trailing separators
-          .trim()
-
-        // Percentage: text after this CAS until next CAS or end
-        const afterCas = block.substring(casEnd)
-        const nextBoundary = i < casMatches.length - 1 ? casMatches[i + 1].index! : afterCas.length
-        const pctSegment = afterCas.substring(0, nextBoundary)
-        const pctMatch = pctSegment.match(PCT_RE) || pctSegment.match(PCT_RE2)
-        const percentage = pctMatch ? pctMatch[1] + '%' : ''
-
-        // Clean component name: remove leading separators
-        name = name.replace(/^\s*[,;:]\s*/, '').trim()
-
-        if (name || cas) {
-          result.push({ component_cn: name, component_en: '', cas, percentage })
-        }
+    // --- Extract CAS and/or PCT ---
+    if (i < tokens.length && tokens[i].type === 'cas') {
+      comp.cas = tokens[i].value; i++
+      // Skip separator text between CAS and PCT
+      while (i < tokens.length && tokens[i].type === 'text' && isSep(tokens[i].value)) { i++ }
+      // After CAS, next might be PCT
+      if (i < tokens.length && tokens[i].type === 'pct') {
+        comp.percentage = tokens[i].value; i++
       }
-    } else {
-      // No CAS found — treat entire block as one component (name + percentage only)
-      const pctMatch = block.match(PCT_RE) || block.match(PCT_RE2)
-      const percentage = pctMatch ? pctMatch[1] + '%' : ''
-      let name = block
-      if (pctMatch) {
-        name = block.substring(0, pctMatch.index).replace(/[,;:]\s*$/, '').trim()
+      // After CAS, next might be another text (component name for next component)
+      // Don't consume it here — it starts the next loop iteration
+    } else if (i < tokens.length && tokens[i].type === 'pct') {
+      comp.percentage = tokens[i].value; i++
+      // Skip separator text between PCT and CAS
+      while (i < tokens.length && tokens[i].type === 'text' && isSep(tokens[i].value)) { i++ }
+      // After PCT, next might be CAS
+      if (i < tokens.length && tokens[i].type === 'cas') {
+        comp.cas = tokens[i].value; i++
       }
-      if (name || percentage) {
-        result.push({ component_cn: name, component_en: '', cas: '', percentage })
+    }
+
+    // Clean up name: trim surrounding separators and leading +
+    comp.component_cn = comp.component_cn
+      .replace(/^[+,:;.\s]+/, '')
+      .replace(/[+,:;.\s]+$/, '')
+      .trim()
+
+    // If name is empty but we have cas+pct, use text AFTER pct as name
+    if (!comp.component_cn && comp.percentage && !comp.cas) {
+      // The pct came before name; look ahead for remaining text tokens
+      while (i < tokens.length && tokens[i].type === 'text' && isSep(tokens[i].value)) { i++ }
+      if (i < tokens.length && tokens[i].type === 'text') {
+        let n = tokens[i].value.replace(/^[+,:;.\s]+/, '').replace(/[+,:;.\s]+$/, '').trim()
+        if (n) { comp.component_cn = n; i++ }
       }
+    }
+
+    if (comp.component_cn || comp.cas || comp.percentage) {
+      result.push(comp)
+    }
+
+    // Skip separator tokens between components (e.g. `,` `;` `:` between two components)
+    // But NOT text that looks like a component name (preserve it for next iteration)
+    while (i < tokens.length && tokens[i].type === 'text' && isSep(tokens[i].value)) {
+      i++
     }
   }
 
@@ -679,14 +769,7 @@ function autoSelectMatchingItems() {
 
     let matched: MsdsLedgerItem | undefined
 
-    // Priority 1: match by internal_code (most reliable)
-    if (orderItem.internal_code) {
-      matched = candidates.find(
-        (item: MsdsLedgerItem) => item.internal_code === orderItem.internal_code
-      )
-    }
-
-    // Priority 2: match by CAS composition
+    // Match by CAS composition
     if (!matched && orderItem.customs_ingredients) {
       const casPattern = /\d{2,7}-\d{1,2}-\d{1,2}/g
       const orderCasSet = [...new Set(
@@ -807,5 +890,25 @@ function onClosed() {
   gap: 8px;
   align-items: center;
   margin-bottom: 8px;
+}
+.composition-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 8px;
+}
+.composition-table th {
+  text-align: left;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--el-border-color-light);
+}
+.composition-table td {
+  padding: 4px 4px;
+}
+.form-error {
+  font-size: 12px;
+  color: var(--el-color-danger);
+  margin-top: 4px;
 }
 </style>

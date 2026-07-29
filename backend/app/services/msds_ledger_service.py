@@ -36,15 +36,12 @@ def _auto_fill_english(data: dict) -> dict:
 
 class MsdsLedgerService:
 
-    def list_ledger(self, db: Session, keyword: Optional[str] = None, internal_code: Optional[str] = None) -> list:
+    def list_ledger(self, db: Session, keyword: Optional[str] = None) -> list:
         query = db.query(MsdsLedger)
-        if internal_code:
-            query = query.filter(MsdsLedger.internal_code == internal_code)
-        elif keyword:
+        if keyword:
             like_pattern = f"%{keyword}%"
             query = query.filter(
                 (MsdsLedger.customs_name.like(like_pattern)) |
-                (MsdsLedger.internal_code.like(like_pattern)) |
                 (MsdsLedger.product_name_en.like(like_pattern))
             )
         return query.order_by(MsdsLedger.customs_name).all()
@@ -56,7 +53,6 @@ class MsdsLedgerService:
         now = datetime.utcnow()
         data = _auto_fill_english(data)
         ledger = MsdsLedger(
-            internal_code=data.get("internal_code", ""),
             customs_name=data.get("customs_name", ""),
             appearance=data.get("appearance", ""),
             ion_type=data.get("ion_type", ""),
@@ -77,7 +73,7 @@ class MsdsLedgerService:
         if not ledger:
             return None
         data = _auto_fill_english(data)
-        for field in ["internal_code", "customs_name", "appearance", "ion_type", "ph", "composition", "product_name_en", "appearance_en", "ion_type_en"]:
+        for field in ["customs_name", "appearance", "ion_type", "ph", "composition", "product_name_en", "appearance_en", "ion_type_en"]:
             if field in data:
                 setattr(ledger, field, data[field])
         ledger.version += 1

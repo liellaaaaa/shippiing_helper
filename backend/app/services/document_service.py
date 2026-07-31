@@ -144,12 +144,19 @@ def replace_placeholder(ws, placeholder: str, value) -> bool:
 
 
 def _to_invoice_no(contract_no: str) -> str:
-    """合同号转发票号：去掉字母前缀（HT/HH/HTPK等），换成 IN。
-    例: HT260304E01→IN260304E01, HTPK260304→IN260304, HH12345→IN12345
+    """合同号转发票号：将公司代码前缀（HT/HH/MH）替换为 IN，保留地区缩写。
+    例: HTPK260304→INPK260304, MHBD260304→INBD260304, HH12345→IN12345, HT260304E01→IN260304E01
     """
     if not contract_no:
         return ""
-    # 找到第一个数字的位置，取后面的部分
+    # 已是发票号（IN 开头）：保持原样，保证幂等
+    if contract_no.startswith("IN"):
+        return contract_no
+    # 公司代码前缀：替换为 IN，保留后面的地区缩写和数字
+    for prefix in ("HT", "HH", "MH"):
+        if contract_no.startswith(prefix):
+            return "IN" + contract_no[len(prefix):]
+    # 无公司代码前缀：找到第一个数字的位置，取后面的部分
     m = re.search(r'\d', contract_no)
     if m:
         return "IN" + contract_no[m.start():]

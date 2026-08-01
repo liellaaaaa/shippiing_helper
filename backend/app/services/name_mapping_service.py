@@ -1,10 +1,12 @@
 """
 产品品名中英文对照服务。
 程序启动时加载，提供中文->英文、英文->中文双向查询。
+数据源: translation_mappings 表 (mapping_type='product_name')
 """
-import json
-from pathlib import Path
 from typing import Optional
+
+from app.database import SessionLocal
+from app.models.reference_data import TranslationMapping
 
 # 全局缓存
 _NAME_MAPPING: list[dict] = []
@@ -13,24 +15,18 @@ _EN_TO_CN: dict[str, str] = {}
 
 
 def load_name_mapping() -> None:
-    """启动时调用，加载品名对照表到内存"""
+    """启动时调用，从数据库加载品名对照表到内存"""
     global _NAME_MAPPING, _CN_TO_EN, _EN_TO_CN
 
-    # 项目根目录 / references / products_name_mapping.json
-    # __file__ = backend/app/services/name_mapping_service.py
-    # parent.parent.parent.parent = 项目根目录
-    project_root = Path(__file__).parent.parent.parent.parent
-    mapping_file = project_root / "references" / "products_name_mapping.json"
-
-    if mapping_file.exists():
-        with open(mapping_file, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            _NAME_MAPPING = data.get("mappings", [])
-            _CN_TO_EN = {item["cn"]: item["en"] for item in _NAME_MAPPING}
-            _EN_TO_CN = {item["en"]: item["cn"] for item in _NAME_MAPPING}
-            print(f"[name_mapping] Loaded {len(_NAME_MAPPING)} product name mappings")
-    else:
-        print(f"[name_mapping] File not found: {mapping_file}")
+    db = SessionLocal()
+    try:
+        rows = db.query(TranslationMapping).filter_by(mapping_type="product_name").all()
+        _NAME_MAPPING = [{"cn": r.cn, "en": r.en} for r in rows]
+        _CN_TO_EN = {item["cn"]: item["en"] for item in _NAME_MAPPING}
+        _EN_TO_CN = {item["en"]: item["cn"] for item in _NAME_MAPPING}
+        print(f"[name_mapping] Loaded {len(_NAME_MAPPING)} product name mappings")
+    finally:
+        db.close()
 
 
 def get_en_name(cn_name: str) -> Optional[str]:

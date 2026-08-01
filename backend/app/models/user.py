@@ -1,18 +1,10 @@
-"""User Pydantic models for authentication."""
-from pydantic import BaseModel
+from sqlalchemy import Column, Integer, String
+from app.database import Base
 
 
-class User(BaseModel):
-    """User schema from users.json."""
-    name: str
-    password: str
+class User(Base):
+    __tablename__ = "users"
 
-
-class LoginRequest(BaseModel):
-    name: str
-    password: str
-
-
-class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(100), unique=True, nullable=False)
+    password = Column(String(100), nullable=False)

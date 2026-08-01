@@ -27,4 +27,13 @@ def init_db():
     """Create all database tables."""
     # Import models to register them with Base.metadata
     from app.models.order import Order, OrderItem, PackagingType, ProductKnowledge
+    from app.models.reference_data import (
+        Pallet,
+        ContainerSpec,
+        DeclarationElement,
+        IngredientMapping,
+        TranslationMapping,
+        MsdsTemplate,
+    )
+    from app.models.user import User
     Base.metadata.create_all(bind=engine)

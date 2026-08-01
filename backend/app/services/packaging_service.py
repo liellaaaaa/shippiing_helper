@@ -1,14 +1,13 @@
 """
-包装计算服务 - 从 references/packaging_data.json 加载包装规格，计算桶数/托数/CBM/毛重/货柜判断
+包装计算服务 - 从数据库加载包装规格，计算桶数/托数/CBM/毛重/货柜判断
 """
-import os
 import math
-import json
 from dataclasses import dataclass, field
 from typing import Optional
 
-
-PACKAGING_DATA_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "..", "references", "packaging_data.json")
+from app.database import SessionLocal
+from app.models.order import PackagingType
+from app.models.reference_data import Pallet, ContainerSpec as ContainerSpecModel
 
 
 @dataclass
@@ -120,8 +119,44 @@ class OrderPackagingResult:
 
 
 def _load_data() -> dict:
-    with open(PACKAGING_DATA_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)
+    """从数据库加载包装规格，返回与 packaging_data.json 相同的结构"""
+    db = SessionLocal()
+    try:
+        packages = [
+            {
+                "name": p.name,
+                "dims": p.dims,
+                "cbm": p.cbm,
+                "tare_kg": p.tare_kg,
+                "gross_kg": p.gross_kg,
+                "net_kg": p.net_kg,
+                "barrel_type": p.barrel_type,
+                "is_palletizable": bool(p.is_palletizable),
+                "no_pallet_qty": p.no_pallet_qty,
+                "pallet_qty_1x1": p.pallet_qty_1x1,
+                "pallet_qty_1_1x1_1": p.pallet_qty_1_1x1_1,
+            }
+            for p in db.query(PackagingType).all()
+        ]
+        pallets = [
+            {"name": p.name, "dims": p.dims, "weight_kg": p.weight_kg, "cbm": p.cbm}
+            for p in db.query(Pallet).all()
+        ]
+        specs = {s.name: s for s in db.query(ContainerSpecModel).all()}
+        return {
+            "packages": packages,
+            "pallets": pallets,
+            "container_20gp": {
+                "max_cbm": specs["20GP"].max_cbm,
+                "max_weight_kg": specs["20GP"].max_weight_kg,
+            },
+            "container_40gp": {
+                "max_cbm": specs["40GP"].max_cbm,
+                "max_weight_kg": specs["40GP"].max_weight_kg,
+            },
+        }
+    finally:
+        db.close()
 
 
 def get_package_types() -> list[PackageSpec]:

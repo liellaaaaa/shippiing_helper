@@ -12,16 +12,11 @@ from docx import Document
 from docx.shared import Pt, RGBColor
 from io import BytesIO
 
-from app.core.config import CUSTOMS_CODES_JSON, MSDS_DIR, TEMPLATES
+from app.core.config import MSDS_DIR, TEMPLATES
 
 
 # 项目根目录
 ROOT = Path(__file__).parent.parent.parent.parent
-INGREDIENT_MAPPING_JSON = str(ROOT / "references" / "ingredient_mapping.json")
-APPEARANCE_COLOR_MAPPING_JSON = str(ROOT / "references" / "appearance_color_mapping.json")
-PRODUCTS_NAME_MAPPING_JSON = str(ROOT / "references" / "products_name_mapping.json")
-ION_TYPE_MAPPING_JSON = str(ROOT / "references" / "ion_type_mapping.json")
-MSDS_ENGLISH_TEMPLATE_JSON = str(ROOT / "references" / "msds_english_template.json")
 
 # 英文 MSDS 参考文件目录
 ENGLISH_MSDS_DIR = str(ROOT / "references" / "MSDS")
@@ -86,45 +81,63 @@ class MSDSGeneratorService:
         self._load_msds_template()
 
     def _load_data(self):
-        """加载所有数据文件"""
-        # 加载 customs_codes.json
-        if Path(CUSTOMS_CODES_JSON).exists():
-            with open(CUSTOMS_CODES_JSON, "r", encoding="utf-8") as f:
-                self._customs_codes = json.load(f)
+        """从数据库加载所有参考数据（原 references/ 下多个 JSON）"""
+        from app.database import SessionLocal
+        from app.models.order import ProductKnowledge
+        from app.models.reference_data import IngredientMapping, TranslationMapping
 
-        # 加载 ingredient_mapping.json
-        if Path(INGREDIENT_MAPPING_JSON).exists():
-            with open(INGREDIENT_MAPPING_JSON, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                self._ingredient_map = data.get("mappings", [])
+        db = SessionLocal()
+        try:
+            # 产品数据 (原 customs_codes.json)
+            self._customs_codes = [
+                {
+                    "internal_code": r.internal_code,
+                    "product_code": r.hs_code,
+                    "customs_name": r.customs_name,
+                    "components": r.customs_ingredients,
+                    "product_appearance": r.product_appearance,
+                }
+                for r in db.query(ProductKnowledge).all()
+                if r.internal_code
+            ]
 
-        # 加载 appearance_color_mapping.json
-        if Path(APPEARANCE_COLOR_MAPPING_JSON).exists():
-            with open(APPEARANCE_COLOR_MAPPING_JSON, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                for item in data.get("mappings", []):
-                    self._appearance_map[item["cn"]] = item["en"]
+            # 成分中英文对照 (原 ingredient_mapping.json)
+            self._ingredient_map = [
+                {
+                    "cn_names": json.loads(m.cn_names or "[]"),
+                    "en_names": json.loads(m.en_names or "[]"),
+                    "cas_numbers": json.loads(m.cas_numbers or "[]"),
+                    "raw": m.raw,
+                }
+                for m in db.query(IngredientMapping).all()
+            ]
 
-        # 加载 products_name_mapping.json
-        if Path(PRODUCTS_NAME_MAPPING_JSON).exists():
-            with open(PRODUCTS_NAME_MAPPING_JSON, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                for item in data.get("mappings", []):
-                    self._products_name_map[item["cn"]] = item["en"]
-
-        # 加载 ion_type_mapping.json
-        if Path(ION_TYPE_MAPPING_JSON).exists():
-            with open(ION_TYPE_MAPPING_JSON, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                for item in data.get("mappings", []):
-                    self._ion_type_map[item["cn"]] = item["en"]
+            # 三个 cn/en 映射 (原 appearance_color / products_name / ion_type mapping json)
+            for mtype, attr in [
+                ("appearance", "_appearance_map"),
+                ("product_name", "_products_name_map"),
+                ("ion_type", "_ion_type_map"),
+            ]:
+                d = getattr(self, attr)
+                d.clear()
+                for m in db.query(TranslationMapping).filter_by(mapping_type=mtype).all():
+                    d[m.cn] = m.en
+        finally:
+            db.close()
 
     def _load_msds_template(self):
-        """加载 msds_english_template.json 并构建翻译映射"""
-        if not Path(MSDS_ENGLISH_TEMPLATE_JSON).exists():
-            return
-        with open(MSDS_ENGLISH_TEMPLATE_JSON, "r", encoding="utf-8") as f:
-            self._msds_template = json.load(f)
+        """从数据库加载英文 MSDS 翻译模板并构建翻译映射"""
+        from app.database import SessionLocal
+        from app.models.reference_data import MsdsTemplate
+
+        db = SessionLocal()
+        try:
+            row = db.query(MsdsTemplate).filter_by(name="english").first()
+            if row is None or not row.template_json:
+                return
+            self._msds_template = json.loads(row.template_json)
+        finally:
+            db.close()
         self._build_translation_mapping()
 
     def _normalize(self, text: str) -> str:

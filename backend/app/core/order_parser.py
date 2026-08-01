@@ -406,9 +406,8 @@ def parse_pasted_data(
 
     # Inject customs name matching logic before returning
     from app.services.customs_name_service import CustomsNameService
-    from app.core.config import CUSTOMS_CODES_JSON
 
-    customs_svc = CustomsNameService.get_instance(CUSTOMS_CODES_JSON)
+    customs_svc = CustomsNameService.get_instance()
 
     for order in orders_by_no.values():
         for item in order.items:

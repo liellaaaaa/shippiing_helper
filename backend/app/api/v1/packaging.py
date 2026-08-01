@@ -81,7 +81,7 @@ def calculate_packaging(req: CalculateRequest):
         if req.use_pallet:
             # 返回所有打卡板方案
             schemes = calculate_all_schemes(req.packaging_name, req.order_qty_kg, actual_fill_kg=req.actual_fill_kg)
-            schemes = [s for s in schemes if s.use_pallet or s.pallets == 0]
+            schemes = [s for s in schemes if s.pallet_type is not None or s.pallets == 0]
             if not schemes:
                 raise ValueError("无可用方案")
             # 返回推荐的第一个方案（优先20GP可装的）

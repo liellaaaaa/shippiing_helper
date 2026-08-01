@@ -1,11 +1,9 @@
 """
 申报要素服务 — 按 HS Code + 报关名称 查找产品的申报要素
 
-数据来源: references/申报要素.json（由 申报要素.xlsx 转换）
+数据来源: declaration_elements 表（原 references/申报要素.json）
 """
 
-import json
-import os
 import re
 from typing import Optional
 
@@ -27,17 +25,31 @@ class CustomsDeclarationService:
 
     _instance: Optional["CustomsDeclarationService"] = None
 
-    def __init__(self, json_path: str):
-        self.json_path = json_path
-        with open(json_path, encoding="utf-8") as f:
-            self.data: dict[str, dict] = json.load(f)
+    def __init__(self, json_path: Optional[str] = None):
+        # json_path 参数保留以兼容旧调用点，数据源已改为数据库
+        self.data: dict[str, dict] = {}
+        self._load()
+
+    def _load(self):
+        from app.database import SessionLocal
+        from app.models.reference_data import DeclarationElement
+
+        db = SessionLocal()
+        try:
+            rows = db.query(DeclarationElement).all()
+            for r in rows:
+                key = f"{r.hs_code}|{r.declaration_name}"
+                self.data[key] = {
+                    "hs_code": r.hs_code,
+                    "申报名称": r.declaration_name,
+                    "申报要素": r.elements_text,
+                }
+        finally:
+            db.close()
 
     @classmethod
     def get_instance(cls, json_path: Optional[str] = None) -> "CustomsDeclarationService":
         if cls._instance is None:
-            if json_path is None:
-                base = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-                json_path = os.path.join(base, "references", "申报要素.json")
             cls._instance = cls(json_path)
         return cls._instance
 

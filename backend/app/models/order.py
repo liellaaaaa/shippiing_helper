@@ -82,6 +82,7 @@ class PackagingType(Base):
     gross_kg = Column(Float)
     net_kg = Column(Float)
     barrel_type = Column(String(50))
+    is_palletizable = Column(Integer, default=1)
     pallet_qty_1x1 = Column(Integer)
     pallet_qty_1_1x1_1 = Column(Integer)
     no_pallet_qty = Column(Integer)
@@ -97,4 +98,5 @@ class ProductKnowledge(Base):
     hs_code = Column(String(20))
     customs_name = Column(String(200))
     customs_ingredients = Column(Text)
+    product_appearance = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)

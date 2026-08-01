@@ -22,7 +22,6 @@ from app.schemas.pi_contract import PiContractUploadResponse
 from app.core.order_parser import parse_pasted_data, parse_pi_contract_table
 from app.core.pi_parser import parse_pi_bytes
 from app.services.customs_name_service import CustomsNameService
-from app.core.config import CUSTOMS_CODES_JSON
 from typing import Optional
 
 
@@ -204,7 +203,7 @@ class LedgerService:
             merged_items.append(item)
 
         # 补充知识库填充
-        customs_svc = CustomsNameService.get_instance(CUSTOMS_CODES_JSON)
+        customs_svc = CustomsNameService.get_instance()
         for item in merged_items:
             if not item.hs_code or not item.customs_name:
                 json_data = customs_svc.lookup(item.internal_code)

@@ -1,5 +1,4 @@
 """Authentication service - JWT token generation and user validation."""
-import json
 import os
 from datetime import datetime, timedelta
 from typing import Optional
@@ -7,25 +6,23 @@ from typing import Optional
 from jose import jwt
 from fastapi import HTTPException, status
 
+from app.database import SessionLocal
+from app.models.user import User
+
 # JWT 配置
 JWT_SECRET = os.getenv("JWT_SECRET", "shipping-helper-secret-key-change-in-production")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_HOURS = 24
 
-# users.json 路径
-USERS_FILE = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-    "data",
-    "users.json"
-)
-
 
 def load_users():
-    """从 users.json 加载用户列表."""
-    if not os.path.exists(USERS_FILE):
-        return []
-    with open(USERS_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
+    """从 users 表加载用户列表."""
+    db = SessionLocal()
+    try:
+        rows = db.query(User).all()
+        return [{"name": r.name, "password": r.password} for r in rows]
+    finally:
+        db.close()
 
 
 def verify_user(name: str, password: str) -> Optional[dict]:

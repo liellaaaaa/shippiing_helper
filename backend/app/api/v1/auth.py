@@ -2,7 +2,7 @@
 from fastapi import APIRouter, HTTPException, status, Request
 from datetime import datetime
 
-from app.models.user import LoginRequest, TokenResponse
+from app.schemas.auth import LoginRequest, TokenResponse
 from app.services.auth_service import authenticate
 from app.services.audit_service import AuditService
 from app.database import SessionLocal

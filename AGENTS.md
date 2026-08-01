@@ -157,7 +157,6 @@ shipping_helper/
 │               └── components/
 │                   ├── ReferencePanel.vue  # 4-tab reference panel
 │                   ├── DocumentEditor.vue  # OnlyOffice editor wrapper
-│                   ├── MyDocumentsDrawer.vue # Saved template instances
 │                   └── DataCenterPanel.vue # Data center panel
 ├── docs/
 │   ├── PRD-ShippingHelper-Web.md        # Main PRD

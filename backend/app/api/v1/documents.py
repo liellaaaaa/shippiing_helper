@@ -3,7 +3,6 @@ import os
 from fastapi import APIRouter, Query, Body
 from pydantic import BaseModel
 from sqlalchemy import desc
-from urllib.parse import quote
 from app.database import SessionLocal
 from app.models.shipment_doc import ShipmentDoc
 from app.services.document_service import DocumentService
@@ -189,31 +188,6 @@ async def get_doc_history(order_id: int):
         db.close()
 
 
-@router.get("/template/{template_type}")
-async def open_blank_template(template_type: str):
-    if template_type not in ("booking", "msds"):
-        return {"error": "Invalid template type"}
-    svc = DocumentService()
-    try:
-        content, doc_key, _ = svc.generate_template_instance(template_type)
-        file_ext = "xlsx" if template_type == "booking" else "docx"
-        token, config, safe_key = oo_svc.create_config(doc_key, file_ext)
-        _save_doc_to_db(doc_key, template_type, content, storage_key=safe_key)
-        api_base = os.getenv("API_BASE_URL", "http://localhost:8000")
-        callback_base = os.getenv("ONLYOFFICE_CALLBACK_BASE_URL", "http://host.docker.internal:8000")
-        return {
-            **config,
-            "url": f"{callback_base}/api/v1/onlyoffice/download/{safe_key}",
-            "downloadUrl": f"{api_base}/api/v1/onlyoffice/download/{safe_key}",
-        }
-    except FileNotFoundError as e:
-        return {"error": "模板文件未找到"}
-    except ValueError as e:
-        return {"error": "参数错误"}
-    except Exception:
-        return {"error": "文档生成失败"}
-
-
 def _save_doc_to_db(doc_key: str, doc_type: str, content: bytes, order_id: int = None, storage_key: str = None):
     """
     Save generated document to DB so OnlyOffice can download it.
@@ -237,30 +211,5 @@ def _save_doc_to_db(doc_key: str, doc_type: str, content: bytes, order_id: int =
         )
         db.add(doc)
         db.commit()
-    finally:
-        db.close()
-
-
-@router.get("/my-templates")
-async def list_my_templates():
-    db = SessionLocal()
-    try:
-        docs = db.query(ShipmentDoc).filter(
-            ShipmentDoc.order_id == None  # noqa: E711 — independent template instances
-        ).order_by(desc(ShipmentDoc.created_at)).all()
-        api_base = os.getenv("API_BASE_URL", "http://localhost:8000")
-        callback_base = os.getenv("ONLYOFFICE_CALLBACK_BASE_URL", "http://host.docker.internal:8000")
-        return [{
-            "doc_key": d.doc_key,
-            "doc_type": d.doc_type,
-            "file_name": d.file_name,
-            "version": d.version,
-            "created_by": d.created_by,
-            "created_at": d.created_at.isoformat() if d.created_at else None,
-            "url": f"{callback_base}/api/v1/onlyoffice/download/{quote(d.doc_key, safe='')}",
-            "downloadUrl": f"{api_base}/api/v1/onlyoffice/download/{quote(d.doc_key, safe='')}",
-            "callbackUrl": f"{callback_base}/api/v1/onlyoffice/callback?doc_key={quote(d.doc_key, safe='')}",
-            "docType": "xlsx" if d.doc_type == "booking" else "docx",
-        } for d in docs]
     finally:
         db.close()

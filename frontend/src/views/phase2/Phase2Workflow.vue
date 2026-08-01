@@ -51,19 +51,6 @@
           >
             报关资料
           </el-button>
-          <el-dropdown @command="(cmd: 'booking' | 'msds') => openBlankTemplate(cmd)" trigger="click">
-            <el-button size="small">
-              空白模板
-              <el-icon class="el-icon--right"><arrow-down /></el-icon>
-            </el-button>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item command="booking">订舱单 Booking</el-dropdown-item>
-                <el-dropdown-item command="msds">MSDS物质安全表</el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
-          <el-button size="small" @click="showMyDocuments = true">我的模板</el-button>
         </div>
       </div>
     </div>
@@ -204,8 +191,6 @@
     <!-- ── MSDS Generator Dialog ──────────────────── -->
     <MSDSGeneratorDialog v-model="showMsdsDialog" :order-items="allLedgerItems" @generated="onMsdsGenerated" />
 
-    <MyDocumentsDrawer v-model="showMyDocuments" @open-doc="onOpenMyDoc" />
-
   </div>
 </template>
 
@@ -216,8 +201,6 @@ import { ElMessage } from 'element-plus'
 import DocumentEditor from './components/DocumentEditor.vue'
 import BookingConfirmDialog from './components/BookingConfirmDialog.vue'
 import MSDSGeneratorDialog from './components/MSDSGeneratorDialog.vue'
-import MyDocumentsDrawer from './components/MyDocumentsDrawer.vue'
-import { ArrowDown } from '@element-plus/icons-vue'
 import { phase2Api } from '@/api/phase2'
 import { getOrderList, getOrderComparison, getOrderPiContracts, type OrderListItem } from '@/api/merge'
 import { getDashboardOrders, type DashboardOrder } from '@/api/dashboard'
@@ -285,7 +268,6 @@ function startResize(e: MouseEvent) {
   document.addEventListener('mouseup', onMouseUp)
 }
 const showMsdsDialog = ref(false)
-const showMyDocuments = ref(false)
 const showBookingDialog = ref(false)
 const selectedBookingTemplate = ref<'xls' | 'xlsx'>('xlsx')
 
@@ -544,34 +526,6 @@ async function onBookingConfirm(fields: import('./components/BookingConfirmDialo
 function onMsdsGenerated(config: any) {
   currentDocKey.value = config.documentKey || config.docKey
   currentConfig.value = config
-}
-
-async function openBlankTemplate(type: 'booking' | 'msds') {
-  try {
-    const res = await phase2Api.openBlankTemplate(type)
-    currentDocKey.value = res.data.documentKey || res.data.docKey
-    currentConfig.value = res.data
-  } catch (e: any) {
-    ElMessage.error('模板打开失败，请稍后重试')
-  }
-}
-
-async function onOpenMyDoc(doc: any) {
-  showMyDocuments.value = false
-  currentDocKey.value = doc.doc_key
-  // Fetch fresh config from backend so JWT key and documentKey are properly paired.
-  // Using the stored doc.token would have a mismatched key since we now use UUID-based keys.
-  try {
-    const fileType = doc.docType || 'docx'
-    const res = await phase2Api.getJwt(doc.doc_key, fileType)
-    currentConfig.value = {
-      ...res.data,
-      url: doc.url,        // OnlyOffice Document Server URL (host.docker.internal)
-      downloadUrl: doc.downloadUrl,  // browser-accessible download URL
-    }
-  } catch (e: any) {
-    ElMessage.error('文档加载失败，请稍后重试')
-  }
 }
 
 onMounted(() => {

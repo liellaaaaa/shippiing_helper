@@ -86,8 +86,6 @@
 | GET | `/api/v1/documents/msds/{msds_id}` | 加载指定 MSDS 文件 |
 | GET | `/api/v1/documents/customs` | 生成出口报关资料 |
 | GET | `/api/v1/documents/history/{order_id}` | 获取文档历史版本 |
-| GET | `/api/v1/documents/template/{template_type}` | 打开空白模板 |
-| GET | `/api/v1/documents/my-templates` | 我的模板列表 |
 | **OnlyOffice** | | |
 | POST | `/api/v1/onlyoffice/jwt` | 创建 JWT 配置 |
 | POST | `/api/v1/onlyoffice/callback` | OnlyOffice 保存回调 |
@@ -455,14 +453,6 @@ Phase 1 核心落库接口。接收订单+PI+包装数据，写入 `order_pi_rec
 ### GET `/api/v1/documents/customs`
 
 生成出口报关资料工作簿（5个 sheet 的 xlsx）。参数：`order_id`。
-
-### GET `/api/v1/documents/template/{template_type}
-
-打开空白模板。`template_type`: `booking` / `msds`。
-
-### GET `/api/v1/documents/my-templates`
-
-我的模板列表（独立于订单的模板实例）。
 
 ---
 

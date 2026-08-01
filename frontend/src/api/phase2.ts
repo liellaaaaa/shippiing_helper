@@ -50,15 +50,6 @@ export const phase2Api = {
   getExportCodes(internalCode: string) {
     return apiClient.get('/export-codes', { params: { internal_code: internalCode } })
   },
-  getJwt(documentKey: string, fileType: string) {
-    return apiClient.post('/onlyoffice/jwt', null, { params: { documentKey, fileType } })
-  },
-  openBlankTemplate(type: 'booking' | 'msds') {
-    return apiClient.get(`/documents/template/${type}`)
-  },
-  listMyTemplates() {
-    return apiClient.get('/documents/my-templates')
-  },
 
   // ── 数据中心 ───────────────────────────────────────────────
   searchDataCenter(query: string) {

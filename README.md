@@ -115,7 +115,6 @@ shipping_helper/
 │           │   └── components/
 │           │       ├── ReferencePanel.vue
 │           │       ├── DocumentEditor.vue
-│           │       ├── MyDocumentsDrawer.vue
 │           │       ├── DataCenterPanel.vue
 │           │       ├── BookingConfirmDialog.vue
 │           │       └── FieldReferenceCard.vue

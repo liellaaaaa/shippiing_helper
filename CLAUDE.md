@@ -208,7 +208,6 @@ shipping_helper/
 │           │   └── components/
 │           │       ├── ReferencePanel.vue    # 4标签页参考面板
 │           │       ├── DocumentEditor.vue     # OnlyOffice 编辑器封装
-│           │       ├── MyDocumentsDrawer.vue  # 我的模板抽屉
 │           │       ├── DataCenterPanel.vue    # 数据中心面板
 │           │       ├── BookingConfirmDialog.vue # 订舱确认弹窗
 │           │       └── FieldReferenceCard.vue  # 字段参考卡片
@@ -290,8 +289,6 @@ shipping_helper/
 - `POST /api/v1/documents/booking` — 生成订舱单
 - `GET /api/v1/documents/msds` — 生成 MSDS
 - `GET /api/v1/documents/customs` — 生成报关资料
-- `GET /api/v1/documents/template/{type}` — 空白模板
-- `GET /api/v1/documents/my-templates` — 我的模板
 - `GET /api/v1/documents/history/{order_id}` — 文档历史
 
 ### OnlyOffice
@@ -478,7 +475,6 @@ docker run -d -p 8080:80 onlyoffice/documentserver
 - `frontend/src/views/phase2/Phase2Workflow.vue` — Phase 2 主工作流页面
 - `frontend/src/views/phase2/components/ReferencePanel.vue` — 4标签页参考面板
 - `frontend/src/views/phase2/components/DocumentEditor.vue` — OnlyOffice 编辑器封装
-- `frontend/src/views/phase2/components/MyDocumentsDrawer.vue` — 我的模板抽屉
 - `frontend/src/views/phase2/components/DataCenterPanel.vue` — 数据中心面板
 - `frontend/src/views/phase2/components/BookingConfirmDialog.vue` — 订舱确认弹窗
 - `frontend/src/views/phase2/components/FieldReferenceCard.vue` — 字段参考卡片
@@ -503,8 +499,6 @@ docker run -d -p 8080:80 onlyoffice/documentserver
 | 收货人/目的港 | ✅ 完成 | PI Header 字段从 PDF 提取 |
 | 数据中心（MSDS） | ✅ 完成 | 搜索、预览、目录树、修正上传 |
 | 运输鉴定报告 | ✅ 完成 | 在 references/ 中搜索 + 预览 |
-| 空白模板 | ✅ 完成 | `GET /api/v1/documents/template/{type}` |
-| 我的模板 | ✅ 完成 | `GET /api/v1/documents/my-templates` |
 | 报关资料 | ✅ 完成 | `GET /api/v1/documents/customs`（5 sheet 工作簿） |
 
 *最后更新：2026/06/22*

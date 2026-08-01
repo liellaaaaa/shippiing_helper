@@ -1,6 +1,5 @@
 # backend/app/services/document_service.py
 import openpyxl
-import xlrd
 from typing import Tuple, Optional
 import os, time, base64, uuid
 from datetime import datetime
@@ -98,20 +97,6 @@ def _extract_doc_text(doc_path: str) -> str:
         return raw.decode(encoding, errors="replace")
     except Exception:
         return ""
-
-
-def convert_xls_to_xlsx(template_path: str) -> bytes:
-    """用 xlrd 读取 .xls，用 openpyxl 写出 .xlsx，保持单元格数据不变。"""
-    wb_xls = xlrd.open_workbook(template_path)
-    ws_xls = wb_xls.sheet_by_index(0)
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    for r in range(ws_xls.nrows):
-        for c in range(ws_xls.ncols):
-            ws.cell(r + 1, c + 1).value = ws_xls.cell_value(r, c)
-    buf = BytesIO()
-    wb.save(buf)
-    return buf.getvalue()
 
 
 def find_marker_cell(ws, marker_text: str) -> Tuple[int, int]:
@@ -1232,56 +1217,6 @@ class DocumentService:
         wb.save(buf)
         content = buf.getvalue()
         doc_key = f"customs_{uuid.uuid4().hex}"
-        return content, doc_key, base64.b64encode(content).decode()
-
-    def generate_template_instance(self, template_type: str) -> Tuple[bytes, str, str]:
-        """加载空白模板（不填充 marker），返回 (content, doc_key, encoded_content)。"""
-        type_map = {
-            "booking": ("booking", "xlsx"),
-            "msds":    ("msds",    "docx"),
-        }
-        if template_type not in type_map:
-            raise ValueError(f"Unknown template type: {template_type}")
-        key_prefix, file_ext = type_map[template_type]
-        template_path = TEMPLATES[template_type]
-        # Find effective template: .docx directly, or .xls for booking
-        effective_template: Optional[str] = None
-        if os.path.exists(template_path):
-            if template_path.endswith(".docx"):
-                effective_template = template_path
-            elif template_path.endswith(".xls"):
-                effective_template = template_path  # .xls will be converted to .xlsx below
-        # For MSDS, also scan MSDS_DIR as fallback
-        if not effective_template and template_type == "msds":
-            for fname in os.listdir(MSDS_DIR):
-                candidate = os.path.join(MSDS_DIR, fname)
-                if fname.endswith(".docx") and os.path.exists(candidate):
-                    effective_template = candidate
-                    break
-                elif fname.endswith(".doc") and os.path.exists(candidate):
-                    try:
-                        converted = convert_doc_to_docx(candidate)
-                        temp_path = os.path.join(MSDS_DIR, f"_blank_converted_{fname}.docx")
-                        with open(temp_path, "wb") as f:
-                            f.write(converted)
-                        effective_template = temp_path
-                        break
-                    except Exception:
-                        continue
-        if not effective_template:
-            raise FileNotFoundError(f"Template not found: {template_path}")
-
-        if file_ext == "xlsx":
-            # .xls 模板 → .xlsx
-            content = convert_xls_to_xlsx(effective_template)
-        else:
-            doc = Document(effective_template)
-            buf = BytesIO()
-            doc.save(buf)
-            content = buf.getvalue()
-
-        timestamp = int(time.time())
-        doc_key = f"{key_prefix}_template_{timestamp}"
         return content, doc_key, base64.b64encode(content).decode()
 
     def load_msds_file(self, msds_index_record) -> Tuple[bytes, str, str]:

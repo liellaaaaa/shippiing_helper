@@ -21,25 +21,30 @@ shipping_helper/
 │       ├── api/
 │       │   ├── v1/
 │       │   │   ├── auth.py          # POST /auth/login（JWT 认证）
-│       │   │   ├── orders.py        # POST /orders/paste, /orders
+│       │   │   ├── orders.py        # POST /orders/paste, /orders/ledger 等
+│       │   │   ├── pi.py            # POST /pi/upload（PI 文件解析）
+│       │   │   ├── merge.py         # GET /merge/orders, /comparison
 │       │   │   ├── packages.py      # /packages/calculate (sea/air/land)
 │       │   │   ├── packaging.py     # /packaging/calculate, /calculate-schemes
 │       │   │   ├── dashboard.py     # /dashboard/orders, /records
 │       │   │   ├── documents.py     # /documents/booking, /msds, /customs
 │       │   │   ├── onlyoffice.py    # /onlyoffice/callback, /download
-│       │   │   ├── msds.py         # /msds/, /content, /reindex
+│       │   │   ├── msds.py          # /msds/, /content, /reindex
+│       │   │   ├── msds_generator.py # MSDS 生成器（搜索/解析/生成）
+│       │   │   ├── msds_ledger.py   # MSDS 台账 CRUD + 批量生成
 │       │   │   ├── transport.py     # /transport/upload
 │       │   │   ├── export_codes.py  # /export-codes/
 │       │   │   ├── data_center.py  # /data-center/search, /tree, /file
 │       │   │   ├── transport_reports.py # /transport-reports/search
-│       │   │   └── name_mapping.py  # /name-mapping, /lookup
+│       │   │   ├── name_mapping.py  # /name-mapping, /lookup
+│       │   │   └── audit.py         # /audit/logs, /stats（审计日志）
 │       │   └── deps.py             # FastAPI 依赖注入
 │       ├── core/
 │       │   ├── order_parser.py     # 分隔符检测、批量去重、聚合
 │       │   ├── knowledge_filler.py # HS code + 报关品名自动补全
 │       │   ├── pi_parser.py        # PI 文件解析 (.xlsx/.xls/.pdf OCR)
 │       │   ├── config.py           # 目录路径和环境配置
-│       │   └── name_mapping.py     # 产品名称中英文对照
+│       │   └── shipment_title_mapping.py # 发货人抬头映射
 │       ├── services/
 │       │   ├── auth_service.py           # JWT 认证服务
 │       │   ├── order_service.py          # 订单服务层
@@ -48,34 +53,48 @@ shipping_helper/
 │       │   ├── calculation_service.py     # 核心计算逻辑（Phase 1 & 2 共用）
 │       │   ├── merge_service.py           # 订单-PI 合并 + 比对
 │       │   ├── save_service.py           # 订单+PI+包装的事务性保存
+│       │   ├── ledger_service.py          # 台账服务（订单台账）
 │       │   ├── document_service.py       # 文档模板 + BLOB 存储
 │       │   ├── onlyoffice_service.py     # OnlyOffice JWT + 配置生成
 │       │   ├── export_service.py         # Excel 导出
 │       │   ├── data_center_service.py    # MSDS 搜索 + 索引
 │       │   ├── msds_service.py           # MSDS 文本提取
+│       │   ├── msds_generator_service.py # MSDS 生成器
+│       │   ├── msds_ledger_service.py    # MSDS 台账服务
+│       │   ├── customs_declaration_service.py # 报关申报要素查询
+│       │   ├── customs_name_service.py   # 报关品名服务
 │       │   ├── transport_service.py      # 运输鉴定报告解析
 │       │   ├── name_mapping_service.py   # 品名对照查询
-│       │   └── export_codes_service.py   # HS code 查询
+│       │   ├── export_codes_service.py   # HS code 查询
+│       │   └── audit_service.py          # 审计日志服务
 │       ├── models/
-│       │   ├── user.py              # User Pydantic 模型
+│       │   ├── user.py              # User 模型
 │       │   ├── order.py             # orders, order_items, packaging_types, pallets
 │       │   ├── pi_contract.py       # PiContract, PiContractItem, PiData
 │       │   ├── order_pi_record.py   # OrderPiRecord（合并记录）
+│       │   ├── order_item_transport_report.py # 订单项-运输报告关联
 │       │   ├── shipment_doc.py     # ShipmentDoc（文档版本）
 │       │   ├── msds_index.py        # MSDSIndex
 │       │   ├── msds_correction.py   # MSDSCorrection
-│       │   └── transport_report.py  # TransportReport
+│       │   ├── msds_ledger.py       # MSDSLedger（MSDS 台账）
+│       │   ├── transport_report.py  # TransportReport
+│       │   ├── reference_data.py    # 参考数据（包装/托盘/知识库）
+│       │   ├── template.py          # 文档模板配置
+│       │   └── audit_log.py         # AuditLog（审计日志）
 │       ├── schemas/
+│       │   ├── auth.py              # 登录请求/响应
 │       │   ├── order.py             # Pydantic schemas（订单解析/保存）
 │       │   ├── pi_contract.py       # Pydantic schemas（PI）
-│       │   └── order_pi_record.py   # Pydantic schemas（合并记录）
+│       │   ├── order_pi_record.py   # Pydantic schemas（合并记录）
+│       │   ├── merge.py             # Pydantic schemas（合并/比对）
+│       │   └── ledger.py            # Pydantic schemas（台账）
 │       ├── main.py                  # FastAPI 入口
 │       └── database.py             # SQLite 连接
 ├── frontend/
 │   └── src/
 │       ├── api/
 │       │   ├── axios.ts           # Axios 实例 + JWT 拦截器
-│       │   ├── orders.ts           # POST /orders/paste, /orders
+│       │   ├── orders.ts           # 订单解析/台账 API
 │       │   ├── pi.ts               # PI 上传 API
 │       │   ├── merge.ts            # /merge/orders, /comparison
 │       │   ├── packaging.ts       # /packaging/calculate
@@ -83,45 +102,50 @@ shipping_helper/
 │       │   ├── dashboard.ts        # /dashboard/orders, /records
 │       │   ├── phase1.ts           # Phase 1 API 客户端
 │       │   ├── phase2.ts          # Phase 2 API 客户端
+│       │   ├── msds_generator.ts   # MSDS 生成器 API
+│       │   ├── msds-ledger.ts     # MSDS 台账 API
+│       │   ├── health.ts           # /health 检查
 │       │   └── name_mapping.ts    # 品名对照 API
 │       ├── stores/
 │       │   └── auth.ts            # Pinia 认证状态管理
-│       └── views/
-│           ├── auth/
-│           │   └── Login.vue       # 登录页面
-│       ├── components/
-│       │   └── phase1/
-│       │       ├── PasteTextarea.vue
-│       │       ├── OrderPreviewForm.vue
-│       │       ├── PiUploadDragger.vue
-│       │       ├── PiPreviewTable.vue
-│       │       ├── ColumnMappingModal.vue
-│       │       ├── PackagingCalculator.vue
-│       │       ├── PackagingTypeSelect.vue
-│       │       ├── RemainderAllocationDialog.vue
-│       │       ├── DiffCell.vue
-│       │       ├── OrderExpandRow.vue
-│       │       ├── QuickJumpPopover.vue
-│       │       ├── AirFreightPanel.vue
-│       │       └── LandTransportPanel.vue
-│       └── views/
-│           ├── Layout.vue
-│           ├── phase1/
-│           │   ├── OrderPaste.vue
-│           │   ├── Phase1Workflow.vue
-│           │   └── Dashboard.vue
-│           ├── phase2/
-│           │   ├── Phase2Workflow.vue
-│           │   └── components/
-│           │       ├── ReferencePanel.vue
-│           │       ├── DocumentEditor.vue
-│           │       ├── DataCenterPanel.vue
-│           │       ├── BookingConfirmDialog.vue
-│           │       └── FieldReferenceCard.vue
-│           ├── phase3/
-│           │   └── Phase3Workflow.vue
-│           └── data-center/
-│               └── DataCenter.vue
+│       ├── router/
+│       │   └── index.ts           # 路由配置（/workflow, /dashboard, /phase2, /data-center）
+│       ├── views/
+│       │   ├── auth/
+│       │   │   └── Login.vue       # 登录页面
+│       │   ├── Layout.vue          # 主布局（侧边导航）
+│       │   ├── phase1/
+│       │   │   ├── Phase1Workflow.vue  # Phase 1 统一工作流
+│       │   │   ├── Dashboard.vue       # 数据看板
+│       │   │   └── LedgerDetailDialog.vue # 台账详情弹窗
+│       │   ├── phase2/
+│       │   │   ├── Phase2Workflow.vue  # 文档编辑工作流
+│       │   │   └── components/
+│       │   │       ├── ReferencePanel.vue    # 参考面板
+│       │   │       ├── DocumentEditor.vue     # OnlyOffice 编辑器封装
+│       │   │       ├── DataCenterPanel.vue    # 数据中心面板
+│       │   │       ├── BookingConfirmDialog.vue # 订舱确认弹窗
+│       │   │       ├── MSDSGeneratorDialog.vue  # MSDS 生成弹窗
+│       │   │       ├── BatchGenerateDialog.vue  # 批量生成弹窗
+│       │   │       └── FieldReferenceCard.vue   # 字段参考卡片
+│       │   └── data-center/
+│       │       └── DataCenter.vue   # 数据中心页面
+│       └── components/
+│           └── phase1/
+│               ├── PasteTextarea.vue          # 订单粘贴输入
+│               ├── OrderPreviewForm.vue       # 订单预览 + 编辑
+│               ├── PiUploadDragger.vue        # PI 文件上传
+│               ├── PiPreviewTable.vue         # PI 预览表格
+│               ├── ColumnMappingModal.vue     # 列映射弹窗
+│               ├── PackagingCalculator.vue    # 包装计算器
+│               ├── PackagingTypeSelect.vue    # 包装类型选择
+│               ├── RemainderAllocationDialog.vue # 余数分配弹窗
+│               ├── DiffCell.vue               # 差异单元格
+│               ├── OrderExpandRow.vue         # 订单展开行
+│               ├── DuplicateWarningDialog.vue # 重复警告弹窗
+│               ├── QuickJumpPopover.vue       # 快速跳转
+│               ├── AirFreightPanel.vue        # 空运面板
+│               └── LandTransportPanel.vue     # 陆运面板
 ├── docs/                        # PRD、API、TEST 文档
 ├── 参考/                        # 旧版 PyQt5 参考
 └── data/                        # SQLite 数据库
@@ -168,8 +192,9 @@ docker run -d -p 8080:80 onlyoffice/documentserver
 | PI 文件提取 | ✅ | .xlsx/.xls/.pdf(OCR)、列映射、置信度 |
 | 数据关联 | ✅ | internal_code 关联、订单-PI 合并 |
 | 包装计算 | ✅ | 13种桶型、2种托盘、20GP判断、多行计算器 |
-| 数据看板 | ✅ | Phase1Workflow 只读预览 |
+| 数据看板 | ✅ | 只读预览 + 台账详情 |
 | 余数分配 | ✅ | 每行余数独立选择板规格 |
+| 订单台账 | ✅ | 落库记录查询、编辑、删除、判重 |
 
 ## Phase 2 功能模块
 
@@ -180,23 +205,17 @@ docker run -d -p 8080:80 onlyoffice/documentserver
 | OnlyOfficeService | ✅ | Booking/MSDS 生成、标记填充 |
 | DocumentService | ✅ | 模板复制、BLOB 存储、版本管理 |
 | ShipmentDoc 模型 | ✅ | 文档版本存储、content_hash 幂等 |
-| ExportCodesService | ✅ | HS code 查询服务 |
 | OnlyOffice 回调 | ✅ | content_hash 去重、悲观锁释放 |
 | Phase 2 前端页面 | ✅ | Phase2Workflow + ReferencePanel + DocumentEditor |
 | PI 上传 (.pdf) | ✅ | 支持 PDF via OCR |
 | consignee/destination | ✅ | PI Header 字段从 PDF 提取 |
 | 数据中心（MSDS） | ✅ | 搜索、预览、目录树、修正上传 |
 | 运输鉴定报告 | ✅ | 在 references/ 中搜索 + 预览 |
-| 空白模板 | ✅ | Booking/MSDS 空白模板 |
-| 我的模板 | ✅ | 独立于订单的模板实例管理 |
 | 报关资料 | ✅ | 5 sheet 工作簿生成 |
+| MSDS 台账 | ✅ | MSDS 台账管理 + 批量生成 |
+| 审计日志 | ✅ | 操作审计记录与统计 |
 
-## Phase 3 功能模块
-
-| 模块 | 状态 | 说明 |
-|------|------|------|
-| Phase3Workflow 搭建 | ✅ | 页面骨架 |
-| 报关功能 | 进行中 | — |
+> Phase 3（报关）已并入 Phase 2：报关资料生成、申报要素自动填充均已完成。
 
 ## 核心文档
 
@@ -206,7 +225,7 @@ docker run -d -p 8080:80 onlyoffice/documentserver
 | `docs/PRD-ShippingHelper-Web-P1v2.md` | Phase 1 详细需求 |
 | `docs/PRD-ShippingHelper-Web-P2v2.md` | Phase 2 详细需求 |
 | `docs/PRD-ShippingHelper-Web-P1v2-OrderParsing.md` | 订单解析模块设计方案 |
-| `docs/API-ShippingHelper-v1.md` | API 接口文档（2026-06-22 更新） |
+| `docs/API-ShippingHelper-v1.md` | API 接口文档（2026-08-01 更新） |
 | `docs/TEST-ShippingHelper-v1.md` | 集成测试文档 |
 | `docs/superpowers/plans/` | 实施计划 |
 | `docs/superpowers/specs/` | 设计规格 |
@@ -222,6 +241,7 @@ docker run -d -p 8080:80 onlyoffice/documentserver
 | 文件存储 | 数据库 BLOB，不使用共享文件夹 |
 | 模板原则 | 模板只读，实例从模板复制 |
 | 悲观锁 | 订单级锁（`order_status`, `locked_by`, `locked_at`） |
+| OnlyOffice 回调 | 后端暴露 `POST /api/v1/onlyoffice/callback`，保存成功写 DB + 释放锁 |
 | PDF 解析 | OCR（pymupdf）支持 PDF 格式 PI 文件 |
 
 ## 数据模型
@@ -242,16 +262,19 @@ Phase 1 落库数据存储在 `order_pi_records` 表（合并记录），不直�
 | 分组 | 端点 |
 |------|------|
 | 认证 | `POST /api/v1/auth/login` |
-| 订单 | `POST /api/v1/orders/paste`, `POST /api/v1/orders` |
-| PI | `POST /api/v1/pi/upload` |
+| 订单 | `POST /api/v1/orders/paste`, `POST /api/v1/orders`, `GET /api/v1/orders/ledger` |
+| PI | `POST /api/v1/pi/upload`, `POST /api/v1/pi/contracts` |
 | 数据关联 | `GET /api/v1/merge/orders`, `GET /api/v1/merge/orders/{id}/comparison` |
 | 包装计算 | `GET /api/v1/packaging/types`, `POST /api/v1/packaging/calculate` |
 | 数据看板 | `GET /api/v1/dashboard/orders`, `POST /api/v1/dashboard/records` |
-| 文档生成 | `POST /api/v1/documents/booking`, `GET /api/v1/documents/msds` |
+| 文档生成 | `POST /api/v1/documents/booking`, `GET /api/v1/documents/msds`, `GET /api/v1/documents/customs` |
 | OnlyOffice | `POST /api/v1/onlyoffice/callback`, `GET /api/v1/onlyoffice/download/{key}` |
+| MSDS 台账 | `GET /api/v1/msds-ledger`, `POST /api/v1/msds-ledger/generate` |
 | 数据中心 | `GET /api/v1/data-center/search`, `GET /api/v1/data-center/tree` |
 | 运输报告 | `GET /api/v1/transport-reports/search` |
 | 品名对照 | `GET /api/v1/name-mapping`, `GET /api/v1/name-mapping/lookup` |
+| 审计日志 | `GET /api/v1/audit/logs`, `GET /api/v1/audit/stats` |
+| 健康检查 | `GET /health` |
 
 > 注意：除登录和健康检查外，所有 API 端点均需要认证（携带 `Authorization: Bearer <token>`）。
 

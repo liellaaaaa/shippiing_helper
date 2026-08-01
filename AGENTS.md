@@ -110,54 +110,131 @@ shipping_helper/
 │   └── app/
 │       ├── api/
 │       │   ├── v1/
-│       │   │   ├── orders.py      # REST API: /api/v1/orders
-│       │   │   ├── pi.py          # PI upload/save/query API
-│       │   │   ├── packaging.py   # Packaging calculation API
-│       │   │   ├── phase2.py      # Phase 2 document generation API
-│       │   │   └── dashboard.py   # Dashboard data API
+│       │   │   ├── auth.py          # POST /auth/login (JWT auth)
+│       │   │   ├── orders.py        # REST API: /api/v1/orders (+ /orders/ledger 台账)
+│       │   │   ├── pi.py            # PI upload/save/query API
+│       │   │   ├── merge.py         # /merge/orders, /comparison
+│       │   │   ├── packaging.py     # Packaging calculation API
+│       │   │   ├── packages.py      # Sea/air/land unified calculation
+│       │   │   ├── dashboard.py     # Dashboard data API
+│       │   │   ├── documents.py     # Document generation API (booking/msds/customs)
+│       │   │   ├── onlyoffice.py    # OnlyOffice callback/download API
+│       │   │   ├── msds.py          # MSDS list/content/reindex
+│       │   │   ├── msds_generator.py # MSDS generator API
+│       │   │   ├── msds_ledger.py   # MSDS ledger CRUD + batch generate
+│       │   │   ├── data_center.py   # Data center (MSDS search/tree/file)
+│       │   │   ├── transport.py     # Transport report upload
+│       │   │   ├── transport_reports.py # Transport report search/link
+│       │   │   ├── export_codes.py  # HS code lookup API
+│       │   │   ├── name_mapping.py  # Product name mapping API
+│       │   │   └── audit.py         # Audit log API
 │       │   └── deps.py            # FastAPI dependency injection
 │       ├── core/
 │       │   ├── order_parser.py    # Delimiter detection, aggregation, dedup
 │       │   ├── knowledge_filler.py # HS code + customs name auto-fill
-│       │   └── pi_parser.py       # PI file parsing (.xlsx/.xls/.pdf)
+│       │   ├── pi_parser.py       # PI file parsing (.xlsx/.xls/.pdf)
+│       │   ├── config.py          # Directory paths and env config
+│       │   └── shipment_title_mapping.py # Shipper title mapping
 │       ├── services/
+│       │   ├── auth_service.py    # JWT auth service
 │       │   ├── order_service.py   # Order service layer
 │       │   ├── pi_service.py      # PI service layer
 │       │   ├── packaging_service.py # Packaging calculation (drums, pallets, 20GP)
+│       │   ├── calculation_service.py # Core calculation logic (Phase 1 & 2 shared)
+│       │   ├── merge_service.py   # Order-PI merge + comparison
 │       │   ├── save_service.py    # Transactional save for order+PI+packaging
-│       │   └── document_service.py # Document template + BLOB storage
+│       │   ├── ledger_service.py  # Order ledger service
+│       │   ├── document_service.py # Document template + BLOB storage
+│       │   ├── onlyoffice_service.py # OnlyOffice JWT + config
+│       │   ├── data_center_service.py # MSDS search + index
+│       │   ├── msds_service.py    # MSDS text extraction
+│       │   ├── msds_generator_service.py # MSDS generator
+│       │   ├── msds_ledger_service.py    # MSDS ledger
+│       │   ├── customs_declaration_service.py # Customs declaration elements
+│       │   ├── customs_name_service.py   # Customs name service
+│       │   ├── transport_service.py # Transport report parsing
+│       │   ├── name_mapping_service.py # Product name mapping
+│       │   ├── export_codes_service.py # HS code lookup
+│       │   └── audit_service.py   # Audit log service
 │       ├── models/
-│       │   └── order.py          # SQLAlchemy models
+│       │   ├── user.py            # User model
+│       │   ├── order.py           # orders, order_items, packaging_types, pallets
+│       │   ├── pi_contract.py     # PiContract, PiContractItem, PiData
+│       │   ├── order_pi_record.py # OrderPiRecord (merged record)
+│       │   ├── order_item_transport_report.py # Order item-report link
+│       │   ├── shipment_doc.py    # ShipmentDoc (document versions)
+│       │   ├── msds_index.py      # MSDSIndex
+│       │   ├── msds_correction.py # MSDSCorrection
+│       │   ├── msds_ledger.py     # MSDSLedger
+│       │   ├── transport_report.py # TransportReport
+│       │   ├── reference_data.py  # Reference data (packaging/pallets/knowledge)
+│       │   ├── template.py        # Document template config
+│       │   └── audit_log.py       # AuditLog
 │       ├── schemas/
-│       │   └── order.py          # Pydantic schemas
+│       │   ├── auth.py            # Login request/response
+│       │   ├── order.py           # Order schemas (parse/save)
+│       │   ├── pi_contract.py     # PI schemas
+│       │   ├── order_pi_record.py # Merge record schemas
+│       │   ├── merge.py           # Merge/comparison schemas
+│       │   └── ledger.py          # Ledger schemas
 │       ├── main.py               # FastAPI entry point
 │       └── database.py           # SQLite connection
 ├── frontend/
 │   └── src/
 │       ├── api/
-│       │   ├── orders.ts        # Axios API client
-│       │   ├── pi.ts            # PI API client
-│       │   ├── phase1.ts        # Phase 1 API client
-│       │   ├── phase2.ts        # Phase 2 API client
-│       │   └── packaging.ts     # Packaging API client
-│       ├── components/
-│       │   └── phase1/
-│       │       ├── PasteTextarea.vue       # Order paste input
-│       │       ├── OrderPreviewForm.vue   # Order preview + edit
-│       │       ├── PiUploadDragger.vue     # PI file upload drag-and-drop
-│       │       ├── PiPreviewTable.vue     # PI preview table
-│       │       ├── PackagingCalculator.vue # Multi-row packaging calculator
-│       │       └── ColumnMappingModal.vue  # PI column mapping modal
-│       └── views/
-│           ├── phase1/
-│           │   ├── OrderPaste.vue         # Order paste page
-│           │   └── Phase1Workflow.vue     # Phase 1 workflow page
-│           └── phase2/
-│               ├── Phase2Workflow.vue     # Phase 2 main workflow
-│               └── components/
-│                   ├── ReferencePanel.vue  # 4-tab reference panel
-│                   ├── DocumentEditor.vue  # OnlyOffice editor wrapper
-│                   └── DataCenterPanel.vue # Data center panel
+│       │   ├── axios.ts          # Axios instance + JWT interceptor
+│       │   ├── orders.ts         # Order/ledger API client
+│       │   ├── pi.ts             # PI API client
+│       │   ├── merge.ts          # Merge/comparison API client
+│       │   ├── packaging.ts      # Packaging calculation API client
+│       │   ├── packages.ts       # Sea/air/land calculation API client
+│       │   ├── dashboard.ts      # Dashboard API client
+│       │   ├── phase1.ts         # Phase 1 API client
+│       │   ├── phase2.ts         # Phase 2 API client
+│       │   ├── msds_generator.ts # MSDS generator API client
+│       │   ├── msds-ledger.ts    # MSDS ledger API client
+│       │   ├── health.ts         # Health check API client
+│       │   └── name_mapping.ts   # Name mapping API client
+│       ├── stores/
+│       │   └── auth.ts           # Pinia auth store
+│       ├── router/
+│       │   └── index.ts          # Route config
+│       ├── views/
+│       │   ├── auth/
+│       │   │   └── Login.vue     # Login page
+│       │   ├── Layout.vue        # App layout
+│       │   ├── phase1/
+│       │   │   ├── Phase1Workflow.vue     # Phase 1 workflow page
+│       │   │   ├── Dashboard.vue          # Dashboard page
+│       │   │   └── LedgerDetailDialog.vue # Ledger detail dialog
+│       │   ├── phase2/
+│       │   │   ├── Phase2Workflow.vue     # Phase 2 document workflow
+│       │   │   └── components/
+│       │   │       ├── ReferencePanel.vue  # Reference panel
+│       │   │       ├── DocumentEditor.vue  # OnlyOffice editor wrapper
+│       │   │       ├── DataCenterPanel.vue # Data center panel
+│       │   │       ├── BookingConfirmDialog.vue # Booking confirm dialog
+│       │   │       ├── MSDSGeneratorDialog.vue  # MSDS generator dialog
+│       │   │       ├── BatchGenerateDialog.vue  # Batch generate dialog
+│       │   │       └── FieldReferenceCard.vue   # Field reference card
+│       │   └── data-center/
+│       │       └── DataCenter.vue # Data center page
+│       └── components/
+│           └── phase1/
+│               ├── PasteTextarea.vue       # Order paste input
+│               ├── OrderPreviewForm.vue   # Order preview + edit
+│               ├── PiUploadDragger.vue     # PI file upload drag-and-drop
+│               ├── PiPreviewTable.vue     # PI preview table
+│               ├── ColumnMappingModal.vue  # PI column mapping modal
+│               ├── PackagingCalculator.vue # Multi-row packaging calculator
+│               ├── PackagingTypeSelect.vue # Packaging type selector
+│               ├── RemainderAllocationDialog.vue # Remainder allocation dialog
+│               ├── DiffCell.vue            # Diff cell
+│               ├── OrderExpandRow.vue     # Order expand row
+│               ├── DuplicateWarningDialog.vue # Duplicate warning dialog
+│               ├── QuickJumpPopover.vue   # Quick jump popover
+│               ├── AirFreightPanel.vue    # Air freight panel
+│               └── LandTransportPanel.vue # Land transport panel
 ├── docs/
 │   ├── PRD-ShippingHelper-Web.md        # Main PRD
 │   ├── PRD-ShippingHelper-Web-P1v2.md  # Phase 1 spec
@@ -219,7 +296,9 @@ The `参考/` folder contains the Python implementation that should inform imple
 2. ~~Template management~~ ✅
 3. ~~Document generation (Booking, MSDS via OnlyOffice)~~ ✅
 4. ~~Data display (left dashboard, right editor)~~ ✅
-5. ~~Blank template and My Templates support~~ ✅
+5. ~~Customs declaration workbook (5 sheets)~~ ✅
+6. ~~MSDS ledger + batch generation~~ ✅
+7. ~~Audit log~~ ✅
 
 ---
 
@@ -266,6 +345,7 @@ docker run -d -p 8080:80 onlyoffice/documentserver
 | Data merging | ✅ done | internal_code association, order-PI merge |
 | Packaging calculation | ✅ done | 13 drum types, 2 pallets, 20GP judgment, multi-row calculator, per-pallet capacity |
 | Data dashboard | ✅ done | Read-only order + PI merge preview in Phase1Workflow |
+| Order ledger | ✅ done | Ledger CRUD, dedup check, ledger detail |
 
 **Completed Files:**
 - `backend/app/models/order.py` — orders + order_items + packaging_types + products_knowledge
@@ -279,7 +359,6 @@ docker run -d -p 8080:80 onlyoffice/documentserver
 - `backend/app/services/packaging_service.py` — packaging calculation (drums, pallets, volume, 20GP)
 - `backend/app/api/v1/orders.py` — REST API endpoints
 - `backend/app/api/v1/pi.py` — PI upload/save/query endpoints
-- `backend/app/api/v1/phase2.py` — Phase 2 API routes (document generation, OnlyOffice callback)
 - `backend/app/api/deps.py` — FastAPI dependency injection
 - `backend/migrations/001_add_pi_contracts.py` — table migration
 - `backend/migrations/002_add_indexes.py` — index migration
@@ -288,12 +367,12 @@ docker run -d -p 8080:80 onlyoffice/documentserver
 - `frontend/src/api/phase2.ts` — Phase 2 API client
 - `frontend/src/components/phase1/PasteTextarea.vue` — paste input component
 - `frontend/src/components/phase1/OrderPreviewForm.vue` — preview + edit component
-- `frontend/src/components/phase1/PIExtract.vue` — full page
 - `frontend/src/components/phase1/PiUploadDragger.vue` — drag-and-drop upload (.xlsx/.xls/.pdf)
 - `frontend/src/components/phase1/PiPreviewTable.vue` — editable preview table
 - `frontend/src/components/phase1/ColumnMappingModal.vue` — column mapping modal
 - `frontend/src/components/phase1/PackagingCalculator.vue` — packaging calculator component
-- `frontend/src/views/phase1/OrderPaste.vue` — order paste page
+- `frontend/src/views/phase1/Phase1Workflow.vue` — Phase 1 workflow page
+- `frontend/src/views/phase1/Dashboard.vue` — dashboard page
 - `frontend/src/views/phase2/Phase2Workflow.vue` — Phase 2 main workflow page
 - `frontend/src/views/phase2/components/ReferencePanel.vue` — 4-tab reference panel
 - `frontend/src/views/phase2/components/DocumentEditor.vue` — OnlyOffice editor wrapper
@@ -313,5 +392,8 @@ docker run -d -p 8080:80 onlyoffice/documentserver
 | Phase 2 frontend page | ✅ done | Phase2Workflow + ReferencePanel + DocumentEditor components |
 | PI upload (.pdf) | ✅ done | PiUploadDragger supports .pdf via OCR |
 | consignee/destination | ✅ done | PI Header fields extracted from PDF |
+| Customs declaration | ✅ done | 5-sheet workbook generation |
+| MSDS ledger | ✅ done | MSDS ledger CRUD + batch generation |
+| Audit log | ✅ done | Operation audit records and stats |
 
-*Last updated: 2026/06/02*
+*Last updated: 2026/08/01*

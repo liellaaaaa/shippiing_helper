@@ -824,6 +824,53 @@ class DocumentService:
         doc.save(buf)
         return buf.getvalue()
 
+    @staticmethod
+    def _extend_customs_sheet(ws, n_items: int) -> None:
+        """
+        报关单 sheet 按产品数动态扩展产品块（每品 3 行）。
+
+        模板预建 6 块（行 20-37）。N > 6 时，以第 6 块（行 35-37）为样式源，
+        从第 38 行起逐块复制边框/行高/合并单元格，并更新打印区域。
+        仅复制样式与结构，不写任何数据（数据由 generate_customs 主体写入）。
+        """
+        import copy
+
+        if n_items <= 6:
+            return
+        if ws.max_row < 37:
+            raise ValueError(f"报关单模板预建块不足，max_row={ws.max_row}")
+
+        src_rows = (35, 36, 37)          # 源块（第 6 块）三行
+        n_new_blocks = n_items - 6
+        for k in range(n_new_blocks):
+            target = 38 + k * 3          # 新块起始行：38, 41, 44, ...
+            for off in range(3):
+                src = src_rows[off]
+                dst = target + off
+                # 复制行高
+                if ws.row_dimensions[src].height:
+                    ws.row_dimensions[dst].height = ws.row_dimensions[src].height
+                # 逐单元格复制样式（A..S 列）
+                for col in range(1, 20):
+                    src_cell = ws.cell(src, col)
+                    dst_cell = ws.cell(dst, col)
+                    dst_cell._style = copy.copy(src_cell._style)
+            # 复制合并单元格：源块所有合并区域偏移到本块位置
+            # 每个新块独立偏移（target-35），不能一次性整体偏移
+            row_offset = target - 35     # 第7块=3, 第8块=6, ...
+            for mc in list(ws.merged_cells.ranges):
+                if mc.min_row >= 35 and mc.max_row <= 37:
+                    ws.merge_cells(
+                        start_row=mc.min_row + row_offset,
+                        start_column=mc.min_col,
+                        end_row=mc.max_row + row_offset,
+                        end_column=mc.max_col,
+                    )
+
+        # 更新打印区域
+        last_row = 20 + 3 * n_items - 1
+        ws.print_area = f"'报关单'!$A$1:$S${last_row}"
+
     def generate_customs(
         self,
         order_id: int | None = None,       # OrderPiRecord 主键 ID（非业务订单号）
@@ -981,18 +1028,10 @@ class DocumentService:
         ws.cell(12, 14, currency_cn)   # N12: 保费币制
 
         # 产品明细：每品占 3 行（数据行 / 申报要素行 / 公式行）
-        # 起始行 = 20 + idx * 3，模板最多支持到行 37（约 5-6 个产品）
-        max_items = (ws.max_row - 20) // 3
-        if len(items) > max_items:
-            import logging
-            logging.warning(
-                "报关单模板最多容纳 %d 个产品，当前 %d 个，多余产品将被截断",
-                max_items, len(items),
-            )
+        # 起始行 = 20 + idx * 3；超出模板预建 6 块时动态扩展
+        self._extend_customs_sheet(ws, len(items))
         for idx, item in enumerate(items):
             row = 20 + idx * 3
-            if row + 2 > ws.max_row:
-                break
 
         # 业务说明：以下硬编码值适用于宏昊化工出口业务场景
         # 千克（KG）— 化工品标准计量单位
@@ -1057,9 +1096,7 @@ class DocumentService:
         for idx, item in enumerate(items):
             if idx == 0:
                 continue  # 第1个产品由箱单直接引用 F12/G20
-            helper_row = 23 + (idx - 1) * 3  # 23, 26, 29, 32, 35
-            if helper_row > ws.max_row:
-                break
+            helper_row = 23 + (idx - 1) * 3  # 23, 26, 29, 32, ...
             nw = item.quantity_kg or item.net_weight_kg
             gw = item.gross_weight_kg
             pc = item.pallet_count or item.drum_count
@@ -1115,9 +1152,9 @@ class DocumentService:
             if idx == 0:
                 continue  # 第1个产品由箱单直接引用 F12/G20
             # 箱单公式 ROW(V{4+idx})*3+16 = (4+idx)*3+16, 再+1偏移
-            helper_row = 26 + idx * 3  # 29, 32, 35, 38, 41
+            helper_row = 26 + idx * 3  # 29, 32, 35, 38, ...
             if helper_row > ws.max_row:
-                break
+                break  # 第二辅助列行超出扩展后的工作表（max_row=20+3N-1），跳过
             nw = item.quantity_kg or item.net_weight_kg or 0
             gw = item.gross_weight_kg or 0
             pc = item.pallet_count or item.drum_count or 0

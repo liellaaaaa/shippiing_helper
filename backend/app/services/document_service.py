@@ -207,6 +207,20 @@ def _amount_to_chinese_upper(amount: float) -> str:
     return result
 
 
+# 币制代码→中文名（报关资料中币制一律显示中文，不写 USD/CNY 等代码）
+_CURRENCY_CN_MAP = {
+    "USD": "美元",
+    "CNY": "人民币",
+    "RMB": "人民币",
+}
+
+
+def _currency_to_chinese(code: str | None) -> str:
+    """币制代码转中文名，未知代码原样保留。"""
+    code = (code or "CNY").upper()
+    return _CURRENCY_CN_MAP.get(code, code)
+
+
 # 国家名英文→中文翻译表
 COUNTRY_CN_MAP: dict[str, str] = {
     "turkey": "土耳其", "turkiye": "土耳其",
@@ -934,6 +948,7 @@ class DocumentService:
         payment_method_cn = _classify_payment_method_cn(payment_terms)
         pi_date = record.pi_date or ""
         currency = getattr(record, "currency", None) or "CNY"  # 默认人民币
+        currency_cn = _currency_to_chinese(currency)  # 币制中文名（美元/人民币）
         total_pallets = sum(it.pallet_count or 0 for it in items)
         total_drums = sum(it.drum_count or 0 for it in items)
         total_gw = sum(it.gross_weight_kg or 0 for it in items)
@@ -959,11 +974,11 @@ class DocumentService:
         replace_placeholder(ws, "{{PRICE_TERM}}", price_term)
         # V4: 成交方式（发票公式 =报关单!V4 引用）
         replace_placeholder(ws, "{{PRICE_TERM_V4}}", price_term)
-        # 币制：I22 单元格
-        replace_placeholder(ws, "{{CURRENCY}}", currency)
+        # 币制：I22 单元格（显示中文币制名）
+        replace_placeholder(ws, "{{CURRENCY}}", currency_cn)
         # 运费/保费币制（金额由用户自行填写）
-        ws.cell(12, 11, currency)   # K12: 运费币制
-        ws.cell(12, 14, currency)   # N12: 保费币制
+        ws.cell(12, 11, currency_cn)   # K12: 运费币制
+        ws.cell(12, 14, currency_cn)   # N12: 保费币制
 
         # 产品明细：每品占 3 行（数据行 / 申报要素行 / 公式行）
         # 起始行 = 20 + idx * 3，模板最多支持到行 37（约 5-6 个产品）
@@ -1034,7 +1049,7 @@ class DocumentService:
             # currency row (row+2) - quantity reference + unit + currency
             ws.cell(row + 2, 7, item.quantity_kg)              # G: quantity reference
             ws.cell(row + 2, 8, "千克")                         # H: unit
-            ws.cell(row + 2, 9, currency)                      # I: currency
+            ws.cell(row + 2, 9, currency_cn)                   # I: currency（中文币制名）
 
         # ── T/U/V 辅助列：供箱单公式引用 ──
         # 箱单公式: OFFSET(报关单!$V$1, ROW(报关单!V{N})*3+16, 0)
@@ -1066,8 +1081,7 @@ class DocumentService:
         if pi_date:
             ws["G3"] = _parse_date(pi_date)
         # G6 成交方式由公式 =报关单!V4 自动填充
-        # 币制显示：USD → USD，CNY/RMB → 人民币
-        currency_label = "人民币" if currency in ("CNY", "RMB", None) else currency
+        # 币制显示中文名（美元/人民币），不写 USD/CNY 代码
         # 填充所有产品行（行8开始，每品1行，完整填充所有列）
         total_amt_inv = 0
         for idx, item in enumerate(items):
@@ -1079,19 +1093,19 @@ class DocumentService:
             ws.cell(r, 4).value = item.quantity_kg or 0       # D: 数量
             ws.cell(r, 5).value = "千克"                      # E: 单位
             ws.cell(r, 6).value = round(item.unit_price or 0, 2)  # F: 单价
-            ws.cell(r, 7).value = currency_label              # G: 币制
+            ws.cell(r, 7).value = currency_cn                     # G: 币制（中文）
             amt = round(item.total_amount or 0, 2)
             ws.cell(r, 8).value = amt                         # H: 总金额
             total_amt_inv += amt
         # 汇总行：直接写值（不依赖公式，避免缓存值问题）
         total_words = _amount_to_chinese_upper(total_amt_inv)
         ws["C24"].value = total_words                         # C: 中文大写金额
-        ws["G24"].value = currency_label                      # G: 币制
+        ws["G24"].value = currency_cn                         # G: 币制（中文）
         ws["H24"].value = round(total_amt_inv, 2)             # H: 数字金额
         # 备用：替换模板占位符
         replace_placeholder(ws, "{{TOTAL_AMOUNT_WORDS}}", total_words)
         replace_placeholder(ws, "{{TOTAL_AMOUNT}}", round(total_amt_inv, 2))
-        replace_placeholder(ws, "{{CURRENCY}}", currency_label)
+        replace_placeholder(ws, "{{CURRENCY}}", currency_cn)
 
         # ── T/U/V 辅助列：供箱单公式引用 ──
         # 箱单公式: OFFSET(报关单!$V$1, ROW(报关单!V{N})*3+16, 0)

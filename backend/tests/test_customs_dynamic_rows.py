@@ -97,7 +97,7 @@ def test_extended_block_borders_and_merges(monkeypatch):
     """新块样式：边框与合并单元格必须与源块（第 6 块）一致"""
     ws, _ = load_customs_sheet(monkeypatch, 8)
     # 源块第 6 块：35/36/37 行；新块第 7 块：38/39/40 行
-    # 边框抽样：数据行 A 列、申报行 D 列必须有 thin 边框
+    # 边框抽样：数据行 A 列、申报行 A 列必须有 thin 边框
     assert ws.cell(38, 1).border.left.style is not None   # A38 边框
     assert ws.cell(39, 1).border.left.style is not None   # A39 申报要素行边框
     # 合并单元格：新块申报要素合并跨两行 D39:F40（对应源块 D36:F37）

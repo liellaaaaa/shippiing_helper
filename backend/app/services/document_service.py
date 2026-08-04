@@ -847,9 +847,10 @@ class DocumentService:
             for off in range(3):
                 src = src_rows[off]
                 dst = target + off
-                # 复制行高
-                if ws.row_dimensions[src].height:
-                    ws.row_dimensions[dst].height = ws.row_dimensions[src].height
+                # 行高源：块 2（行 23-25），块 6 无显式行高
+                h = ws.row_dimensions[23 + off].height
+                if h:
+                    ws.row_dimensions[dst].height = h
                 # 逐单元格复制样式（A..S 列）
                 for col in range(1, 20):
                     src_cell = ws.cell(src, col)

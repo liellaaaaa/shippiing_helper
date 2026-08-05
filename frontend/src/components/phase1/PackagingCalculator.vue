@@ -15,7 +15,7 @@
       <el-table :data="rows" border size="small" class="calc-table">
         <el-table-column label="产品" width="150">
           <template #default="{ row }">
-            <el-select v-model="row.product_name" placeholder="选择产品" size="small" filterable allow-create>
+            <el-select v-model="row.product_name" placeholder="选择产品" size="small" filterable allow-create @change="(val: string) => onRowProductChange(row, val)">
               <el-option v-for="p in productOptions" :key="p" :label="p" :value="p" />
             </el-select>
           </template>
@@ -218,6 +218,8 @@ interface PackingRow {
 const packageTypes = ref<PackageType[]>([])
 const palletTypes = ref<PalletType[]>([])
 const productOptions = ref<string[]>([])
+// 产品名 → 内部编码 映射（预填行注册，用户加行选产品时自动带出编码）
+const codeMap = ref<Record<string, string>>({})
 const rows = ref<PackingRow[]>([])
 const summary = ref({ total_drums: 0, total_pallets: 0, total_cbm: 0, total_weight_kg: 0, fits_20gp: false, fits_40gp: false })
 const remainder_mode = ref<'full_pallet_merge' | 'full_pallet_independent' | 'no_pallet'>('full_pallet_merge')
@@ -259,6 +261,9 @@ onMounted(async () => {
 
 // Task 3C: Row operation functions
 function addRow(internalCode = '', productName = '', quantityKg = 0) {
+  if (internalCode && productName) {
+    codeMap.value[productName] = internalCode
+  }
   rows.value.push({
     id: Date.now().toString(),
     internal_code: internalCode,
@@ -289,6 +294,11 @@ function addRow(internalCode = '', productName = '', quantityKg = 0) {
 function removeRow(index: number) {
   rows.value.splice(index, 1)
   recalcSummary()
+}
+
+function onRowProductChange(row: PackingRow, name: string) {
+  // 用户加行选产品时自动带出内部编码（保存时按编码配对，拆行才能各自入库）
+  row.internal_code = codeMap.value[name] || ''
 }
 
 function onPalletsChange(row: PackingRow) {

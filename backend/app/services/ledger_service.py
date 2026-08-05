@@ -95,40 +95,29 @@ class LedgerService:
         so_order = sales_orders[0] if sales_orders else None
         order_no = pi_order.order_no if pi_order else (so_order.order_no if so_order else "UNKNOWN")
 
-        # 构建 PI合同表 产品索引 {internal_code: item}
+        # PI合同表索引 {internal_code: item}（同编码取第一条）
         pi_items_map: dict[str, OrderItemSchema] = {}
         if pi_order:
             for pi_item in pi_order.items:
-                pi_items_map[pi_item.internal_code] = pi_item
+                pi_items_map.setdefault(pi_item.internal_code, pi_item)
 
-        # 构建 销售订单表 产品索引 {internal_code: item}
-        so_items_map: dict[str, OrderItemSchema] = {}
+        # 销售订单表索引 {internal_code: [item, ...]} — 同产品多行全部保留（支持 3000 拆 1000+2000）
+        so_items_map: dict[str, list[OrderItemSchema]] = {}
+        so_order_codes: list[str] = []
         if so_order:
             for so_item in so_order.items:
-                so_items_map[so_item.internal_code] = so_item
+                if so_item.internal_code not in so_items_map:
+                    so_order_codes.append(so_item.internal_code)
+                so_items_map.setdefault(so_item.internal_code, []).append(so_item)
 
-        # 合并所有内部编码（保持PI合同表优先顺序，追加销售订单独有的）
-        all_codes: list[str] = []
-        seen_codes: set[str] = set()
-        if pi_order:
-            for pi_item in pi_order.items:
-                if pi_item.internal_code not in seen_codes:
-                    all_codes.append(pi_item.internal_code)
-                    seen_codes.add(pi_item.internal_code)
-        if so_order:
-            for so_item in so_order.items:
-                if so_item.internal_code not in seen_codes:
-                    all_codes.append(so_item.internal_code)
-                    seen_codes.add(so_item.internal_code)
-
-        for code in all_codes:
-            pi_item = pi_items_map.get(code)
-            so_item = so_items_map.get(code)
-
+        def _build_merged_item(
+            code: str,
+            pi_item: Optional[OrderItemSchema],
+            so_item: Optional[OrderItemSchema],
+        ) -> MergePreviewItem:
+            """合并单行字段：销售订单表行提供品名/规格/数量（拆行以销售行为准），PI 合同表行提供单价/报关字段"""
             in_pi = pi_item is not None
             in_so = so_item is not None
-
-            # 确定来源标记
             if in_pi and in_so:
                 source_note = "匹配"
             elif in_pi:
@@ -136,8 +125,25 @@ class LedgerService:
             else:
                 source_note = "仅销售订单表"
 
-            # 合并字段：PI合同表优先，销售订单表补充
-            item = MergePreviewItem(
+            quantity = (
+                so_item.quantity_kg if (so_item and so_item.quantity_kg is not None)
+                else (pi_item.quantity_kg if pi_item else None)
+            )
+            unit_price = (
+                pi_item.unit_price if (pi_item and pi_item.unit_price is not None)
+                else (so_item.unit_price if so_item and so_item.unit_price is not None else None)
+            )
+            # 金额：PI 表金额是整单总额，数量与 PI 不一致（拆行）时按 数量×单价 逐行分摊
+            total_amount = None
+            if pi_item and pi_item.total_amount is not None:
+                if so_item and pi_item.quantity_kg is not None and abs((so_item.quantity_kg or 0) - pi_item.quantity_kg) > FLOAT_TOLERANCE:
+                    total_amount = round(quantity * unit_price, 2) if (quantity is not None and unit_price is not None) else None
+                else:
+                    total_amount = pi_item.total_amount
+            elif quantity is not None and unit_price is not None:
+                total_amount = round(quantity * unit_price, 2)
+
+            return MergePreviewItem(
                 internal_code=code,
                 source_pi_contract=in_pi,
                 source_sales_order=in_so,
@@ -149,12 +155,9 @@ class LedgerService:
                     or (pi_item.customs_name if pi_item else None)
                 ),
                 spec_kg=so_item.spec_kg if so_item else None,
-                # 数量：PI合同表为准
-                quantity_kg=pi_item.quantity_kg if pi_item else (so_item.quantity_kg if so_item else None),
-                # 单价：PI合同表为准
-                unit_price=pi_item.unit_price if pi_item and pi_item.unit_price is not None else (so_item.unit_price if so_item else None),
-                # 金额：PI合同表为准
-                total_amount=pi_item.total_amount if pi_item else (so_item.total_amount if so_item else None),
+                quantity_kg=quantity,
+                unit_price=unit_price,
+                total_amount=total_amount,
                 # HS Code：PI合同表优先
                 hs_code=(
                     (pi_item.hs_code if pi_item and pi_item.hs_code else None)
@@ -169,38 +172,53 @@ class LedgerService:
                 product_appearance=getattr(pi_item, "product_appearance", None) if pi_item else None,
             )
 
-            # 从 PI 合同文件校验数量/金额
-            if pi_file_data:
-                item.source_pi_file = True
-                for pf_item in pi_file_data.items:
-                    if pf_item.internal_code == code:
-                        # 数量校验
-                        compare_qty = pi_item.quantity_kg if pi_item else (so_item.quantity_kg if so_item else None)
-                        if compare_qty is not None and pf_item.quantity is not None:
-                            if abs(compare_qty - pf_item.quantity) > FLOAT_TOLERANCE:
-                                validation_status = "warning"
-                                validation_warnings.append(ValidationWarning(
-                                    internal_code=code,
-                                    field="quantity_kg",
-                                    pi_contract_value=compare_qty,
-                                    pi_file_value=pf_item.quantity,
-                                    message=f"数量不一致：合同表={compare_qty}，PI文件={pf_item.quantity}",
-                                ))
-                        # 金额校验
-                        compare_amount = pi_item.total_amount if pi_item else (so_item.total_amount if so_item else None)
-                        if compare_amount is not None and pf_item.total_amount is not None:
-                            if abs(compare_amount - pf_item.total_amount) > FLOAT_TOLERANCE:
-                                validation_status = "warning"
-                                validation_warnings.append(ValidationWarning(
-                                    internal_code=code,
-                                    field="total_amount",
-                                    pi_contract_value=compare_amount,
-                                    pi_file_value=pf_item.total_amount,
-                                    message=f"金额不一致：合同表={compare_amount}，PI文件={pf_item.total_amount}",
-                                ))
-                        break
+        # 1) 销售订单表每一行（含同产品多行）
+        for code in so_order_codes:
+            pi_item = pi_items_map.get(code)
+            for so_item in so_items_map[code]:
+                merged_items.append(_build_merged_item(code, pi_item, so_item))
 
-            merged_items.append(item)
+        # 2) 仅 PI 合同表的产品
+        for code, pi_item in pi_items_map.items():
+            if code not in so_items_map:
+                merged_items.append(_build_merged_item(code, pi_item, None))
+
+        # 3) 与 PI 合同文件校验数量/金额（同编码多行按总量求和比较）
+        if pi_file_data:
+            for item in merged_items:
+                item.source_pi_file = True
+
+            code_totals: dict[str, dict] = {}
+            for item in merged_items:
+                totals = code_totals.setdefault(item.internal_code, {"qty": 0.0, "amount": 0.0})
+                totals["qty"] += item.quantity_kg or 0
+                totals["amount"] += item.total_amount or 0
+
+            for pf_item in pi_file_data.items:
+                code = pf_item.internal_code
+                if code is None or code not in code_totals:
+                    continue
+                totals = code_totals[code]
+                # 数量校验（总和）
+                if totals["qty"] > 0 and pf_item.quantity is not None and abs(totals["qty"] - pf_item.quantity) > FLOAT_TOLERANCE:
+                    validation_status = "warning"
+                    validation_warnings.append(ValidationWarning(
+                        internal_code=code,
+                        field="quantity_kg",
+                        pi_contract_value=totals["qty"],
+                        pi_file_value=pf_item.quantity,
+                        message=f"数量不一致：合同表={totals['qty']}，PI文件={pf_item.quantity}",
+                    ))
+                # 金额校验（总和）
+                if totals["amount"] > 0 and pf_item.total_amount is not None and abs(totals["amount"] - pf_item.total_amount) > FLOAT_TOLERANCE:
+                    validation_status = "warning"
+                    validation_warnings.append(ValidationWarning(
+                        internal_code=code,
+                        field="total_amount",
+                        pi_contract_value=totals["amount"],
+                        pi_file_value=pf_item.total_amount,
+                        message=f"金额不一致：合同表={totals['amount']}，PI文件={pf_item.total_amount}",
+                    ))
 
         # 补充知识库填充
         customs_svc = CustomsNameService.get_instance()

@@ -32,14 +32,6 @@
       </div>
     </div>
 
-    <!-- 重复产品提示弹窗 -->
-    <DuplicateWarningDialog
-      v-model="duplicateDialogVisible"
-      :duplicates="duplicateItems"
-      @confirm="handleConfirmSave"
-      @cancel="handleDuplicateCancel"
-    />
-
     <!-- 三列输入区 -->
     <div class="three-col-layout">
       <!-- 第一列：PI合同表 -->
@@ -333,14 +325,12 @@ import { Document, Delete, Plus } from '@element-plus/icons-vue'
 import PasteTextarea from '@/components/phase1/PasteTextarea.vue'
 import PiUploadDragger from '@/components/phase1/PiUploadDragger.vue'
 import PackagingCalculator from '@/components/phase1/PackagingCalculator.vue'
-import DuplicateWarningDialog from '@/components/phase1/DuplicateWarningDialog.vue'
 import {
   ordersApi,
   type ParsedOrderSchema,
   type MergePreviewResponse,
   type MergePreviewItem,
   type LedgerWriteRequest,
-  type DuplicateItem,
 } from '@/api/orders'
 import { uploadPiFile, type PiUploadResponse } from '@/api/pi'
 import { nameMappingApi } from '@/api/name_mapping'
@@ -403,11 +393,6 @@ let mergeGroupCounter = 1
 // 保存
 const saving = ref(false)
 const savedRecordId = ref<number | null>(null)
-
-// 重复检测
-const duplicateDialogVisible = ref(false)
-const duplicateItems = ref<DuplicateItem[]>([])
-const pendingSaveRequest = ref<LedgerWriteRequest | null>(null)
 
 // 包装计算
 const calcRef = ref<InstanceType<typeof PackagingCalculator>>()
@@ -657,47 +642,121 @@ async function handleSaveLedger() {
     const calcSummary = calcRef.value?.getSummary()
     const calcRows = calcRef.value?.getRows() || []
 
-    // 构建包装计算结果索引 {internal_code: calcRow}
-    const calcMap: Record<string, any> = {}
+    // 计算行按 内部编码 分组（保留顺序；同编码多行 = 拆行，如 3000 拆 1080+1080+840）
+    const calcByCode: Record<string, any[]> = {}
     for (const row of calcRows) {
       const code = row.internal_code || row.product_name
-      if (code) calcMap[code] = row
+      if (code) (calcByCode[code] = calcByCode[code] || []).push(row)
     }
 
-    // 只写入包装计算器中有数据的产品（以包装计算结果为准）
-    const processedItems: any[] = []
+    // 合并明细行按 内部编码 分组（非组头）
+    const mergeItemsByCode: Record<string, any[]> = {}
     for (const item of flatItems) {
-      const rowCalc = calcMap[item.internal_code]
+      const ext = item as any
+      if (ext._is_group_header) continue
+      if (item.internal_code) (mergeItemsByCode[item.internal_code] = mergeItemsByCode[item.internal_code] || []).push(item)
+    }
+
+    // 包装字段（从计算行取值）
+    const packagingFields = (rowCalc: any) => ({
+      packaging_name: rowCalc?.packaging_name || undefined,
+      drum_count: rowCalc?.drums ?? undefined,
+      pallet_count: rowCalc?.pallets ?? (rowCalc?.drums && rowCalc?.drums_per_pallet ? Math.ceil(rowCalc.drums / rowCalc.drums_per_pallet) : undefined),
+      net_weight_kg: rowCalc?.net_weight_kg ?? undefined,
+      gross_weight_kg: rowCalc?.gross_weight_kg ?? undefined,
+      volume_cbm: rowCalc?.volume_cbm ?? undefined,
+      fits_20gp: rowCalc?.fits_20gp || undefined,
+      packaging_type_id: undefined,
+      pallet_spec: rowCalc?.pallet_spec || undefined,
+      drums_per_pallet: rowCalc?.drums_per_pallet ?? undefined,
+    })
+
+    const processedItems: any[] = []
+    const consumedByCode: Record<string, number> = {}
+
+    // 第一轮：按合并行顺序生成（组头占位 + 明细 1:1 配对；拆行编码本轮跳过）
+    for (const item of flatItems) {
       const ext = item as any
       const isHeader = ext._is_group_header ?? false
       const groupId = ext._group_id
+
+      if (isHeader) {
+        processedItems.push({
+          internal_code: `_group_${groupId ?? 0}`,
+          product_cn: ext._group_name || item.product_cn,
+          product_en: '',
+          spec_kg: undefined,
+          quantity_kg: item.quantity_kg,
+          unit_price: item.unit_price,
+          total_amount: item.total_amount,
+          hs_code: item.hs_code,
+          customs_name: item.customs_name,
+          customs_ingredients: undefined,
+          product_appearance: undefined,
+          group_id: groupId ?? undefined,
+          group_name: ext._group_name ?? undefined,
+          is_group_header: true,
+        })
+        continue
+      }
+
+      const code = item.internal_code
+      const calcLines = calcByCode[code] || []
+      const mergeCount = mergeItemsByCode[code]?.length || 0
+      if (calcLines.length > mergeCount && calcLines.length > 1) {
+        // 拆行编码：本合并行是整单总量，具体行由第二轮按计算行统一生成
+        continue
+      }
+
+      const idx = consumedByCode[code] || 0
+      const rowCalc = calcLines[idx]
+      consumedByCode[code] = idx + 1
+
       processedItems.push({
         internal_code: item.internal_code || `_group_${groupId ?? 0}`,
-        product_cn: isHeader ? (ext._group_name || item.product_cn) : item.product_cn,
+        product_cn: item.product_cn,
         product_en: '',
-        spec_kg: isHeader ? undefined : (item.spec_kg ?? undefined),
+        spec_kg: item.spec_kg ?? undefined,
         quantity_kg: item.quantity_kg,
         unit_price: item.unit_price,
         total_amount: item.total_amount,
         hs_code: item.hs_code,
         customs_name: item.customs_name,
-        customs_ingredients: isHeader ? undefined : item.customs_ingredients,
-        product_appearance: isHeader ? undefined : item.product_appearance,
-        // 分组字段
+        customs_ingredients: item.customs_ingredients,
+        product_appearance: item.product_appearance,
         group_id: groupId ?? undefined,
         group_name: ext._group_name ?? undefined,
-        is_group_header: isHeader,
-        packaging_name: rowCalc?.packaging_name || undefined,
-        drum_count: rowCalc?.drums ?? undefined,
-        pallet_count: rowCalc?.pallets ?? (rowCalc?.drums && rowCalc?.drums_per_pallet ? Math.ceil(rowCalc.drums / rowCalc.drums_per_pallet) : undefined),
-        net_weight_kg: rowCalc?.net_weight_kg ?? undefined,
-        gross_weight_kg: rowCalc?.gross_weight_kg ?? undefined,
-        volume_cbm: rowCalc?.volume_cbm ?? undefined,
-        fits_20gp: rowCalc?.fits_20gp || undefined,
-        packaging_type_id: undefined,
-        pallet_spec: rowCalc?.pallet_spec || undefined,
-        drums_per_pallet: rowCalc?.drums_per_pallet ?? undefined,
+        is_group_header: false,
+        ...packagingFields(rowCalc),
       })
+    }
+
+    // 第二轮：拆行编码按计算行逐行生成（数量取各计算行，单价/品名取合并参考行）
+    for (const [code, calcLines] of Object.entries(calcByCode)) {
+      const refItems = mergeItemsByCode[code]
+      if (!refItems || calcLines.length <= refItems.length) continue  // 已 1:1 配对
+      const ref = refItems[0]
+      for (const cRow of calcLines) {
+        const qty = cRow.quantity_kg || 0
+        const price = ref.unit_price ?? undefined
+        processedItems.push({
+          internal_code: code,
+          product_cn: ref.product_cn || cRow.product_name,
+          product_en: '',
+          spec_kg: ref.spec_kg ?? undefined,
+          quantity_kg: qty,
+          unit_price: price,
+          total_amount: qty && price ? Math.round(qty * price * 100) / 100 : undefined,
+          hs_code: ref.hs_code,
+          customs_name: ref.customs_name,
+          customs_ingredients: ref.customs_ingredients,
+          product_appearance: ref.product_appearance,
+          group_id: (ref as any)._group_id ?? undefined,
+          group_name: (ref as any)._group_name ?? undefined,
+          is_group_header: false,
+          ...packagingFields(cRow),
+        })
+      }
     }
 
     // 对组头行：从子项聚合包装数据（组头可能没有匹配包装计算，需要从子项累计）
@@ -786,18 +845,26 @@ async function handleSaveLedger() {
       items,
     }
 
-    // 先检查重复
-    const checkResult = await ordersApi.checkDuplicates({ items })
-    if (checkResult.has_duplicates) {
-      duplicateItems.value = checkResult.duplicates
-      pendingSaveRequest.value = request
-      duplicateDialogVisible.value = true
-      saving.value = false
-      return
+    // 订单级重复检测：订单号已入台账 → 提示覆盖更新（同产品拆行属正常录入，不做产品级拦截）
+    const existing = await ordersApi.getLedgerRecordByOrderNo(request.order_no)
+    if (existing) {
+      try {
+        await ElMessageBox.confirm(
+          `订单 ${request.order_no} 已录入台账（${existing.items?.length ?? 0} 条记录）。重复录入将覆盖更新该订单的全部记录，是否继续？`,
+          '检测到重复订单',
+          {
+            confirmButtonText: '覆盖更新',
+            cancelButtonText: '取消',
+            type: 'warning',
+          }
+        )
+      } catch {
+        return
+      }
+      await doWriteLedger(request, true)
+    } else {
+      await doWriteLedger(request)
     }
-
-    // 无重复，直接写入
-    await doWriteLedger(request)
   } catch (err: any) {
     ElMessage.error(err.response?.data?.detail || '写入台账失败')
   } finally {
@@ -805,10 +872,12 @@ async function handleSaveLedger() {
   }
 }
 
-async function doWriteLedger(request: LedgerWriteRequest) {
+async function doWriteLedger(request: LedgerWriteRequest, update = false) {
   saving.value = true
   try {
-    const resp = await ordersApi.writeLedger(request)
+    const resp = update
+      ? await ordersApi.updateLedger(request.order_no, request)
+      : await ordersApi.writeLedger(request)
     savedRecordId.value = resp.record_id
     ElMessage.success(`成功写入台账：${resp.items_count} 条产品记录`)
   } catch (err: any) {
@@ -816,17 +885,6 @@ async function doWriteLedger(request: LedgerWriteRequest) {
   } finally {
     saving.value = false
   }
-}
-
-async function handleConfirmSave() {
-  if (pendingSaveRequest.value) {
-    await doWriteLedger(pendingSaveRequest.value)
-    pendingSaveRequest.value = null
-  }
-}
-
-function handleDuplicateCancel() {
-  pendingSaveRequest.value = null
 }
 
 function buildSalesOrderFields(): Partial<LedgerWriteRequest> {

@@ -26,14 +26,15 @@ HT260304E01\tTOA-DOVECHEM\tSILI-002\t有机硅柔软剂B\t50\t1600"""
     assert len(orders[0].items) == 2
 
 
-def test_parse_batch_dedup():
+def test_parse_same_product_multiple_lines_kept():
+    """同产品多行（拆分录入，如 3000 拆 1000+2000）应全部保留，不再折叠"""
     text = """订单号\t客户编号\t内部编号\t产品中文名\t订单量kg
 HT260304E01\tTOA-DOVECHEM\tSILI-001\t有机硅柔软剂\t1000
 HT260304E01\tTOA-DOVECHEM\tSILI-001\t有机硅柔软剂\t2000"""
     orders, skipped, warning = parse_pasted_data(text)
-    assert warning is not None
-    assert len(orders[0].items) == 1
-    assert orders[0].items[0].quantity_kg == 2000  # later entry overwrites earlier
+    assert warning is None
+    assert len(orders[0].items) == 2
+    assert [i.quantity_kg for i in orders[0].items] == [1000, 2000]
 
 
 def test_parse_missing_internal_code_skipped():

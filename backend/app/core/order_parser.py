@@ -341,23 +341,10 @@ def parse_pasted_data(
         else:
             raw_items.append(row_data)
 
-    # Batch dedup: key = (order_no, internal_code), later overwrites earlier
-    deduped: dict[tuple[str, str], dict] = {}
-    duplicate_keys: set[tuple[str, str]] = set()
-    warnings: list[str] = []
-    for item in raw_items:
-        key = (str(item["order_no"]), str(item["internal_code"]))
-        if key in deduped:
-            duplicate_keys.add(key)
-        deduped[key] = item
-
-    if duplicate_keys:
-        warnings.append(f"Batch dedup: {len(duplicate_keys)} duplicate(s) overwritten")
-
-    # Aggregate by order_no
+    # 同产品多行全部保留（不按 订单号+内部编码 折叠，支持 3000 拆 1000+2000 等拆分录入）
     orders_by_no: dict[str, ParsedOrderSchema] = {}
 
-    for item in deduped.values():
+    for item in raw_items:
         order_no = str(item["order_no"])
 
         if order_no not in orders_by_no:
@@ -449,7 +436,7 @@ def parse_pasted_data(
                 item.product_code = json_data.get("product_code")
                 item.product_appearance = json_data.get("product_appearance")
 
-    return list(orders_by_no.values()), skipped_rows, warnings[0] if warnings else None
+    return list(orders_by_no.values()), skipped_rows, None
 
 
 # ── PI合同表解析（17列，企业微信在线表格格式）───────────────────────────────────
@@ -548,22 +535,10 @@ def parse_pi_contract_table(
         else:
             raw_items.append(row_data)
 
-    # 批次内去重
-    deduped: dict[tuple[str, str], dict] = {}
-    duplicate_keys: set[tuple[str, str]] = set()
-    warnings: list[str] = []
-    for item in raw_items:
-        key = (str(item["pi_no"]), str(item["internal_code"]))
-        if key in deduped:
-            duplicate_keys.add(key)
-        deduped[key] = item
-    if duplicate_keys:
-        warnings.append(f"批次去重：{len(duplicate_keys)} 个重复项被覆盖")
-
-    # 按 pi_no 聚合
+    # 同产品多行全部保留（不按 pi_no+内部编码 折叠）
     orders_by_no: dict[str, ParsedOrderSchema] = {}
 
-    for item in deduped.values():
+    for item in raw_items:
         pi_no = str(item["pi_no"])
         if pi_no not in orders_by_no:
             orders_by_no[pi_no] = ParsedOrderSchema(
@@ -591,7 +566,7 @@ def parse_pi_contract_table(
         )
         orders_by_no[pi_no].items.append(order_item)
 
-    return list(orders_by_no.values()), skipped_rows, warnings[0] if warnings else None
+    return list(orders_by_no.values()), skipped_rows, None
 
 
 def _build_pi_contract_positional_map(col_count: int) -> dict[int, str]:

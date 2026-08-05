@@ -328,7 +328,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Document, Delete, Plus } from '@element-plus/icons-vue'
 import PasteTextarea from '@/components/phase1/PasteTextarea.vue'
 import PiUploadDragger from '@/components/phase1/PiUploadDragger.vue'
@@ -720,11 +720,36 @@ async function handleSaveLedger() {
       }
     }
 
-    // 检查是否有产品被写入（至少需要非组头行有数据）
-    const hasContent = processedItems.some(item => !item.is_group_header)
-    if (!hasContent) {
-      ElMessage.warning('请先在包装计算器中添加产品并完成计算')
+    // 校验：毛重/CBM 只来自包装计算器，产品未完成包装计算时不允许直接入库
+    const nonHeaderItems = processedItems.filter(item => !item.is_group_header)
+    if (nonHeaderItems.length === 0) {
+      ElMessage.warning('没有可入库的产品，请先在合并预览中添加产品')
       return
+    }
+    const missingPackaging = nonHeaderItems
+      .filter(item => !(item.drum_count > 0 && item.gross_weight_kg > 0 && item.volume_cbm > 0))
+      .map(item => item.internal_code || item.product_cn || '未知产品')
+    if (missingPackaging.length > 0) {
+      try {
+        await ElMessageBox.confirm(
+          `以下 ${missingPackaging.length} 个产品未进行包装计算：<br><strong>${missingPackaging.join('、')}</strong><br><br>毛重/CBM 将不会生成。请先完成包装计算，或点「仍要入库」强制保存。`,
+          '包装计算未完成',
+          {
+            confirmButtonText: '仍要入库',
+            cancelButtonText: '去补算',
+            type: 'warning',
+            dangerouslyUseHTMLString: true,
+          }
+        )
+      } catch {
+        // 用户选择去补算：展开包装计算区（已有计算行则保留，否则自动预填产品）
+        if (calcRef.value?.getRows().length) {
+          showPackaging.value = true
+        } else {
+          handleShowPackaging()
+        }
+        return
+      }
     }
 
     const items = processedItems

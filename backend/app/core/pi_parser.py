@@ -23,6 +23,7 @@ from app.schemas.pi_contract import (
     PiContractItemRow,
     ConfidenceInfo,
 )
+from app.core.destination_map import normalize_destination
 
 
 # 标准字段映射：字段名 -> 可能的中英文表头别名
@@ -895,6 +896,10 @@ def parse_proforma_invoice(rows: list[list[str]]) -> PiContractUploadResponse:
     # 付款方式分类
     payment_method = _classify_payment_method(payment_terms)
 
+    # 目的港规范化：能翻译成中文港口/城市名的返回中文（如 "KEELUNG基隆" → "基隆"）
+    if destination:
+        destination = normalize_destination(destination)
+
     # ── 7. 提取产品明细 ──────────────────────────────────────────────
     items: list[PiContractItemRow] = []
     table_started = False
@@ -1298,6 +1303,8 @@ def parse_proforma_invoice_from_text(text: str, filename: str = "") -> PiContrac
 
     # 4) destination
     destination = scan(r"[0-9]\.\s*DEST\s*:") or scan(r"DEST\s*INAT\s*ION\s*:")
+    if destination:
+        destination = normalize_destination(destination)
 
     # 5) date
     pi_date = scan_value(r"DATE\s*[:;]?", r"\d{4}[-/.]\d{1,2}[-/.]\d{1,2}") or scan(r"DATE\s*:")
@@ -1493,7 +1500,7 @@ def _build_response_from_ai(ai_data: dict) -> PiContractUploadResponse:
         consignee_name=ai_data.get("consignee_name"),
         consignee_address=ai_data.get("consignee_address"),
         consignee_tel=ai_data.get("consignee_tel"),
-        destination=ai_data.get("destination"),
+        destination=normalize_destination(ai_data.get("destination")),
         loading_port=ai_data.get("loading_port"),
         price_term=_clean_price_term(ai_data.get("price_term")),
         payment_terms=ai_data.get("payment_terms"),

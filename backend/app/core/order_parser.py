@@ -168,6 +168,21 @@ def merge_quoted_lines(lines: list[str]) -> list[str]:
                 i += 1
                 continue
 
+        # 列数模式：上一行是行首片段（列数不足，如 "WA495\tHT20260722RE" 仅客户编码+PI号），
+        # 当前行是完整续行 → 拼接为完整数据行
+        # 限制：片段须为 2~3 列（避免把 1 列标题行并入数据行），且不含可识别列名（表头）
+        if result:
+            prev_parts = split_cols(result[-1])
+            if (
+                2 <= len(prev_parts) <= 3
+                and len(prev_parts) < FULL_ROW_MIN_COLS
+                and len(line_cols) >= FULL_ROW_MIN_COLS
+                and not any(normalize_column_name(p) for p in prev_parts)
+            ):
+                result[-1] = join_cols(prev_parts + line_cols)
+                i += 1
+                continue
+
         # 列数模式：上一行是完整数据行，当前行列数不足 → 续行
         if result:
             prev_parts = split_cols(result[-1])

@@ -35,30 +35,56 @@
     <div v-if="showEditList && newFormulas.length > 0" class="edit-list-section">
       <div class="edit-list-header">
         <span class="edit-list-title">新配方（可编辑后导入）</span>
-        <el-button size="small" type="success" @click="importAllFormulas">确认导入</el-button>
+        <div class="edit-list-header-right">
+          <span v-if="mismatchCount > 0" class="mismatch-hint">{{ mismatchCount }} 个配方含量与台账不一致，导入前请核对</span>
+          <el-button size="small" type="success" @click="importAllFormulas">确认导入</el-button>
+        </div>
       </div>
       <div class="edit-list-content">
-        <div v-for="(formula, idx) in newFormulas" :key="idx" class="formula-edit-card">
+        <div
+          v-for="(formula, idx) in newFormulas"
+          :key="idx"
+          class="formula-edit-card"
+          :class="{ 'has-error': importErrors[idx] }"
+        >
           <div class="formula-edit-row">
             <div class="formula-field">
-              <label>报关名称</label>
-              <el-input v-model="formula.customs_name" size="small" />
+              <label>报关名称 <span class="req">*</span></label>
+              <el-input
+                v-model="formula.customs_name"
+                size="small"
+                :class="{ 'input-error': importErrors[idx]?.includes('报关名称') }"
+              />
             </div>
             <div class="formula-field">
-              <label>外观</label>
-              <el-input v-model="formula.appearance" size="small" />
+              <label>外观 <span class="req">*</span></label>
+              <el-input
+                v-model="formula.appearance"
+                size="small"
+                :class="{ 'input-error': importErrors[idx]?.includes('外观') }"
+              />
             </div>
             <div class="formula-field">
-              <label>离子性</label>
-              <el-select v-model="formula.ion_type" size="small" placeholder="请选择">
+              <label>离子性 <span class="req">*</span></label>
+              <el-select
+                v-model="formula.ion_type"
+                size="small"
+                placeholder="请选择"
+                :class="{ 'input-error': importErrors[idx]?.includes('离子性') }"
+              >
                 <el-option label="阳离子" value="阳离子" />
                 <el-option label="阴离子" value="阴离子" />
                 <el-option label="非离子" value="非离子" />
               </el-select>
             </div>
             <div class="formula-field">
-              <label>pH值</label>
-              <el-input v-model="formula.ph" size="small" placeholder="5.0-7.0" />
+              <label>pH值 <span class="req">*</span></label>
+              <el-input
+                v-model="formula.ph"
+                size="small"
+                placeholder="5.0-7.0"
+                :class="{ 'input-error': importErrors[idx]?.includes('pH值') }"
+              />
             </div>
           </div>
           <div class="formula-edit-row">
@@ -75,7 +101,14 @@
                 </thead>
                 <tbody>
                   <tr v-for="(comp, ci) in formula.composition" :key="ci">
-                    <td><el-input v-model="comp.component_cn" size="small" placeholder="必填" /></td>
+                    <td>
+                      <el-input
+                        v-model="comp.component_cn"
+                        size="small"
+                        placeholder="必填"
+                        :class="{ 'input-error': importErrors[idx]?.includes('成分「组分」') }"
+                      />
+                    </td>
                     <td><el-input v-model="comp.cas" size="small" placeholder="如 123-45-6" /></td>
                     <td><el-input v-model="comp.percentage" size="small" placeholder="如 30%" /></td>
                     <td><el-button size="small" type="danger" link @click="removeFormulaComp(formula, ci)">删除</el-button></td>
@@ -87,8 +120,10 @@
             </div>
           </div>
           <div class="formula-actions">
+            <el-tag v-if="formula.pctMismatch" type="warning" size="small">含量与台账不一致</el-tag>
             <el-button size="small" type="danger" link @click="removeNewFormula(idx)">移除</el-button>
           </div>
+          <div v-if="importErrors[idx]" class="form-error">缺少必填项：{{ importErrors[idx].join('、') }}</div>
         </div>
       </div>
     </div>
@@ -222,7 +257,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import { msdsLedgerApi, type MsdsLedgerItem, type CompositionItem } from '@/api/msds-ledger'
@@ -245,6 +280,8 @@ const ledgerList = ref<MsdsLedgerItem[]>([])
 const tableRef = ref<any>(null)
 const selectedItem = ref<MsdsLedgerItem | null>(null)
 const showEditList = ref(false)
+const importErrors = ref<Record<number, string[]>>({})
+const mismatchCount = computed(() => newFormulas.value.filter((f: any) => f.pctMismatch).length)
 
 // 批量选择相关
 const batchMode = ref(false)
@@ -301,6 +338,57 @@ function generateRandomPh(): string {
   return `${x}±1`
 }
 
+// 归一化 CAS：去掉前导零（"0026545-58-4" -> "26545-58-4"）
+function normCas(s: string): string {
+  return (s || '').replace(/(\b0+)(\d)/g, '$2')
+}
+
+// 归一化含量：提取数值（"30%"、"30.0%"、"30 %" -> "30"），无法解析返回空串
+function normPct(s: string): string {
+  const m = String(s ?? '').match(/(\d+(?:\.\d+)?)/)
+  return m ? String(parseFloat(m[1])) : ''
+}
+
+// 成分匹配级别：full = CAS 与含量全部一致；pct = CAS 一致但含量不同；none = CAS 不一致或无法比较
+function compositionMatchLevel(orderList: any[], ledgerList: any[]): 'full' | 'pct' | 'none' {
+  const orderMap: Record<string, string> = {}
+  for (const c of orderList || []) {
+    const cas = normCas(c.cas || '').trim()
+    if (cas) orderMap[cas] = normPct(c.percentage)
+  }
+  const ledgerMap: Record<string, string> = {}
+  for (const c of ledgerList || []) {
+    const cas = normCas(c.cas || '').trim()
+    if (cas) ledgerMap[cas] = normPct(c.percentage)
+  }
+  const oKeys = Object.keys(orderMap).sort()
+  const lKeys = Object.keys(ledgerMap).sort()
+  if (oKeys.length === 0 || oKeys.join(',') !== lKeys.join(',')) return 'none'
+  for (const cas of oKeys) {
+    const op = orderMap[cas]
+    const lp = ledgerMap[cas]
+    if (op && lp && op !== lp) return 'pct'
+  }
+  return 'full'
+}
+
+// 校验新配方必填项，返回是否全部通过；失败时填充 importErrors 供界面标红
+function validateNewFormulas(): boolean {
+  const errs: Record<number, string[]> = {}
+  newFormulas.value.forEach((f: any, idx: number) => {
+    const missing: string[] = []
+    if (!f.customs_name?.trim()) missing.push('报关名称')
+    if (!f.appearance?.trim()) missing.push('外观')
+    if (!f.ion_type?.trim()) missing.push('离子性')
+    if (!f.ph?.trim()) missing.push('pH值')
+    if (!f.composition || f.composition.length === 0) missing.push('成分表')
+    else if (f.composition.some((c: any) => !c.component_cn?.trim())) missing.push('成分「组分」')
+    if (missing.length) errs[idx] = missing
+  })
+  importErrors.value = errs
+  return Object.keys(errs).length === 0
+}
+
 watch(() => props.modelValue, (v) => {
   visible.value = v
   if (v) {
@@ -319,7 +407,12 @@ watch(() => props.modelValue, (v) => {
       orderItemsNames.value = []
       orderItemsWithIngredients.value = []
     }
-    loadLedger().then(() => autoSelectMatchingItems())
+    loadLedger().then(() => {
+      autoSelectMatchingItems()
+      if (mismatchCount.value > 0) {
+        ElMessage.warning(`${mismatchCount.value} 个配方含量与台账不一致，已作为新配方列出，导入前请核对`)
+      }
+    })
   }
 })
 
@@ -346,43 +439,39 @@ async function loadLedger() {
     
     // Detect new formulas - products with same name but different composition
     newFormulas.value = []
+    importErrors.value = {}
     if (orderItemsWithIngredients.value.length > 0) {
       for (const orderItem of orderItemsWithIngredients.value) {
         if (!orderItem.customs_ingredients) continue
-        
-        // Check if already exists in ledger (by customs_name + CAS numbers)
-        const alreadyInLedger = items.some((ledgerItem: MsdsLedgerItem) => {
-          if (ledgerItem.customs_name !== orderItem.customs_name) return false
-          if (!ledgerItem.composition || ledgerItem.composition.length === 0) return false
-          // Normalize CAS: remove leading zeros, e.g. "0026545-58-4" -> "26545-58-4"
-          const normCas = (s: string) => s.replace(/(\b0+)(\d)/g, '$2')
-          const ledgerCas = ledgerItem.composition
-            .map((c: any) => normCas(c.cas || ''))
-            .filter((s: string) => s.trim())
-            .sort()
-            .join(',')
-          const casPattern = /\d{2,7}-\d{1,2}-\d{1,2}/g
-          const orderCas = (orderItem.customs_ingredients.match(casPattern) || [])
-            .map((s: string) => normCas(s))
-            .sort()
-            .join(',')
-          return ledgerCas === orderCas
-        })
-        
-        if (!alreadyInLedger) {
-          // Check if we already added this formula
-          const exists = newFormulas.value.some((f: any) => 
-            f.customs_name === orderItem.customs_name && f.customs_ingredients === orderItem.customs_ingredients
-          )
-          if (!exists) {
-            const parsedComp = parseIngredients(orderItem.customs_ingredients || '')
-            newFormulas.value.push({
-              ...orderItem,
-              ion_type: '',
-              ph: generateRandomPh(),
-              composition: parsedComp,
-            })
+
+        const parsedComp = parseIngredients(orderItem.customs_ingredients)
+        // 与台账同名单据项比对：full = 已在库；pct = CAS 一致但含量不同（按新配方列出并标记）；none = 库里没有
+        let matchLevel: 'full' | 'pct' | 'none' = 'none'
+        for (const ledgerItem of items) {
+          if (ledgerItem.customs_name !== orderItem.customs_name) continue
+          if (!ledgerItem.composition || ledgerItem.composition.length === 0) continue
+          const level = compositionMatchLevel(parsedComp, ledgerItem.composition)
+          if (level === 'full') {
+            matchLevel = 'full'
+            break
           }
+          if (level === 'pct' && matchLevel === 'none') matchLevel = 'pct'
+        }
+
+        if (matchLevel === 'full') continue
+
+        // Check if we already added this formula
+        const exists = newFormulas.value.some((f: any) => 
+          f.customs_name === orderItem.customs_name && f.customs_ingredients === orderItem.customs_ingredients
+        )
+        if (!exists) {
+          newFormulas.value.push({
+            ...orderItem,
+            ion_type: '',
+            ph: generateRandomPh(),
+            composition: parsedComp,
+            pctMismatch: matchLevel === 'pct',
+          })
         }
       }
       
@@ -403,6 +492,7 @@ function toggleEditList() {
 
 function removeNewFormula(idx: number) {
   newFormulas.value.splice(idx, 1)
+  delete importErrors.value[idx]
   if (newFormulas.value.length === 0) {
     showEditList.value = false
   }
@@ -574,6 +664,10 @@ async function onConfirmGenerate() {
 }
 
 async function importAllFormulas() {
+  if (!validateNewFormulas()) {
+    ElMessage.error('存在未填写的必填项，请补齐后再导入')
+    return
+  }
   for (const formula of newFormulas.value) {
     // composition already pre-parsed on init; use directly
     const composition = formula.composition || []
@@ -754,7 +848,6 @@ function onBatchGenerated() {
 function autoSelectMatchingItems() {
   if (ledgerList.value.length === 0 || orderItemsWithIngredients.value.length === 0) return
 
-  const normCas = (s: string) => s.replace(/(\b0+)(\d)/g, '$2')
   const selectedIds = new Set<number>()
   const itemsToSelect: MsdsLedgerItem[] = []
 
@@ -769,24 +862,13 @@ function autoSelectMatchingItems() {
 
     let matched: MsdsLedgerItem | undefined
 
-    // Match by CAS composition
+    // Match by CAS composition + 含量（CAS 与含量全部一致才匹配，避免选错含量的配方）
     if (!matched && orderItem.customs_ingredients) {
-      const casPattern = /\d{2,7}-\d{1,2}-\d{1,2}/g
-      const orderCasSet = [...new Set(
-        (orderItem.customs_ingredients.match(casPattern) || [])
-          .map((s: string) => normCas(s))
-          .filter(Boolean)
-      )].sort().join(',')
-
-      if (orderCasSet) {
+      const parsedComp = parseIngredients(orderItem.customs_ingredients)
+      if (parsedComp.length > 0) {
         matched = candidates.find((item: MsdsLedgerItem) => {
           if (!item.composition || item.composition.length === 0) return false
-          const ledgerCasSet = [...new Set(
-            item.composition
-              .map((c: any) => normCas(c.cas || ''))
-              .filter((s: string) => s.trim())
-          )].sort().join(',')
-          return ledgerCasSet === orderCasSet
+          return compositionMatchLevel(parsedComp, item.composition) === 'full'
         })
       }
     }
@@ -816,6 +898,7 @@ function onClosed() {
   selectedItem.value = null
   orderItemsNames.value = []
   showEditList.value = false
+  importErrors.value = {}
   batchMode.value = false
   selectedItems.value = []
   showBatchGenerate.value = false
@@ -841,9 +924,28 @@ function onClosed() {
   align-items: center;
   margin-bottom: 12px;
 }
+.edit-list-header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.mismatch-hint {
+  font-size: 12px;
+  color: var(--el-color-warning);
+}
 .edit-list-title {
   font-weight: 600;
   color: var(--el-color-warning);
+}
+.req {
+  color: var(--el-color-danger);
+}
+.formula-edit-card.has-error {
+  border-color: var(--el-color-danger);
+}
+.input-error :deep(.el-input__wrapper),
+.input-error :deep(.el-select__wrapper) {
+  box-shadow: 0 0 0 1px var(--el-color-danger) inset;
 }
 .edit-list-content {
   display: flex;

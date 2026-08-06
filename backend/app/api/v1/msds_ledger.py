@@ -7,7 +7,7 @@ from io import BytesIO
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Query, Body
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 from app.database import SessionLocal
 from app.services.msds_ledger_service import msds_ledger_svc
@@ -19,11 +19,11 @@ BATCH_LIMIT = 50
 
 
 class LedgerCreate(BaseModel):
-    customs_name: str
-    appearance: str
-    ion_type: str
-    ph: str
-    composition: list = []
+    customs_name: str = Field(min_length=1, description="报关名称")
+    appearance: str = Field(min_length=1, description="外观")
+    ion_type: str = Field(min_length=1, description="离子性")
+    ph: str = Field(min_length=1, description="pH值")
+    composition: list = Field(default_factory=list, min_length=1, description="成分表")
     product_name_en: str = ""
     appearance_en: str = ""
     ion_type_en: str = ""

@@ -4,6 +4,19 @@
 原定义位于 document_service.py，为避免 core→services 反向依赖，抽到 core 层。
 """
 
+import re
+
+from app.database import SessionLocal
+from app.models.reference_data import TranslationMapping
+
+# CJK 表意文字 + 中文标点（用于从混合值中剔除中文）
+_CJK_RE = re.compile(r"[\u4e00-\u9fff\u3400-\u4dbf\u3000-\u303f]")
+
+# 数据库对照覆盖层：启动时从 translation_mappings 加载
+# （mapping_type='destination_city' / 'destination_country'），未命中时回退下方内置字典。
+_city_db: dict[str, str] = {}
+_country_db: dict[str, str] = {}
+
 # 国家名英文→中文翻译表
 COUNTRY_CN_MAP: dict[str, str] = {
     "turkey": "土耳其", "turkiye": "土耳其",
@@ -156,7 +169,12 @@ CITY_CN_MAP: dict[str, str] = {
 
 
 def _lookup_city(dest_lower: str) -> str | None:
-    """尝试匹配城市名的中文翻译"""
+    """尝试匹配城市名的中文翻译（数据库对照优先，内置字典回退）"""
+    if dest_lower in _city_db:
+        return _city_db[dest_lower]
+    for key, val in _city_db.items():
+        if key in dest_lower or dest_lower in key:
+            return val
     if dest_lower in CITY_CN_MAP:
         return CITY_CN_MAP[dest_lower]
     for key, val in CITY_CN_MAP.items():
@@ -166,13 +184,43 @@ def _lookup_city(dest_lower: str) -> str | None:
 
 
 def _lookup_country(dest_lower: str) -> str | None:
-    """尝试匹配国家名的中文翻译"""
+    """尝试匹配国家名的中文翻译（数据库对照优先，内置字典回退）"""
+    if dest_lower in _country_db:
+        return _country_db[dest_lower]
+    for key, val in _country_db.items():
+        if key in dest_lower or dest_lower in key:
+            return val
     if dest_lower in COUNTRY_CN_MAP:
         return COUNTRY_CN_MAP[dest_lower]
     for key, val in COUNTRY_CN_MAP.items():
         if key in dest_lower or dest_lower in key:
             return val
     return None
+
+
+def load_destination_mapping() -> None:
+    """启动时调用：从 translation_mappings 表加载港口/国家对照到内存，覆盖内置字典。"""
+    global _city_db, _country_db
+    try:
+        db = SessionLocal()
+        try:
+            _city_db = {
+                r.en.strip().lower(): r.cn
+                for r in db.query(TranslationMapping).filter_by(mapping_type="destination_city").all()
+            }
+            _country_db = {
+                r.en.strip().lower(): r.cn
+                for r in db.query(TranslationMapping).filter_by(mapping_type="destination_country").all()
+            }
+            print(f"[destination_map] Loaded {len(_city_db)} cities, {len(_country_db)} countries from DB")
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"[destination_map] DB 对照加载失败，回退内置字典: {e}")
+
+
+# 启动时自动加载（表不存在/加载失败时静默回退内置字典）
+load_destination_mapping()
 
 
 def parse_destination(dest: str) -> tuple[str, str]:
@@ -253,3 +301,28 @@ def normalize_destination(dest: str | None) -> str | None:
         return country_cn
 
     return dest_stripped
+
+
+def normalize_destination_source(dest: str | None) -> str | None:
+    """
+    目的港导入规范化（台账源数据规则）：
+    汇入是什么就保留什么；仅当值中英混合时取英文部分（订舱单用英文）。
+    例: "KEELUNG基隆" → "KEELUNG", "Izmit,土耳其" → "Izmit",
+        "基隆" → "基隆", "Izmit,Turkiye" → "Izmit,Turkiye"
+    """
+    if not dest or not dest.strip():
+        return dest
+
+    stripped = dest.strip()
+    has_cjk = bool(_CJK_RE.search(stripped))
+    has_latin = bool(re.search(r"[A-Za-z]", stripped))
+
+    # 纯中文或纯英文（或纯数字等）：保留原样
+    if not (has_cjk and has_latin):
+        return stripped
+
+    # 中英混合：剔除中文，清理残留分隔符
+    cleaned = _CJK_RE.sub("", stripped)
+    cleaned = re.sub(r"\s*,\s*", ",", cleaned)
+    cleaned = re.sub(r",+", ",", cleaned)
+    return cleaned.strip(" ,")

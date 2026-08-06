@@ -26,6 +26,7 @@ from app.api.v1.name_mapping import router as name_mapping_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.audit import router as audit_router
 from app.core.config import MSDS_DIR, TRANSPORT_REPORTS_DIR
+from app.core.destination_map import load_destination_mapping
 from app.database import SessionLocal
 from app.services.data_center_service import DataCenterService
 from app.services.transport_service import TransportService
@@ -252,6 +253,8 @@ async def startup():
     """启动时加载品名对照表，全量扫描 MSDS 和运输鉴定报告目录，建立内存索引。"""
     load_name_mapping()
     print("[startup] Product name mapping loaded")
+    load_destination_mapping()
+    print("[startup] Destination mapping loaded")
     CustomsNameService.get_instance()
     print("[startup] Customs name service loaded")
     db = SessionLocal()

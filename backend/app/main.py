@@ -2,6 +2,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import os
+import json
 import subprocess
 import httpx
 from sqlalchemy import text
@@ -10,6 +11,34 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, Response, JSONResponse
 from jose import jwt, JWTError
+
+from app.core.text_sanitize import strip_surrogates
+
+
+class SanitizedJSONResponse(JSONResponse):
+    """JSONResponse that strips Unicode surrogates before serialization.
+
+    Surrogates (U+D800-U+DFFF) are invalid in UTF-8 and cause
+    UnicodeEncodeError during json.dumps(). This response class
+    recursively sanitizes the content as a defense-in-depth measure.
+    """
+
+    def render(self, content) -> bytes:
+        return json.dumps(
+            self._sanitize(content),
+            ensure_ascii=False,
+            allow_nan=False,
+        ).encode("utf-8")
+
+    @staticmethod
+    def _sanitize(obj):
+        if isinstance(obj, str):
+            return strip_surrogates(obj)
+        if isinstance(obj, dict):
+            return {k: SanitizedJSONResponse._sanitize(v) for k, v in obj.items()}
+        if isinstance(obj, (list, tuple)):
+            return [SanitizedJSONResponse._sanitize(v) for v in obj]
+        return obj
 
 from app.api.v1.orders import router as orders_router
 from app.api.v1.pi import router as pi_router
@@ -40,6 +69,7 @@ app = FastAPI(
     description="外贸船务效率工具 - Phase 1 API",
     docs_url="/docs",
     redoc_url="/redoc",
+    default_response_class=SanitizedJSONResponse,
 )
 
 app.add_middleware(

@@ -19,6 +19,7 @@ import xlrd
 from typing import Optional
 
 from app.core.destination_map import normalize_destination_source
+from app.core.text_sanitize import strip_surrogates
 from app.schemas.pi_contract import (
     PiContractUploadResponse,
     PiContractItemRow,
@@ -1164,7 +1165,7 @@ def _read_xlsx_rows(file_path: str) -> list[list[str]]:
     ws = wb.active
     rows: list[list[str]] = []
     for row in ws.iter_rows(values_only=True):
-        rows.append([str(cell).strip() if cell is not None else "" for cell in row])
+        rows.append([strip_surrogates(str(cell).strip()) if cell is not None else "" for cell in row])
     wb.close()
     return rows
 
@@ -1175,7 +1176,7 @@ def _read_xls_rows(file_path: str) -> list[list[str]]:
     rows = []
     for row_idx in range(sheet.nrows):
         row_values = sheet.row_values(row_idx)
-        rows.append([str(cell).strip() if cell else "" for cell in row_values])
+        rows.append([strip_surrogates(str(cell).strip()) if cell else "" for cell in row_values])
     wb.release_resources()
     return rows
 
@@ -1185,7 +1186,7 @@ def _read_xlsx_bytes(content: bytes) -> list[list[str]]:
     ws = wb.active
     rows: list[list[str]] = []
     for row in ws.iter_rows(values_only=True):
-        rows.append([str(cell).strip() if cell is not None else "" for cell in row])
+        rows.append([strip_surrogates(str(cell).strip()) if cell is not None else "" for cell in row])
     wb.close()
     return rows
 
@@ -1196,7 +1197,7 @@ def _read_xls_bytes(content: bytes) -> list[list[str]]:
     rows = []
     for row_idx in range(sheet.nrows):
         row_values = sheet.row_values(row_idx)
-        rows.append([str(cell).strip() if cell else "" for cell in row_values])
+        rows.append([strip_surrogates(str(cell).strip()) if cell else "" for cell in row_values])
     wb.release_resources()
     return rows
 
@@ -1214,7 +1215,7 @@ def _extract_text_from_pdf_bytes(content: bytes) -> str:
         text = pytesseract.image_to_string(img, lang="chi_sim+eng", config="--psm 6")
         texts.append(text)
     doc.close()
-    return "\n".join(texts)
+    return strip_surrogates("\n".join(texts))
 
 
 def _parse_rows_from_text(text: str) -> list[list[str]]:

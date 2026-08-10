@@ -8,6 +8,7 @@ from docx import Document
 from docx.shared import Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from app.core.config import TEMPLATES, MSDS_DIR
+from app.core.text_sanitize import strip_surrogates
 from app.services.msds_service import MSDSService
 from app.database import SessionLocal
 from app.models.order import Order, OrderItem
@@ -83,7 +84,7 @@ def _extract_doc_text(doc_path: str) -> str:
                     text = result.stdout.decode(encoding, errors="replace")
                 # 检查是否提取到了有效内容（包含非ASCII字符或足够多的ASCII）
                 if text and len(text.strip()) > 10:
-                    return text
+                    return strip_surrogates(text)
         except (subprocess.SubprocessError, FileNotFoundError):
             break
         except Exception:
@@ -95,7 +96,7 @@ def _extract_doc_text(doc_path: str) -> str:
             raw = f.read()
         detected = chardet.detect(raw)
         encoding = detected.get("encoding", "latin-1") or "latin-1"
-        return raw.decode(encoding, errors="replace")
+        return strip_surrogates(raw.decode(encoding, errors="replace"))
     except Exception:
         return ""
 

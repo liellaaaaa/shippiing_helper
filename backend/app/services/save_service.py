@@ -1,6 +1,7 @@
 """Phase 1 落库服务 — 双轨数据合并写入 order_pi_records 表"""
 
 import json
+from app.core.text_sanitize import strip_surrogates
 from typing import Optional
 from app.database import SessionLocal
 from app.models.order_pi_record import OrderPiRecord

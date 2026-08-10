@@ -8,6 +8,7 @@ import zipfile
 from typing import Optional
 
 import subprocess
+from app.core.text_sanitize import strip_surrogates
 
 import pdfplumber
 from docx import Document
@@ -55,7 +56,7 @@ class MSDSService:
                         for para in cell.paragraphs:
                             if para.text.strip():
                                 text_parts.append(para.text.strip())
-            return "\n".join(text_parts)
+            return strip_surrogates("\n".join(text_parts))
         except Exception:
             return ""
 
@@ -69,7 +70,7 @@ class MSDSService:
                 timeout=30,
             )
             if result.returncode == 0 and result.stdout:
-                return result.stdout.decode("utf-8", errors="ignore")
+                return strip_surrogates(result.stdout.decode("utf-8", errors="ignore"))
         except (subprocess.SubprocessError, FileNotFoundError):
             pass
 
@@ -79,7 +80,7 @@ class MSDSService:
                 raw = f.read()
             detected = chardet.detect(raw)
             encoding = detected.get("encoding", "latin-1") or "latin-1"
-            return raw.decode(encoding, errors="ignore")
+            return strip_surrogates(raw.decode(encoding, errors="ignore"))
         except Exception:
             return ""
 
@@ -92,7 +93,7 @@ class MSDSService:
                     text = page.extract_text()
                     if text:
                         parts.append(text)
-            return "\n".join(parts)
+            return strip_surrogates("\n".join(parts))
         except Exception:
             return ""
 

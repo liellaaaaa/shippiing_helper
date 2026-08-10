@@ -5,11 +5,23 @@ from typing import Optional
 
 from app.database import SessionLocal
 from app.models.audit_log import AuditLog
+from app.core.text_sanitize import strip_surrogates
 
 
 class AuditService:
     def __init__(self, db=None):
         self.db = db or SessionLocal()
+
+    @staticmethod
+    def _sanitize(obj):
+        """Recursively strip surrogates from dict/list/str values."""
+        if isinstance(obj, str):
+            return strip_surrogates(obj)
+        if isinstance(obj, dict):
+            return {k: AuditService._sanitize(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [AuditService._sanitize(v) for v in obj]
+        return obj
 
     def log(self, event_type: str, user_name: str, module: Optional[str] = None,
             detail: Optional[dict] = None, ip_address: Optional[str] = None,
@@ -19,7 +31,7 @@ class AuditService:
             user_name=user_name,
             module=module,
             action_time=action_time or datetime.now(),
-            detail=json.dumps(detail, ensure_ascii=False) if detail else None,
+            detail=json.dumps(self._sanitize(detail), ensure_ascii=False) if detail else None,
             ip_address=ip_address,
         )
         self.db.add(log_entry)

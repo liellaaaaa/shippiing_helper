@@ -4,6 +4,7 @@ Transport Service - 运输鉴定报告 PDF 字段提取
 import re
 import os
 import pdfplumber
+from app.core.text_sanitize import strip_surrogates
 from app.database import SessionLocal
 from app.models.transport_report import TransportReport
 
@@ -112,7 +113,7 @@ class TransportService:
                 text = page.extract_text()
                 if text:
                     texts.append(text)
-        return "\n".join(texts)
+        return strip_surrogates("\n".join(texts))
 
     @staticmethod
     def extract_fields(text: str) -> dict:

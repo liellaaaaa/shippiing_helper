@@ -28,9 +28,9 @@
     >
       <el-table-column prop="hs_code" label="商品编码" width="150" />
       <el-table-column prop="declaration_name" label="申报名称" width="200" />
-      <el-table-column prop="elements_text" label="申报要素" min-width="300">
+      <el-table-column prop="elements_text" label="申报要素" min-width="400">
         <template #default="{ row }">
-          <span class="elements-text">{{ row.elements_text }}</span>
+          <div class="elements-text">{{ row.elements_text }}</div>
         </template>
       </el-table-column>
       <el-table-column label="操作" width="120" fixed="right">
@@ -139,10 +139,8 @@ onMounted(() => loadData(1))
   font-size: 13px;
   color: var(--el-text-color-regular);
   word-break: break-all;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  white-space: pre-wrap;
+  line-height: 1.6;
 }
 .pagination {
   display: flex;

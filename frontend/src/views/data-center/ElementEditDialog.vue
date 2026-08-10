@@ -3,7 +3,7 @@
     :model-value="modelValue"
     @update:model-value="$emit('update:model-value', $event)"
     :title="isEdit ? '编辑申报要素' : '新增申报要素'"
-    width="680px"
+    width="780px"
     :close-on-click-modal="false"
   >
     <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
@@ -17,24 +17,39 @@
         <div class="kv-editor">
           <div v-if="kvPairs.length === 0" class="kv-empty">暂无字段，点击下方添加</div>
           <div v-for="(pair, index) in kvPairs" :key="index" class="kv-row">
-            <el-input
-              v-model="pair.key"
-              placeholder="字段名"
-              class="kv-key"
-            />
-            <span class="kv-separator">：</span>
-            <el-input
-              v-model="pair.value"
-              placeholder="字段值"
-              class="kv-value"
-            />
-            <el-button
-              type="danger"
-              :icon="Delete"
-              circle
-              size="small"
-              @click="removePair(index)"
-            />
+            <div class="kv-row-main">
+              <el-input
+                v-model="pair.key"
+                placeholder="字段名"
+                class="kv-key"
+              />
+              <template v-if="pair.hasValue">
+                <span class="kv-separator">：</span>
+                <el-input
+                  v-model="pair.value"
+                  type="textarea"
+                  :autosize="{ minRows: 1, maxRows: 8 }"
+                  placeholder="字段值"
+                  class="kv-value"
+                />
+              </template>
+              <el-button
+                type="primary"
+                link
+                size="small"
+                class="kv-toggle"
+                @click="pair.hasValue = !pair.hasValue"
+              >
+                {{ pair.hasValue ? '转为独立字段' : '添加值' }}
+              </el-button>
+              <el-button
+                type="danger"
+                :icon="Delete"
+                circle
+                size="small"
+                @click="removePair(index)"
+              />
+            </div>
           </div>
           <el-button type="primary" link @click="addPair" class="kv-add-btn">
             + 添加字段
@@ -59,6 +74,7 @@ import type { DeclarationElement } from '@/api/declaration-elements'
 interface KvPair {
   key: string
   value: string
+  hasValue: boolean
 }
 
 const props = defineProps<{
@@ -90,26 +106,34 @@ const rules: FormRules = {
 function parseElementsText(text: string): KvPair[] {
   if (!text) return []
   return text.split('|').map((segment) => {
-    const idx = segment.indexOf('：')
+    const s = segment.trim()
+    if (!s) return null
+    const idx = s.indexOf('：')
     if (idx === -1) {
-      return { key: segment.trim(), value: '' }
+      return { key: s, value: '', hasValue: false }
     }
     return {
-      key: segment.substring(0, idx).trim(),
-      value: segment.substring(idx + 1).trim(),
+      key: s.substring(0, idx).trim(),
+      value: s.substring(idx + 1).trim(),
+      hasValue: true,
     }
-  }).filter(p => p.key)
+  }).filter((p): p is KvPair => !!p && !!p.key)
 }
 
 function buildElementsText(pairs: KvPair[]): string {
   return pairs
     .filter(p => p.key.trim())
-    .map(p => `${p.key.trim()}：${p.value.trim()}`)
+    .map(p => {
+      if (p.hasValue && p.value.trim()) {
+        return `${p.key.trim()}：${p.value.trim()}`
+      }
+      return p.key.trim()
+    })
     .join('|')
 }
 
 function addPair() {
-  kvPairs.value.push({ key: '', value: '' })
+  kvPairs.value.push({ key: '', value: '', hasValue: true })
 }
 
 function removePair(index: number) {
@@ -179,21 +203,31 @@ async function handleSave() {
   padding: 12px 0;
 }
 .kv-row {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  background: var(--el-fill-color-lighter);
+  border-radius: 6px;
+}
+.kv-row-main {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 6px;
-  margin-bottom: 8px;
 }
 .kv-key {
-  width: 140px;
+  width: 150px;
   flex-shrink: 0;
 }
 .kv-separator {
   flex-shrink: 0;
   color: var(--el-text-color-regular);
+  line-height: 32px;
 }
 .kv-value {
   flex: 1;
+}
+.kv-toggle {
+  flex-shrink: 0;
+  margin-top: 4px;
 }
 .kv-add-btn {
   margin-top: 4px;

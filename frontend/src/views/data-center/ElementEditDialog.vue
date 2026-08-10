@@ -103,6 +103,18 @@ const rules: FormRules = {
   declaration_name: [{ required: true, message: '请输入申报名称', trigger: 'blur' }],
 }
 
+function isCompositionField(key: string): boolean {
+  return key === '成分' || key === '成份'
+}
+
+function parseCompositionValue(val: string): string {
+  return val.replace(/[,，;；]\s*/g, '\n').trim()
+}
+
+function buildCompositionValue(val: string): string {
+  return val.split('\n').map(s => s.trim()).filter(Boolean).join('，')
+}
+
 function parseElementsText(text: string): KvPair[] {
   if (!text) return []
   return text.split('|').map((segment) => {
@@ -112,11 +124,12 @@ function parseElementsText(text: string): KvPair[] {
     if (idx === -1) {
       return { key: s, value: '', hasValue: false }
     }
-    return {
-      key: s.substring(0, idx).trim(),
-      value: s.substring(idx + 1).trim(),
-      hasValue: true,
+    const key = s.substring(0, idx).trim()
+    let value = s.substring(idx + 1).trim()
+    if (isCompositionField(key)) {
+      value = parseCompositionValue(value)
     }
+    return { key, value, hasValue: true }
   }).filter((p): p is KvPair => !!p && !!p.key)
 }
 
@@ -125,7 +138,11 @@ function buildElementsText(pairs: KvPair[]): string {
     .filter(p => p.key.trim())
     .map(p => {
       if (p.hasValue && p.value.trim()) {
-        return `${p.key.trim()}：${p.value.trim()}`
+        let val = p.value.trim()
+        if (isCompositionField(p.key.trim())) {
+          val = buildCompositionValue(val)
+        }
+        return `${p.key.trim()}：${val}`
       }
       return p.key.trim()
     })

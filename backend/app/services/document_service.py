@@ -901,9 +901,13 @@ class DocumentService:
         # G6 成交方式由公式 =报关单!V4 自动填充
         # 币制显示中文名（美元/人民币），不写 USD/CNY 代码
         # 填充所有产品行（行8开始，每品1行，完整填充所有列）
+        # 模板行12、13为预留空白行，合同页公式按 8-11 / 14+ 布局引用发票，
+        # 产品5起须从行14开始，否则合同页引用错位导致产品行丢失
         total_amt_inv = 0
         for idx, item in enumerate(items):
             r = 8 + idx
+            if r > 11:
+                r += 2   # 跳过模板预留的行 12、13
             if r > 23:
                 break
             ws.cell(r, 1).value = "N/M"                       # A: 唛头

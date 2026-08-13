@@ -112,3 +112,22 @@ def test_n5_regression(monkeypatch):
     assert ws.max_row == 37
     assert ws.cell(20, 1).value == 1
     assert ws.cell(32, 1).value == 5
+
+
+def test_invoice_contract_row_alignment(monkeypatch):
+    """发票页产品5起从行14开始（跳过模板预留的12/13行），与合同页公式引用对齐"""
+    wb = openpyxl.load_workbook(io.BytesIO(generate_customs_bytes(monkeypatch, 8)))
+    ws_inv = wb["发票"]
+    ws_con = wb["合同"]
+    # 模板预留空白行 12/13 不被写入
+    assert ws_inv.cell(12, 3).value in (None, "")
+    assert ws_inv.cell(13, 3).value in (None, "")
+    # 产品1-4 在行8-11，产品5/6 落到行14/15（而非行12/13）
+    assert ws_inv.cell(8, 3).value == "有机硅柔软剂1"
+    assert ws_inv.cell(11, 3).value == "有机硅柔软剂4"
+    assert ws_inv.cell(14, 3).value == "有机硅柔软剂5"
+    assert ws_inv.cell(15, 3).value == "有机硅柔软剂6"
+    # 合同页公式逐行引用发票：行23/24 对应发票行14/15（产品5/6），不再错位
+    assert ws_con["B23"].value == "=发票!C14"
+    assert ws_con["B24"].value == "=发票!C15"
+    assert ws_con["B26"].value == "=发票!C17"

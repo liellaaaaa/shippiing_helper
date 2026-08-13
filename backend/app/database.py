@@ -35,5 +35,6 @@ def init_db():
         TranslationMapping,
         MsdsTemplate,
     )
+    from app.models.declaration_ledger import HsCodeField, DeclarationProduct, DeclarationValue
     from app.models.user import User
     Base.metadata.create_all(bind=engine)

@@ -8,6 +8,7 @@ from app.models.reference_data import (
     TranslationMapping,
     MsdsTemplate,
 )
+from app.models.declaration_ledger import HsCodeField, DeclarationProduct, DeclarationValue
 from app.models.user import User
 
 __all__ = [
@@ -24,5 +25,8 @@ __all__ = [
     "IngredientMapping",
     "TranslationMapping",
     "MsdsTemplate",
+    "HsCodeField",
+    "DeclarationProduct",
+    "DeclarationValue",
     "User",
 ]

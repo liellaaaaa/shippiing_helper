@@ -55,6 +55,7 @@ from app.api.v1.name_mapping import router as name_mapping_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.audit import router as audit_router
 from app.api.v1.declaration_elements import router as declaration_elements_router
+from app.api.v1.declaration_ledger import router as declaration_ledger_router
 from app.core.config import MSDS_DIR, TRANSPORT_REPORTS_DIR
 from app.core.destination_map import load_destination_mapping
 from app.database import SessionLocal
@@ -99,6 +100,7 @@ app.include_router(audit_router)
 app.include_router(msds_generator_router)
 app.include_router(msds_ledger_router)
 app.include_router(declaration_elements_router)
+app.include_router(declaration_ledger_router)
 
 # OnlyOffice Document Server 代理（解决 ngrok 单端口转发问题）
 DOCUMENT_SERVER = os.getenv("DOCUMENT_SERVER_URL", "http://localhost:8080")
@@ -251,6 +253,7 @@ async def auth_middleware(request: Request, call_next):
        request.url.path.startswith("/api/v1/transport-reports") or \
        request.url.path.startswith("/api/v1/data-center") or \
        request.url.path.startswith("/api/v1/declaration-elements") or \
+       request.url.path.startswith("/api/v1/declaration-ledger") or \
        request.url.path.startswith("/api/v1/audit") or \
        request.url.path.startswith("/documentserver"):
         return await call_next(request)

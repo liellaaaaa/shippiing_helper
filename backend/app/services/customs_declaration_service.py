@@ -1,7 +1,9 @@
 """
 申报要素服务 — 按 HS Code + 报关名称 查找产品的申报要素
 
-数据来源: declaration_elements 表（原 references/申报要素.json）
+数据来源: 
+1. 旧表 declaration_elements（原 references/申报要素.json）
+2. 新表 declaration_products + declaration_values（从 hs_codes.json 导入）
 """
 
 import re
@@ -33,9 +35,11 @@ class CustomsDeclarationService:
     def _load(self):
         from app.database import SessionLocal
         from app.models.reference_data import DeclarationElement
+        from app.models.declaration_ledger import DeclarationProduct, DeclarationValue
 
         db = SessionLocal()
         try:
+            # 1. 加载旧表数据
             rows = db.query(DeclarationElement).all()
             for r in rows:
                 key = f"{r.hs_code}|{r.declaration_name}"
@@ -43,6 +47,32 @@ class CustomsDeclarationService:
                     "hs_code": r.hs_code,
                     "申报名称": r.declaration_name,
                     "申报要素": r.elements_text,
+                }
+
+            # 2. 加载新表数据（如果旧表没有的话）
+            products = db.query(DeclarationProduct).all()
+            for product in products:
+                key = f"{product.hs_code}|{product.product_name}"
+                if key in self.data:
+                    # 旧表已有，跳过
+                    continue
+
+                # 获取要素值
+                values = db.query(DeclarationValue).filter(
+                    DeclarationValue.product_id == product.id
+                ).all()
+
+                # 构建申报要素字符串
+                elements_parts = []
+                for v in values:
+                    if v.field_value:
+                        elements_parts.append(f"{v.field_name}：{v.field_value}")
+                elements_str = "|".join(elements_parts)
+
+                self.data[key] = {
+                    "hs_code": product.hs_code,
+                    "申报名称": product.product_name,
+                    "申报要素": elements_str,
                 }
         finally:
             db.close()

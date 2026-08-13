@@ -709,6 +709,7 @@ class DocumentService:
                         payment_terms=first.payment_terms,
                         pi_date=first.pi_date,
                         currency=first.currency,
+                        status=first.status or "pending",
                         items=[
                             LedgerItemSchema(
                                 internal_code=r.internal_code,

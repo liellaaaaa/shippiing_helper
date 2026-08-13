@@ -9,105 +9,71 @@
           remote
           :remote-method="searchHsCodes"
           :loading="searchLoading"
-          placeholder="搜索或选择商品编码..."
-          clearable
-          style="width: 320px"
+          placeholder="切换商品编码..."
+          style="width: 340px"
           @change="handleHsCodeChange"
-          @clear="handleHsCodeClear"
         >
           <el-option
             v-for="item in hsCodeOptions"
             :key="item.hs_code"
-            :label="`${item.hs_code} - ${item.website_name || ''}`"
+            :label="`${item.hs_code} - ${item.website_name || ''}（${item.product_count}个产品）`"
             :value="item.hs_code"
-          >
-            <span>{{ item.hs_code }}</span>
-            <span style="color: #8492a6; font-size: 12px; margin-left: 8px">
-              {{ item.website_name }} ({{ item.product_count }}个产品)
-            </span>
-          </el-option>
+          />
         </el-select>
-        <el-button type="primary" @click="openAddProduct" :disabled="!selectedHsCode">
-          新增产品
-        </el-button>
+        <el-button type="primary" @click="openAddProduct">新增产品</el-button>
       </div>
       <div class="toolbar-right" v-if="currentDetail">
         <span class="hs-code-info">
-          {{ currentDetail.hs_code }} - {{ currentDetail.website_name }}
+          {{ currentDetail.hs_code }} - {{ currentDetail.website_name }}（{{ currentDetail.products.length }} 个产品）
         </span>
       </div>
     </div>
 
     <!-- 内容区域 -->
-    <div v-if="selectedHsCode && currentDetail" class="content-area">
-      <!-- 产品表格 -->
+    <div v-if="currentDetail" class="content-area">
       <el-table
         :data="currentDetail.products"
         v-loading="loading"
         border
         stripe
+        highlight-current-row
         style="width: 100%"
-        max-height="calc(100vh - 320px)"
+        max-height="calc(100vh - 360px)"
+        @current-change="onRowClick"
       >
-        <!-- 固定列：商品名称 -->
-        <el-table-column prop="product_name" label="商品名称" width="180" fixed="left">
-          <template #default="{ row }">
-            <div class="cell-editable" @click="openEditProduct(row)">
-              {{ row.product_name }}
-            </div>
-          </template>
-        </el-table-column>
+        <!-- 商品名称 -->
+        <el-table-column prop="product_name" label="商品名称" min-width="160" show-overflow-tooltip />
 
-        <!-- 动态列：根据字段定义渲染 -->
+        <!-- 动态列：根据字段定义渲染（列宽按内容自适应） -->
         <el-table-column
           v-for="field in currentDetail.fields"
           :key="field.field_name"
           :label="field.field_name"
-          :min-width="getColumnWidth(field.field_name)"
+          min-width="130"
+          show-overflow-tooltip
         >
           <template #default="{ row }">
-            <div
-              class="cell-editable"
-              :class="{ 'cell-empty': !row.values[field.field_name] }"
-              @click="startEdit(row.id, field.field_name, row.values[field.field_name] || '')"
-            >
-              <template v-if="editingCell?.productId === row.id && editingCell?.fieldName === field.field_name">
-                <el-input
-                  v-model="editingCell.value"
-                  size="small"
-                  :autosize="{ minRows: 1, maxRows: 4 }"
-                  type="textarea"
-                  @blur="finishEdit"
-                  @keyup.enter="finishEdit"
-                  ref="editInput"
-                />
-              </template>
-              <template v-else>
-                {{ row.values[field.field_name] || '-' }}
-              </template>
-            </div>
-          </template>
-        </el-table-column>
-
-        <!-- 操作列 -->
-        <el-table-column label="操作" width="100" fixed="right">
-          <template #default="{ row }">
-            <el-popconfirm
-              title="确认删除此产品？"
-              @confirm="handleDeleteProduct(row.id)"
-            >
-              <template #reference>
-                <el-button type="danger" link size="small">删除</el-button>
-              </template>
-            </el-popconfirm>
+            <span :class="{ 'cell-empty': !row.values[field.field_name] }">
+              {{ row.values[field.field_name] || '-' }}
+            </span>
           </template>
         </el-table-column>
       </el-table>
+
+      <!-- 选中行操作按钮（仿 MSDS 台账：选中后操作，弹窗编辑） -->
+      <div v-if="selectedRow" class="detail-actions">
+        <el-button size="small" @click="openEditProduct">编辑</el-button>
+        <el-popconfirm title="确认删除此产品？" @confirm="handleDeleteProduct">
+          <template #reference>
+            <el-button size="small" type="danger">删除</el-button>
+          </template>
+        </el-popconfirm>
+      </div>
     </div>
 
     <!-- 空状态 -->
     <div v-else class="empty-state">
-      <el-empty description="请选择商品编码查看申报要素" />
+      <el-empty description="暂无申报要素数据" />
     </div>
 
     <!-- 新增/编辑产品弹窗 -->
@@ -122,23 +88,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick, watch } from 'vue'
+import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { declarationLedgerApi, type HsCodeListItem, type HsCodeDetail, type DeclarationProduct } from '@/api/declaration-ledger'
 import ProductEditDialog from './ProductEditDialog.vue'
 
 const hsCodeOptions = ref<HsCodeListItem[]>([])
-const selectedHsCode = ref<string>('')
+const selectedHsCode = ref('')
 const currentDetail = ref<HsCodeDetail | null>(null)
 const loading = ref(false)
 const searchLoading = ref(false)
-
-// 编辑单元格状态
-const editingCell = ref<{
-  productId: number
-  fieldName: string
-  value: string
-} | null>(null)
+const selectedRow = ref<DeclarationProduct | null>(null)
 
 // 产品弹窗状态
 const productDialogVisible = ref(false)
@@ -161,19 +121,11 @@ async function searchHsCodes(query: string) {
   }
 }
 
-// HS Code 变化
+// 切换 HS Code
 async function handleHsCodeChange(hsCode: string) {
-  if (!hsCode) {
-    currentDetail.value = null
-    return
-  }
+  if (!hsCode) return
+  selectedRow.value = null
   await loadHsCodeDetail(hsCode)
-}
-
-// 清除选择
-function handleHsCodeClear() {
-  selectedHsCode.value = ''
-  currentDetail.value = null
 }
 
 // 加载 HS Code 详情
@@ -190,48 +142,9 @@ async function loadHsCodeDetail(hsCode: string) {
   }
 }
 
-// 开始编辑单元格
-function startEdit(productId: number, fieldName: string, value: string) {
-  editingCell.value = { productId, fieldName, value }
-  nextTick(() => {
-    const input = document.querySelector('.cell-editable .el-textarea__inner') as HTMLTextAreaElement
-    if (input) {
-      input.focus()
-    }
-  })
-}
-
-// 完成编辑
-async function finishEdit() {
-  if (!editingCell.value) return
-
-  const { productId, fieldName, value } = editingCell.value
-  editingCell.value = null
-
-  try {
-    await declarationLedgerApi.updateValues(productId, {
-      values: { [fieldName]: value }
-    })
-    // 更新本地数据
-    if (currentDetail.value) {
-      const product = currentDetail.value.products.find(p => p.id === productId)
-      if (product) {
-        product.values[fieldName] = value
-      }
-    }
-    ElMessage.success('保存成功')
-  } catch {
-    ElMessage.error('保存失败')
-  }
-}
-
-// 获取列宽
-function getColumnWidth(fieldName: string): number {
-  const length = fieldName.length
-  if (length <= 4) return 120
-  if (length <= 6) return 150
-  if (length <= 10) return 180
-  return 200
+// 行选中
+function onRowClick(row: DeclarationProduct | null) {
+  selectedRow.value = row
 }
 
 // 打开新增产品弹窗
@@ -241,16 +154,19 @@ function openAddProduct() {
 }
 
 // 打开编辑产品弹窗
-function openEditProduct(product: DeclarationProduct) {
-  editingProduct.value = { ...product }
+function openEditProduct() {
+  if (!selectedRow.value) return
+  editingProduct.value = { ...selectedRow.value }
   productDialogVisible.value = true
 }
 
 // 删除产品
-async function handleDeleteProduct(productId: number) {
+async function handleDeleteProduct() {
+  if (!selectedRow.value) return
   try {
-    await declarationLedgerApi.deleteProduct(productId)
+    await declarationLedgerApi.deleteProduct(selectedRow.value.id)
     ElMessage.success('删除成功')
+    selectedRow.value = null
     if (selectedHsCode.value) {
       await loadHsCodeDetail(selectedHsCode.value)
     }
@@ -266,11 +182,15 @@ async function handleProductSaved() {
   }
 }
 
-// 初始化加载 HS Code 列表
+// 初始化：加载 HS Code 列表并默认选中第一个，打开页面直接展示数据
 onMounted(async () => {
   try {
     const res = await declarationLedgerApi.listHsCodes()
     hsCodeOptions.value = res.data
+    if (res.data.length > 0) {
+      selectedHsCode.value = res.data[0].hs_code
+      await loadHsCodeDetail(selectedHsCode.value)
+    }
   } catch {
     ElMessage.error('加载 HS Code 列表失败')
   }
@@ -311,22 +231,15 @@ onMounted(async () => {
   border-radius: 4px;
 }
 
-.cell-editable {
-  cursor: pointer;
-  padding: 4px 8px;
-  min-height: 32px;
-  display: flex;
-  align-items: center;
-  border-radius: 4px;
-  transition: background-color 0.2s;
-}
-
-.cell-editable:hover {
-  background-color: var(--el-fill-color-light);
-}
-
 .cell-empty {
   color: var(--el-text-color-placeholder);
+}
+
+.detail-actions {
+  margin-top: 12px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
 
 .empty-state {

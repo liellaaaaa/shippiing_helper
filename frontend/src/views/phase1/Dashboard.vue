@@ -1,21 +1,9 @@
 <template>
   <div class="dashboard-page">
-    <div class="page-header">
-      <h1 class="page-title">台账列表</h1>
-      <p class="page-subtitle">三源合并后的完整订单记录 — 选择一条记录进入文档编辑</p>
-    </div>
-
     <el-tabs v-model="activeTab" class="dashboard-tabs">
       <!-- 第一个 tab：订单台账 -->
       <el-tab-pane label="订单台账" name="orders">
         <el-card class="dashboard-card">
-          <template #header>
-            <div class="card-header">
-              <span>订单台账</span>
-              <span class="card-hint">共 {{ total }} 条记录</span>
-            </div>
-          </template>
-
           <!-- 工具栏 -->
           <div class="toolbar">
             <div class="toolbar-left">
@@ -30,6 +18,7 @@
                   <el-button icon="Search" @click="handleSearch" />
                 </template>
               </el-input>
+              <span class="record-count">共 {{ total }} 条记录</span>
             </div>
             <div class="toolbar-right">
               <el-button type="primary" icon="Plus" @click="$router.push('/workflow')">
@@ -108,7 +97,9 @@
 
       <!-- 第二个 tab：申报要素台账 -->
       <el-tab-pane label="申报要素" name="declaration">
-        <DeclarationElementsTab />
+        <el-card class="dashboard-card">
+          <DeclarationElementsTab />
+        </el-card>
       </el-tab-pane>
     </el-tabs>
 
@@ -175,7 +166,6 @@ const handleRowClick = (row: LedgerRecord) => {
 
 const handleSaved = async () => {
   await loadData()
-  // 刷新 selectedRecord 为列表中的最新数据
   if (selectedRecord.value) {
     const updated = recordList.value.find(r => r.order_no === selectedRecord.value!.order_no)
     if (updated) selectedRecord.value = updated
@@ -183,8 +173,6 @@ const handleSaved = async () => {
 }
 
 const handleEdit = (row: LedgerRecord) => {
-  // 导航到 Phase2，传入台账记录ID
-  // Phase2 需要改造为从台账ID读取数据
   router.push({ path: '/phase2', query: { ledgerId: String(row.id) } })
 }
 
@@ -214,7 +202,6 @@ const formatDate = (dateStr: string) => {
   }
 }
 
-/** 统计可见产品数（组头+独立项，不含子项） */
 function visibleItemCount(items: any[] | undefined): number {
   if (!items) return 0
   return items.filter((it: any) => !(it.group_id != null && !it.is_group_header)).length
@@ -235,31 +222,23 @@ onMounted(() => {
 
 <style scoped>
 .dashboard-page { padding: 24px; max-width: 1400px; margin: 0 auto; }
-.page-header { margin-bottom: 20px; }
-.page-title { font-size: 28px; font-weight: 600; margin: 0 0 8px 0; }
-.page-subtitle { font-size: 14px; color: #909399; margin: 0; }
 
 .dashboard-tabs { margin-bottom: 16px; }
 
 .dashboard-card { border-radius: 12px; }
-.card-header { font-weight: 600; font-size: 15px; display: flex; justify-content: space-between; align-items: center; }
-.card-hint { font-size: 12px; font-weight: 400; color: #909399; }
 
 .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding: 12px 16px; background: #f5f7fa; border-radius: 8px; }
 .toolbar-left { display: flex; gap: 12px; align-items: center; }
 .toolbar-right { display: flex; gap: 8px; }
 .search-input { width: 280px; }
+.record-count { font-size: 13px; color: #909399; }
 
 .data-table { margin-bottom: 16px; width: 100%; }
 
 .pagination-wrapper { display: flex; justify-content: flex-end; }
 
-/* 打印样式 */
 @media print {
   .toolbar, .no-print { display: none !important; }
-  .page-header { margin-bottom: 12px; }
-  .page-title { font-size: 20px; }
-  .page-subtitle { display: none; }
   .data-table { width: 100%; page-break-inside: avoid; }
   :deep(.el-table__header-wrapper) { display: table-row-group; }
   @page { size: landscape; margin: 1cm; }

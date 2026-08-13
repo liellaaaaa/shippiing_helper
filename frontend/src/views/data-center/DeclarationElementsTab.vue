@@ -18,7 +18,9 @@
             :value="item.hs_code"
           />
         </el-select>
-        <el-button type="primary" @click="openAddProduct">新增产品</el-button>
+        <el-tooltip :content="!selectedHsCode ? '请先选择商品编码' : ''" placement="top">
+          <el-button type="primary" @click="openAddProduct" :disabled="!selectedHsCode">新增产品</el-button>
+        </el-tooltip>
       </div>
       <div class="toolbar-right" v-if="currentDetail">
         <span class="hs-code-info">

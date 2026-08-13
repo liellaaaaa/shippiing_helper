@@ -776,6 +776,7 @@ class DocumentService:
         # 付款条件分类中文名
         payment_method_cn = _classify_payment_method_cn(payment_terms)
         pi_date = record.pi_date or ""
+        today = datetime.now().date()  # 制单日期（制作单据当天）
         currency = getattr(record, "currency", None) or "CNY"  # 默认人民币
         currency_cn = _currency_to_chinese(currency)  # 币制中文名（美元/人民币）
         total_pallets = sum(it.pallet_count or 0 for it in items)
@@ -897,8 +898,9 @@ class DocumentService:
         if pi_no:
             inv_no = _to_invoice_no(pi_no)
             ws["G2"] = inv_no
-        if pi_date:
-            ws["G3"] = _parse_date(pi_date)
+        # G3 制单日期：制作单据当天（不是 PI 日期）
+        ws["G3"] = today
+        ws["G3"].number_format = "d/m/yyyy"
         # G6 成交方式由公式 =报关单!V4 自动填充
         # 币制显示中文名（美元/人民币），不写 USD/CNY 代码
         # 填充所有产品行（行8开始，每品1行，完整填充所有列）
@@ -952,9 +954,9 @@ class DocumentService:
         # Sheet 3: 箱单 — 填充所有产品行
         # ══════════════════════════════════════════════════════════════
         ws = ws_packing
-        # 第3行日期：台账 PI 日期
-        if pi_date:
-            ws["H3"] = _parse_date(pi_date)
+        # 第3行日期：制单日期（今天，与发票 G3 一致）
+        ws["H3"] = today
+        ws["H3"].number_format = "d/m/yyyy"
         # 先清除所有数据行（包括模板残留的公式和空行）
         for r in range(10, 26):
             for c in range(1, 9):
@@ -1006,10 +1008,12 @@ class DocumentService:
         replace_placeholder(ws, "{{PRICE_TERM}}", price_term)
         replace_placeholder(ws, "{{DEST_PORT}}", dest_city_cn)
         replace_placeholder(ws, "{{PRICE_TERM_V4}}", price_term)
-        # 日期：使用 PI 日期
+        # G7：PI 合同日期（来自 PI 文件，不是模板日期也不是制单日期）
         if pi_date:
             ws["G7"] = _parse_date(pi_date)
             # G7:G8 是合并单元格，G7 的值会自动覆盖整个合并区域，不写 G8
+        # C37 装运期：制单日期（今天）
+        ws["C37"] = today
         # (9)装运口岸和目的地：动态根据 loading_port 和目的国填充
         if dest_country_cn or dest_country_en:
             loading_port_b39 = loading_port_cn if loading_port_cn else ""

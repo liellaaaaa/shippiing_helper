@@ -5,102 +5,112 @@
       <p class="page-subtitle">三源合并后的完整订单记录 — 选择一条记录进入文档编辑</p>
     </div>
 
-    <el-card class="dashboard-card">
-      <template #header>
-        <div class="card-header">
-          <span>订单台账</span>
-          <span class="card-hint">共 {{ total }} 条记录</span>
-        </div>
-      </template>
+    <el-tabs v-model="activeTab" class="dashboard-tabs">
+      <!-- 第一个 tab：订单台账 -->
+      <el-tab-pane label="订单台账" name="orders">
+        <el-card class="dashboard-card">
+          <template #header>
+            <div class="card-header">
+              <span>订单台账</span>
+              <span class="card-hint">共 {{ total }} 条记录</span>
+            </div>
+          </template>
 
-      <!-- 工具栏 -->
-      <div class="toolbar">
-        <div class="toolbar-left">
-          <el-input
-            v-model="searchText"
-            placeholder="搜索订单号 / 客户编码 / 业务员"
-            clearable
-            class="search-input"
-            @keyup.enter="handleSearch"
+          <!-- 工具栏 -->
+          <div class="toolbar">
+            <div class="toolbar-left">
+              <el-input
+                v-model="searchText"
+                placeholder="搜索订单号 / 客户编码 / 业务员"
+                clearable
+                class="search-input"
+                @keyup.enter="handleSearch"
+              >
+                <template #append>
+                  <el-button icon="Search" @click="handleSearch" />
+                </template>
+              </el-input>
+            </div>
+            <div class="toolbar-right">
+              <el-button type="primary" icon="Plus" @click="$router.push('/workflow')">
+                新录入
+              </el-button>
+              <el-button type="primary" icon="Download" @click="handleExportExcel">
+                导出 Excel
+              </el-button>
+              <el-button plain icon="Printer" @click="handlePrintPreview">
+                打印预览
+              </el-button>
+            </div>
+          </div>
+
+          <!-- 数据表格 -->
+          <el-table
+            :data="recordList"
+            v-loading="loading"
+            row-key="id"
+            class="data-table"
+            @row-click="handleRowClick"
           >
-            <template #append>
-              <el-button icon="Search" @click="handleSearch" />
-            </template>
-          </el-input>
-        </div>
-        <div class="toolbar-right">
-          <el-button type="primary" icon="Plus" @click="$router.push('/workflow')">
-            新录入
-          </el-button>
-          <el-button type="primary" icon="Download" @click="handleExportExcel">
-            导出 Excel
-          </el-button>
-          <el-button plain icon="Printer" @click="handlePrintPreview">
-            打印预览
-          </el-button>
-        </div>
-      </div>
+            <el-table-column prop="order_no" label="订单号/PI号" min-width="140" />
+            <el-table-column prop="customer_code" label="客户编码" min-width="120" />
+            <el-table-column prop="sales_person" label="业务员" min-width="100" />
+            <el-table-column prop="consignee_name" label="收货人" min-width="140" show-overflow-tooltip />
+            <el-table-column prop="destination" label="目的港" min-width="100" />
+            <el-table-column prop="items.length" label="产品数" width="80" align="center">
+              <template #default="{ row }">
+                <el-tag type="info" size="small">{{ visibleItemCount(row.items) }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="created_at" label="录入时间" min-width="160">
+              <template #default="{ row }">
+                {{ row.created_at ? formatDate(row.created_at) : '-' }}
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="200" fixed="right">
+              <template #default="{ row }">
+                <el-button
+                  type="primary"
+                  link
+                  size="small"
+                  icon="Document"
+                  @click.stop="handleEdit(row)"
+                >
+                  进入文档编辑
+                </el-button>
+                <el-button
+                  type="danger"
+                  link
+                  size="small"
+                  icon="Delete"
+                  @click.stop="handleDelete(row)"
+                >
+                  删除
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
 
-      <!-- 数据表格 -->
-      <el-table
-        :data="recordList"
-        v-loading="loading"
-        row-key="id"
-        class="data-table"
-        @row-click="handleRowClick"
-      >
-        <el-table-column prop="order_no" label="订单号/PI号" min-width="140" />
-        <el-table-column prop="customer_code" label="客户编码" min-width="120" />
-        <el-table-column prop="sales_person" label="业务员" min-width="100" />
-        <el-table-column prop="consignee_name" label="收货人" min-width="140" show-overflow-tooltip />
-        <el-table-column prop="destination" label="目的港" min-width="100" />
-        <el-table-column prop="items.length" label="产品数" width="80" align="center">
-          <template #default="{ row }">
-            <el-tag type="info" size="small">{{ visibleItemCount(row.items) }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="created_at" label="录入时间" min-width="160">
-          <template #default="{ row }">
-            {{ row.created_at ? formatDate(row.created_at) : '-' }}
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
-          <template #default="{ row }">
-            <el-button
-              type="primary"
-              link
-              size="small"
-              icon="Document"
-              @click.stop="handleEdit(row)"
-            >
-              进入文档编辑
-            </el-button>
-            <el-button
-              type="danger"
-              link
-              size="small"
-              icon="Delete"
-              @click.stop="handleDelete(row)"
-            >
-              删除
-            </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+          <!-- 分页 -->
+          <div class="pagination-wrapper no-print">
+            <el-pagination
+              v-model:current-page="currentPage"
+              v-model:page-size="pageSize"
+              :page-sizes="[10, 20, 50]"
+              :total="total"
+              layout="total, sizes, prev, pager, next"
+              @current-change="loadData"
+              @size-change="handleSizeChange"
+            />
+          </div>
+        </el-card>
+      </el-tab-pane>
 
-      <!-- 分页 -->
-      <div class="pagination-wrapper no-print">
-        <el-pagination
-          v-model:current-page="currentPage"
-          v-model:page-size="pageSize"
-          :page-sizes="[10, 20, 50]"
-          :total="total"
-          layout="total, sizes, prev, pager, next"
-          @current-change="loadData"
-          @size-change="handleSizeChange"
-        />
-      </div>
-    </el-card>
+      <!-- 第二个 tab：申报要素台账 -->
+      <el-tab-pane label="申报要素" name="declaration">
+        <DeclarationElementsTab />
+      </el-tab-pane>
+    </el-tabs>
 
     <LedgerDetailDialog
       v-model="showDetailDialog"
@@ -117,9 +127,11 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ordersApi, type LedgerRecord } from '@/api/orders'
 import LedgerDetailDialog from './LedgerDetailDialog.vue'
+import DeclarationElementsTab from '@/views/data-center/DeclarationElementsTab.vue'
 
 const router = useRouter()
 
+const activeTab = ref('orders')
 const searchText = ref('')
 const recordList = ref<LedgerRecord[]>([])
 const loading = ref(false)
@@ -226,6 +238,8 @@ onMounted(() => {
 .page-header { margin-bottom: 20px; }
 .page-title { font-size: 28px; font-weight: 600; margin: 0 0 8px 0; }
 .page-subtitle { font-size: 14px; color: #909399; margin: 0; }
+
+.dashboard-tabs { margin-bottom: 16px; }
 
 .dashboard-card { border-radius: 12px; }
 .card-header { font-weight: 600; font-size: 15px; display: flex; justify-content: space-between; align-items: center; }

@@ -6,12 +6,10 @@
         <el-select
           v-model="selectedHsCode"
           filterable
-          remote
-          :remote-method="searchHsCodes"
-          :loading="searchLoading"
-          placeholder="切换商品编码..."
+          placeholder="选择商品编码..."
           style="width: 340px"
           @change="handleHsCodeChange"
+          @visible-change="handleDropdownVisible"
         >
           <el-option
             v-for="item in hsCodeOptions"
@@ -94,30 +92,32 @@ import { declarationLedgerApi, type HsCodeListItem, type HsCodeDetail, type Decl
 import ProductEditDialog from './ProductEditDialog.vue'
 
 const hsCodeOptions = ref<HsCodeListItem[]>([])
+const allHsCodeOptions = ref<HsCodeListItem[]>([])  // 缓存所有选项
 const selectedHsCode = ref('')
 const currentDetail = ref<HsCodeDetail | null>(null)
 const loading = ref(false)
-const searchLoading = ref(false)
 const selectedRow = ref<DeclarationProduct | null>(null)
 
 // 产品弹窗状态
 const productDialogVisible = ref(false)
 const editingProduct = ref<DeclarationProduct | null>(null)
 
-// 搜索 HS Code
-async function searchHsCodes(query: string) {
-  if (!query) {
-    hsCodeOptions.value = []
-    return
+// 下拉框显示时，如果有缓存就用缓存，否则重新加载
+async function handleDropdownVisible(visible: boolean) {
+  if (visible && allHsCodeOptions.value.length === 0) {
+    await loadAllHsCodes()
   }
-  searchLoading.value = true
+  hsCodeOptions.value = allHsCodeOptions.value
+}
+
+// 加载所有 HS Code
+async function loadAllHsCodes() {
   try {
-    const res = await declarationLedgerApi.listHsCodes(query)
+    const res = await declarationLedgerApi.listHsCodes()
+    allHsCodeOptions.value = res.data
     hsCodeOptions.value = res.data
   } catch {
-    ElMessage.error('搜索失败')
-  } finally {
-    searchLoading.value = false
+    ElMessage.error('加载 HS Code 列表失败')
   }
 }
 
@@ -184,15 +184,10 @@ async function handleProductSaved() {
 
 // 初始化：加载 HS Code 列表并默认选中第一个，打开页面直接展示数据
 onMounted(async () => {
-  try {
-    const res = await declarationLedgerApi.listHsCodes()
-    hsCodeOptions.value = res.data
-    if (res.data.length > 0) {
-      selectedHsCode.value = res.data[0].hs_code
-      await loadHsCodeDetail(selectedHsCode.value)
-    }
-  } catch {
-    ElMessage.error('加载 HS Code 列表失败')
+  await loadAllHsCodes()
+  if (allHsCodeOptions.value.length > 0) {
+    selectedHsCode.value = allHsCodeOptions.value[0].hs_code
+    await loadHsCodeDetail(selectedHsCode.value)
   }
 })
 </script>

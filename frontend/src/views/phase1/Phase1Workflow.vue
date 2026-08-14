@@ -207,6 +207,7 @@
           border stripe size="small"
           max-height="400"
           style="margin-top: 4px"
+          :row-class-name="mergeRowClassName"
           @selection-change="onSelectionChange"
         >
           <el-table-column type="selection" width="40" :selectable="(row: MergeTableRow) => !row.isGroup" />
@@ -217,7 +218,11 @@
                 <el-input v-model="row.groupName" size="small" style="width:100px" @input="recalcGroup(row)" />
                 <span style="color:#909399;font-size:12px;margin-left:4px">{{ row.children?.length || 0 }}项</span>
               </template>
-              <el-input v-else v-model="row.internal_code" size="small" />
+              <template v-else>
+                <el-tag v-if="row.source_note === '仅PI合同表'" size="small" type="warning" style="margin-right:4px">PI</el-tag>
+                <el-tag v-else-if="row.source_note === '仅销售订单表'" size="small" type="info" style="margin-right:4px">SO</el-tag>
+                <el-input v-model="row.internal_code" size="small" />
+              </template>
             </template>
           </el-table-column>
           <el-table-column prop="product_cn" label="产品名称" min-width="120">
@@ -422,6 +427,13 @@ watch(() => mergePreviewData.value, (val) => {
 }, { immediate: true })
 
 // ── 分组操作 ──────────────────────────────────────────────────────────────────
+
+function mergeRowClassName({ row }: { row: MergeTableRow }) {
+  if (row.isGroup) return ''
+  if (row.source_note === '仅PI合同表') return 'row-pi-only'
+  if (row.source_note === '仅销售订单表') return 'row-so-only'
+  return ''
+}
 
 function onSelectionChange(rows: MergeTableRow[]) {
   selectedRows.value = rows
@@ -1045,4 +1057,10 @@ function handleReset() {
 /* 警告文字 */
 .text-warning { color: #e6a23c; font-style: italic; }
 .validation-warn { font-size: 13px; margin-top: 4px; }
+
+/* 合并预览行高亮 */
+:deep(.row-pi-only) { background-color: #fdf6ec !important; }
+:deep(.row-pi-only:hover > td.el-table__cell) { background-color: #faecd8 !important; }
+:deep(.row-so-only) { background-color: #ecf5ff !important; }
+:deep(.row-so-only:hover > td.el-table__cell) { background-color: #d9ecff !important; }
 </style>

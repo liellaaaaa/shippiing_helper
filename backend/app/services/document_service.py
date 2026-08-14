@@ -690,12 +690,21 @@ class DocumentService:
         elif order_id:
             db = SessionLocal()
             try:
-                rows = db.query(OrderPiRecord).filter_by(id=order_id).all()
-                if not rows:
+                first = db.query(OrderPiRecord).filter_by(id=order_id).first()
+                if not first:
                     record = None
                 else:
+                    rows = (
+                        db.query(OrderPiRecord)
+                        .filter_by(order_no=first.order_no)
+                        .order_by(
+                            OrderPiRecord.group_id.asc().nullslast(),
+                            OrderPiRecord.is_group_header.desc(),
+                            OrderPiRecord.id.asc(),
+                        )
+                        .all()
+                    )
                     from app.schemas.ledger import LedgerRecordResponse, LedgerItemSchema
-                    first = rows[0]
                     record = LedgerRecordResponse(
                         id=first.id,
                         order_no=first.order_no,

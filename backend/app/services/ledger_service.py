@@ -172,16 +172,24 @@ class LedgerService:
                 product_appearance=getattr(pi_item, "product_appearance", None) if pi_item else None,
             )
 
-        # 1) 销售订单表每一行（含同产品多行）
-        for code in so_order_codes:
-            pi_item = pi_items_map.get(code)
-            for so_item in so_items_map[code]:
-                merged_items.append(_build_merged_item(code, pi_item, so_item))
+        # 1) PI 合同表的每一行（含匹配和仅PI合同表）— 按 PI 合同表顺序
+        if pi_order:
+            for pi_item in pi_order.items:
+                code = pi_item.internal_code
+                if code in so_items_map:
+                    # 匹配的产品：展开 SO 的多行拆分
+                    for so_item in so_items_map[code]:
+                        merged_items.append(_build_merged_item(code, pi_item, so_item))
+                else:
+                    # 仅 PI 合同表
+                    merged_items.append(_build_merged_item(code, pi_item, None))
 
-        # 2) 仅 PI 合同表的产品
-        for code, pi_item in pi_items_map.items():
-            if code not in so_items_map:
-                merged_items.append(_build_merged_item(code, pi_item, None))
+        # 2) 仅销售订单表的产品（SO 中有但 PI 中没有的）
+        if so_order:
+            for code in so_order_codes:
+                if code not in pi_items_map:
+                    for so_item in so_items_map[code]:
+                        merged_items.append(_build_merged_item(code, None, so_item))
 
         # 3) 与 PI 合同文件校验数量/金额（同编码多行按总量求和比较）
         if pi_file_data:

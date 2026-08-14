@@ -136,6 +136,10 @@ class MergeService:
             order_no = record.order_no
             all_records = self.db.query(OrderPiRecord).filter(
                 OrderPiRecord.order_no == order_no
+            ).order_by(
+                OrderPiRecord.group_id.asc().nullslast(),
+                OrderPiRecord.is_group_header.desc(),
+                OrderPiRecord.id.asc(),
             ).all()
 
             first = all_records[0]
@@ -197,7 +201,7 @@ class MergeService:
         if not order:
             return None
 
-        order_items = self.db.query(OrderItem).filter_by(order_id=order_id).all()
+        order_items = self.db.query(OrderItem).filter_by(order_id=order_id).order_by(OrderItem.id.asc()).all()
         comparison_items = []
 
         for item in order_items:

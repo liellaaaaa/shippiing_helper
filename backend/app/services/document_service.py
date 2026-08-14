@@ -652,6 +652,95 @@ class DocumentService:
         last_row = 20 + 3 * n_items - 1
         ws.print_area = f"'报关单'!$A$1:$S${last_row}"
 
+    @staticmethod
+    def _extend_invoice_sheet(ws, n_items: int) -> None:
+        """
+        发票 sheet 按产品数动态扩展数据行。
+
+        模板预建行 8-23（16 行产品数据区），汇总行在 24。
+        N > 16 时，以行 23 为样式源，在行 24 处插入新行，
+        将汇总行及备注区下移，并更新打印区域。
+        仅复制样式与结构，不写任何数据（数据由 generate_customs 主体写入）。
+        """
+        import copy
+
+        PREBUILT = 16  # 模板预建产品行数（行 8-23）
+        if n_items <= PREBUILT:
+            return
+        if ws.max_row < 23:
+            raise ValueError(f"发票模板预建行不足，max_row={ws.max_row}")
+
+        n_new = n_items - PREBUILT
+        src_row = 23  # 样式源行（最后一行产品行）
+
+        # 在汇总行前插入新行（将汇总行及备注区下移）
+        ws.insert_rows(24, n_new)
+
+        # 复制样式：行高 + 单元格样式（A..H 列）
+        for k in range(n_new):
+            dst = 24 + k
+            h = ws.row_dimensions[src_row].height
+            if h:
+                ws.row_dimensions[dst].height = h
+            for col in range(1, 9):
+                src_cell = ws.cell(src_row, col)
+                dst_cell = ws.cell(dst, col)
+                dst_cell._style = copy.copy(src_cell._style)
+
+        # 更新打印区域（原 27 行 + 新增行数）
+        ws.print_area = f"'发票'!$A$1:$H${27 + n_new}"
+
+    @staticmethod
+    def _extend_packing_sheet(ws, n_items: int) -> None:
+        """
+        箱单 sheet 按产品数动态扩展产品行。
+
+        模板预建 16 行产品容量（行 10-25），汇总行 26，页脚行 27-28。
+        N > 16 时，以行 25 为样式源，从行 26 起插入新行，
+        复制样式/行高/边框，并更新汇总公式和打印区域。
+        """
+        import copy
+
+        PACKING_PRE_BUILT = 16
+        DATA_START_ROW = 10
+        SRC_STYLE_ROW = 25       # 样式源行（模板最后一行产品行）
+        SUMMARY_INSERT_ROW = 26  # 插入位置（原汇总行）
+
+        if n_items <= PACKING_PRE_BUILT:
+            return
+
+        n_extra = n_items - PACKING_PRE_BUILT
+        src_style_row = SRC_STYLE_ROW
+
+        # 记录源行高
+        src_height = ws.row_dimensions[src_style_row].height
+
+        # 批量插入新行（每次在 SUMMARY_INSERT_ROW 位置插入，
+        # 之前的行自动下移）
+        for _ in range(n_extra):
+            ws.insert_rows(SUMMARY_INSERT_ROW)
+
+        # 插入完成后，统一复制样式到所有新行
+        for i in range(n_extra):
+            new_row = SUMMARY_INSERT_ROW + i
+            if src_height:
+                ws.row_dimensions[new_row].height = src_height
+            for col in range(1, ws.max_column + 1):
+                src_cell = ws.cell(src_style_row, col)
+                dst_cell = ws.cell(new_row, col)
+                dst_cell._style = copy.copy(src_cell._style)
+
+        # 更新汇总行公式范围（汇总行已随 insert_rows 自动下移）
+        summary_row = SUMMARY_INSERT_ROW + n_extra
+        ws.cell(summary_row, 3).value = f"=SUM(C{DATA_START_ROW}:C{summary_row - 1})"
+        ws.cell(summary_row, 5).value = f"=SUM(E{DATA_START_ROW}:E{summary_row - 1})"
+        ws.cell(summary_row, 7).value = f"=SUM(G{DATA_START_ROW}:G{summary_row - 1})"
+        ws.cell(summary_row, 8).value = f"=SUM(H{DATA_START_ROW}:H{summary_row - 1})"
+
+        # 更新打印区域
+        last_row = summary_row + 2  # 汇总 + 2行页脚
+        ws.print_area = f"'箱单'!$A$1:$H${last_row}"
+
     def generate_customs(
         self,
         order_id: int | None = None,       # OrderPiRecord 主键 ID（非业务订单号）
@@ -912,16 +1001,14 @@ class DocumentService:
         ws["G3"].number_format = "d/m/yyyy"
         # G6 成交方式由公式 =报关单!V4 自动填充
         # 币制显示中文名（美元/人民币），不写 USD/CNY 代码
-        # 填充所有产品行（行8开始，每品1行，完整填充所有列）
-        # 模板行12、13为预留空白行，合同页公式按 8-11 / 14+ 布局引用发票，
-        # 产品5起须从行14开始，否则合同页引用错位导致产品行丢失
+
+        # 动态扩展（当产品数超过模板预建 16 行容量时）
+        self._extend_invoice_sheet(ws, len(items))
+
+        # 填充所有产品行（行 8 起连续填充，每品 1 行）
         total_amt_inv = 0
         for idx, item in enumerate(items):
             r = 8 + idx
-            if r > 11:
-                r += 2   # 跳过模板预留的行 12、13
-            if r > 23:
-                break
             ws.cell(r, 1).value = "N/M"                       # A: 唛头
             ws.cell(r, 3).value = item.customs_name or ""     # C: 货物名称
             ws.cell(r, 4).value = item.quantity_kg or 0       # D: 数量
@@ -931,12 +1018,13 @@ class DocumentService:
             amt = round(item.total_amount or 0, 2)
             ws.cell(r, 8).value = amt                         # H: 总金额
             total_amt_inv += amt
-        # 汇总行：直接写值（不依赖公式，避免缓存值问题）
+        # 汇总行：N≤16 时固定行 24，N>16 时随扩展下移
+        summary_row = 24 + max(0, len(items) - 16)
         total_words = _amount_to_chinese_upper(total_amt_inv)
-        ws["C24"].value = total_words                         # C: 中文大写金额
-        ws["G24"].value = currency_cn                         # G: 币制（中文）
-        ws["H24"].value = round(total_amt_inv, 2)             # H: 数字金额
-        # 备用：替换模板占位符
+        ws.cell(summary_row, 3).value = total_words           # C: 中文大写金额
+        ws.cell(summary_row, 7).value = currency_cn            # G: 币制（中文）
+        ws.cell(summary_row, 8).value = round(total_amt_inv, 2)  # H: 数字金额
+        # 备用：替换模板占位符（insert_rows 后占位符已下移，replace_placeholder 会搜索整个 sheet）
         replace_placeholder(ws, "{{TOTAL_AMOUNT_WORDS}}", total_words)
         replace_placeholder(ws, "{{TOTAL_AMOUNT}}", round(total_amt_inv, 2))
         replace_placeholder(ws, "{{CURRENCY}}", currency_cn)
@@ -966,8 +1054,12 @@ class DocumentService:
         # 第3行日期：制单日期（今天，与发票 G3 一致）
         ws["H3"] = today
         ws["H3"].number_format = "d/m/yyyy"
+        # 动态扩展产品行（N > 16 时插入新行）
+        self._extend_packing_sheet(ws, len(items))
         # 先清除所有数据行（包括模板残留的公式和空行）
-        for r in range(10, 26):
+        last_product_row = 10 + len(items) - 1
+        clear_end = max(26, last_product_row + 1)
+        for r in range(10, clear_end):
             for c in range(1, 9):
                 ws.cell(r, c).value = None
         # 行7：船名/目的地 — C7:F7 合并显示 "{装货港}  至  {目的国}"
@@ -979,14 +1071,7 @@ class DocumentService:
         ws.cell(7, 8).value = payment_method_cn if payment_method_cn else "电汇"
         # 填充产品数据
         for idx, item in enumerate(items):
-            if idx == 0:
-                # 产品1: 行10
-                r = 10
-            else:
-                # 产品2+: 行11, 12, 13, ...
-                r = 10 + idx
-            if r > 25:
-                break
+            r = 10 + idx
             pc = item.pallet_count or item.drum_count or 0
             qty = item.quantity_kg or 0
             gw = item.gross_weight_kg or 0

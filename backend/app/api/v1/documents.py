@@ -83,8 +83,9 @@ async def generate_booking(fields: BookingFields = Body(...)):
         "GROSS_WEIGHT": fields.gross_weight,
         "MEASUREMENT": fields.measurement,
     }
-    # 新增：DESC1-DESC6 多产品报关名称
-    for i, name in enumerate(fields.customs_names, 1):
+    # 新增：DESC1-DESC6 多产品报关名称（按产品中文名去重，保持顺序）
+    unique_names = list(dict.fromkeys(fields.customs_names))
+    for i, name in enumerate(unique_names[:6], 1):
         fields_dict[f"DESC{i}"] = name
     # DESC 字段兼容单产品模式：如果 customs_names 为空但 desc 有值，fallback 到 DESC1
     if not fields.customs_names and fields.desc:

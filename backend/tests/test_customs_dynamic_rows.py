@@ -115,19 +115,146 @@ def test_n5_regression(monkeypatch):
 
 
 def test_invoice_contract_row_alignment(monkeypatch):
-    """发票页产品5起从行14开始（跳过模板预留的12/13行），与合同页公式引用对齐"""
+    """发票页产品连续填充（行8起），与合同页公式引用对齐"""
     wb = openpyxl.load_workbook(io.BytesIO(generate_customs_bytes(monkeypatch, 8)))
     ws_inv = wb["发票"]
-    ws_con = wb["合同"]
-    # 模板预留空白行 12/13 不被写入
-    assert ws_inv.cell(12, 3).value in (None, "")
-    assert ws_inv.cell(13, 3).value in (None, "")
-    # 产品1-4 在行8-11，产品5/6 落到行14/15（而非行12/13）
+    # 产品连续填充：行8-15
     assert ws_inv.cell(8, 3).value == "有机硅柔软剂1"
     assert ws_inv.cell(11, 3).value == "有机硅柔软剂4"
-    assert ws_inv.cell(14, 3).value == "有机硅柔软剂5"
-    assert ws_inv.cell(15, 3).value == "有机硅柔软剂6"
-    # 合同页公式逐行引用发票：行23/24 对应发票行14/15（产品5/6），不再错位
-    assert ws_con["B23"].value == "=发票!C14"
-    assert ws_con["B24"].value == "=发票!C15"
-    assert ws_con["B26"].value == "=发票!C17"
+    assert ws_inv.cell(12, 3).value == "有机硅柔软剂5"
+    assert ws_inv.cell(13, 3).value == "有机硅柔软剂6"
+    assert ws_inv.cell(14, 3).value == "有机硅柔软剂7"
+    assert ws_inv.cell(15, 3).value == "有机硅柔软剂8"
+    # 汇总行在行24（N=8 <= 16，不触发扩展）
+    assert ws_inv.cell(24, 8).value is not None
+
+
+# ── 发票 Sheet 动态扩展测试 ──────────────────────────────────────────
+
+def load_invoice_sheet(monkeypatch, n_items: int):
+    """获取生成后的发票 sheet"""
+    wb = openpyxl.load_workbook(io.BytesIO(generate_customs_bytes(monkeypatch, n_items)))
+    return wb["发票"], wb
+
+
+def test_invoice_n10_no_extension(monkeypatch):
+    """N=10（< 预建16）：不触发扩展，产品行 8-17，汇总行 24"""
+    ws, _ = load_invoice_sheet(monkeypatch, 10)
+    assert ws.cell(8, 3).value == "有机硅柔软剂1"
+    assert ws.cell(17, 3).value == "有机硅柔软剂10"
+    # 汇总行仍在行24
+    assert ws.cell(24, 8).value is not None
+    assert ws.cell(24, 8).value == 550000.0  # 10000 * (1+2+...+10) = 10000*55
+    # 打印区域不变
+    assert ws.print_area == "'发票'!$A$1:$H$27"
+
+
+def test_invoice_n16_full_prebuilt(monkeypatch):
+    """N=16（= 预建容量）：不触发扩展，产品行 8-23，汇总行 24"""
+    ws, _ = load_invoice_sheet(monkeypatch, 16)
+    assert ws.cell(8, 3).value == "有机硅柔软剂1"
+    assert ws.cell(23, 3).value == "有机硅柔软剂16"
+    # 汇总行仍在行24
+    assert ws.cell(24, 8).value is not None
+    # 打印区域不变
+    assert ws.print_area == "'发票'!$A$1:$H$27"
+
+
+def test_invoice_n20_extend_4_rows(monkeypatch):
+    """N=20（扩展4行）：产品行 8-27，汇总行下移到 28"""
+    ws, _ = load_invoice_sheet(monkeypatch, 20)
+    # 产品行范围
+    assert ws.cell(8, 3).value == "有机硅柔软剂1"
+    assert ws.cell(27, 3).value == "有机硅柔软剂20"
+    # 汇总行下移到 28 = 24 + (20-16)
+    assert ws.cell(28, 8).value is not None   # H: 数字金额
+    assert ws.cell(28, 3).value is not None   # C: 中文大写金额
+    assert ws.cell(28, 7).value is not None   # G: 币制
+    # 打印区域扩展 4 行（原 27 + 4 = 31）
+    assert ws.print_area == "'发票'!$A$1:$H$31"
+    # 新行样式：行 24 应有行高（从行 23 复制）
+    assert ws.row_dimensions[24].height == 30.0
+    # 新行样式：A 列有边框（从行 23 复制）
+    assert ws.cell(24, 1).border.left.style is not None
+
+
+def test_invoice_n38_extend_22_rows(monkeypatch):
+    """N=38（扩展22行）：产品行 8-45，汇总行下移到 46"""
+    ws, _ = load_invoice_sheet(monkeypatch, 38)
+    # 产品行范围
+    assert ws.cell(8, 3).value == "有机硅柔软剂1"
+    assert ws.cell(45, 3).value == "有机硅柔软剂38"
+    # 汇总行下移到 46 = 24 + (38-16)
+    assert ws.cell(46, 8).value is not None
+    assert ws.cell(46, 3).value is not None
+    assert ws.cell(46, 7).value is not None
+    # 打印区域扩展 22 行（原 27 + 22 = 49）
+    assert ws.print_area == "'发票'!$A$1:$H$49"
+    # 新行样式验证
+    assert ws.row_dimensions[24].height == 30.0
+    assert ws.row_dimensions[45].height == 30.0
+    assert ws.cell(24, 1).border.left.style is not None
+    assert ws.cell(45, 1).border.left.style is not None
+
+
+# ── 箱单 Sheet 动态扩展测试 ──────────────────────────────────────────
+
+def load_packing_sheet(monkeypatch, n_items: int):
+    wb = openpyxl.load_workbook(io.BytesIO(generate_customs_bytes(monkeypatch, n_items)))
+    return wb["箱单"], wb
+
+
+def test_packing_n10_no_extend(monkeypatch):
+    """N=10（< 预建16行）：不触发扩展，汇总行保持在行26"""
+    ws, _ = load_packing_sheet(monkeypatch, 10)
+    # 汇总行仍在行26
+    assert ws.cell(26, 3).value == "=SUM(C10:C25)"
+    # 打印区域不变
+    assert ws.print_area == "'箱单'!$A$1:$H$28"
+    # 产品数据正确写入
+    assert ws.cell(10, 2).value == "有机硅柔软剂1"
+    assert ws.cell(19, 2).value == "有机硅柔软剂10"
+
+
+def test_packing_n16_exact(monkeypatch):
+    """N=16（= 预建容量）：不触发扩展，行25为最后一个产品行"""
+    ws, _ = load_packing_sheet(monkeypatch, 16)
+    assert ws.cell(26, 3).value == "=SUM(C10:C25)"
+    assert ws.print_area == "'箱单'!$A$1:$H$28"
+    assert ws.cell(25, 2).value == "有机硅柔软剂16"
+
+
+def test_packing_n20_extend4(monkeypatch):
+    """N=20（扩展4行）：汇总行下移到行30，打印区域更新"""
+    ws, _ = load_packing_sheet(monkeypatch, 20)
+    # 汇总行下移到 26+4=30
+    assert ws.cell(30, 3).value == "=SUM(C10:C29)"
+    assert ws.cell(30, 5).value == "=SUM(E10:E29)"
+    assert ws.cell(30, 7).value == "=SUM(G10:G29)"
+    assert ws.cell(30, 8).value == "=SUM(H10:H29)"
+    # 打印区域更新（汇总30 + 页脚2行 = 32）
+    assert ws.print_area == "'箱单'!$A$1:$H$32"
+    # 扩展行有样式（A列左边框，与模板行25一致）
+    assert ws.cell(26, 1).border.left.style == "thin"
+    # 扩展行有正确行高
+    assert ws.row_dimensions[26].height == 30.0
+    # 最后一个产品在行29
+    assert ws.cell(29, 2).value == "有机硅柔软剂20"
+
+
+def test_packing_n38_extend22(monkeypatch):
+    """N=38（扩展22行）：汇总行下移到行48，所有产品正确填充"""
+    ws, _ = load_packing_sheet(monkeypatch, 38)
+    # 汇总行下移到 26+22=48
+    assert ws.cell(48, 3).value == "=SUM(C10:C47)"
+    assert ws.cell(48, 5).value == "=SUM(E10:E47)"
+    assert ws.cell(48, 7).value == "=SUM(G10:G47)"
+    assert ws.cell(48, 8).value == "=SUM(H10:H47)"
+    # 打印区域（汇总48 + 页脚2行 = 50）
+    assert ws.print_area == "'箱单'!$A$1:$H$50"
+    # 第一个和最后一个产品
+    assert ws.cell(10, 2).value == "有机硅柔软剂1"
+    assert ws.cell(47, 2).value == "有机硅柔软剂38"
+    # 扩展行样式（A列左边框）
+    assert ws.cell(30, 1).border.left.style == "thin"
+    assert ws.row_dimensions[30].height == 30.0

@@ -1097,18 +1097,19 @@ class DocumentService:
         ws = ws_contract
         # 动态更新合同页公式引用（模板中公式引用发票行8-11和14-20，需要更新为连续行）
         # 合同页行19-29对应产品1-11，需要引用发票行8-18
-        cols_to_update = [2, 4, 5, 6, 7, 8]  # B, D, E, F, G, H 列
+        # 列映射：合同B列->发票C列，合同D-H列->发票D-H列
+        col_mapping = {2: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 8}  # 合同列->发票列
         for contract_row in range(19, 30):
             product_idx = contract_row - 19  # 0-based product index
             if product_idx < len(items):
                 invoice_row = 8 + product_idx  # 发票行号（从行8开始）
-                for col in cols_to_update:
-                    col_letter = chr(64 + col)  # 2->B, 4->D, 5->E, 6->F, 7->G, 8->H
-                    ws.cell(contract_row, col).value = f"=发票!{col_letter}{invoice_row}"
+                for contract_col, invoice_col in col_mapping.items():
+                    invoice_col_letter = chr(64 + invoice_col)  # 3->C, 4->D, 5->E, 6->F, 7->G, 8->H
+                    ws.cell(contract_row, contract_col).value = f"=发票!{invoice_col_letter}{invoice_row}"
             else:
                 # 超出产品数的行清空公式
-                for col in cols_to_update:
-                    ws.cell(contract_row, col).value = None
+                for contract_col in col_mapping.keys():
+                    ws.cell(contract_row, contract_col).value = None
         # 卖方名称（C2 已有公式 =报关单!A4，无需额外填充）
         # 买方名称（C8 已有公式 =报关单!A6，无需额外填充）
         if consignee_addr:

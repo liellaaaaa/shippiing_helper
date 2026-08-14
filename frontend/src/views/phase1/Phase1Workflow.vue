@@ -204,7 +204,7 @@
           row-key="rowUid"
           :tree-props="{ children: 'children' }"
           default-expand-all
-          border stripe size="small"
+          border size="small"
           max-height="400"
           style="margin-top: 4px"
           :row-class-name="mergeRowClassName"
@@ -219,8 +219,6 @@
                 <span style="color:#909399;font-size:12px;margin-left:4px">{{ row.children?.length || 0 }}项</span>
               </template>
               <template v-else>
-                <el-tag v-if="row.source_note === '仅PI合同表'" size="small" type="warning" style="margin-right:4px">PI</el-tag>
-                <el-tag v-else-if="row.source_note === '仅销售订单表'" size="small" type="info" style="margin-right:4px">SO</el-tag>
                 <el-input v-model="row.internal_code" size="small" />
               </template>
             </template>
@@ -1059,8 +1057,8 @@ function handleReset() {
 .validation-warn { font-size: 13px; margin-top: 4px; }
 
 /* 合并预览行高亮 */
-:deep(.row-pi-only) { background-color: #fdf6ec !important; }
+:deep(.row-pi-only td.el-table__cell) { background-color: #fdf6ec !important; }
 :deep(.row-pi-only:hover > td.el-table__cell) { background-color: #faecd8 !important; }
-:deep(.row-so-only) { background-color: #ecf5ff !important; }
+:deep(.row-so-only td.el-table__cell) { background-color: #ecf5ff !important; }
 :deep(.row-so-only:hover > td.el-table__cell) { background-color: #d9ecff !important; }
 </style>

@@ -84,9 +84,27 @@ def detect_delimiter(raw_text: str) -> str:
 
 # 空格分隔符的拆分函数
 def split_by_spaces(line: str) -> list[str]:
-    """按连续4+空格拆分一行（兼容企业微信粘贴格式）"""
+    """按连续空格拆分一行（兼容企业微信粘贴格式，保留空列）。
+
+    企业微信在线表格复制时，列间用8个空格分隔。
+    当某列为空时，会产生16个空格（前一列尾部8空格 + 后一列头部8空格），
+    此时需插入一个空字符串以保留空列，避免后续列全部左移。
+    """
     import re
-    return [p.strip() for p in re.split(r"  {4,}", line)]
+    # 先按4+空格拆分，保留分隔符
+    parts = re.split(r"( {4,})", line)
+    result: list[str] = []
+    for i, part in enumerate(parts):
+        if i % 2 == 0:  # 值部分
+            if part:
+                result.append(part.strip())
+        else:  # 分隔符部分（4+空格）
+            # 若分隔符>=8空格，按每8空格一组计算，多出的组数表示空列
+            if len(part) >= 8:
+                empty_cols = len(part) // 8 - 1
+                for _ in range(empty_cols):
+                    result.append("")
+    return result
 
 
 def split_lines(text: str) -> list[str]:

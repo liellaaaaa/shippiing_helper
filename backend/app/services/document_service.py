@@ -1018,6 +1018,9 @@ class DocumentService:
             amt = round(item.total_amount or 0, 2)
             ws.cell(r, 8).value = amt                         # H: 总金额
             total_amt_inv += amt
+            # 合并唛头列（A:B）- 模板中行8-10已合并，扩展行需要手动合并
+            if idx >= 3:  # 行11开始（idx=3对应行11）
+                ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=2)
         # 汇总行：N≤16 时固定行 24，N>16 时随扩展下移
         summary_row = 24 + max(0, len(items) - 16)
         total_words = _amount_to_chinese_upper(total_amt_inv)
@@ -1078,7 +1081,7 @@ class DocumentService:
             nw = item.quantity_kg or item.net_weight_kg or 0
             unit = "件"
             qty_unit = "千克"
-            ws.cell(r, 1).value = "N/M" if idx == 0 else None   # A: 箱号（仅第1行）
+            ws.cell(r, 1).value = "N/M"                       # A: 箱号（所有行都填）
             ws.cell(r, 2).value = item.customs_name or ""       # B: 货物名称
             ws.cell(r, 3).value = pc                            # C: 件数
             ws.cell(r, 4).value = unit                          # D: 件数单位
@@ -1089,9 +1092,23 @@ class DocumentService:
 
         # ══════════════════════════════════════════════════════════════
         # Sheet 4: 合同 — 填充占位符 + 无公式的独立单元格
-        # （产品数据通过公式引用发票，无需手动填充）
+        # （产品数据通过公式引用发票，需要动态更新公式）
         # ══════════════════════════════════════════════════════════════
         ws = ws_contract
+        # 动态更新合同页公式引用（模板中公式引用发票行8-11和14-20，需要更新为连续行）
+        # 合同页行19-29对应产品1-11，需要引用发票行8-18
+        cols_to_update = [2, 4, 5, 6, 7, 8]  # B, D, E, F, G, H 列
+        for contract_row in range(19, 30):
+            product_idx = contract_row - 19  # 0-based product index
+            if product_idx < len(items):
+                invoice_row = 8 + product_idx  # 发票行号（从行8开始）
+                for col in cols_to_update:
+                    col_letter = chr(64 + col)  # 2->B, 4->D, 5->E, 6->F, 7->G, 8->H
+                    ws.cell(contract_row, col).value = f"=发票!{col_letter}{invoice_row}"
+            else:
+                # 超出产品数的行清空公式
+                for col in cols_to_update:
+                    ws.cell(contract_row, col).value = None
         # 卖方名称（C2 已有公式 =报关单!A4，无需额外填充）
         # 买方名称（C8 已有公式 =报关单!A6，无需额外填充）
         if consignee_addr:

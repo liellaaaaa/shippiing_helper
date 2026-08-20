@@ -86,9 +86,10 @@
                 placeholder="请选择发货人"
                 size="small"
                 style="width:100%"
-                @change="(val: string) => { if (val === '__other__') { shipperEditing = true; shipperSelectValue = '' } else if (val === 'HONGHAO') { currentOrderInfo.shipper = SHIPPER_OPTIONS[0] } }"
+                @change="(val: string) => { if (val === '__other__') { shipperEditing = true; shipperSelectValue = '' } else if (val === 'HONGHAO') { currentOrderInfo.shipper = SHIPPER_OPTIONS[0] } else if (val === 'MINHAO') { currentOrderInfo.shipper = SHIPPER_OPTIONS[1] } }"
               >
                 <el-option label="HONGHAO CHEMICAL CO., LTD." value="HONGHAO" />
+                <el-option label="GUANGZHOU MINHAO NEW MATERIAL CO. LTD." value="MINHAO" />
                 <el-option label="其他" value="__other__" />
               </el-select>
               <span v-else class="info-value muted">—</span>
@@ -213,6 +214,10 @@ const SHIPPER_MAP: Record<string, string> = {
   '宏昊化工': SHIPPER_OPTIONS[0],
   '广东宏昊': SHIPPER_OPTIONS[0],
   '广东宏昊化工': SHIPPER_OPTIONS[0],
+  '民浩': SHIPPER_OPTIONS[1],
+  '民浩化工': SHIPPER_OPTIONS[1],
+  '广州民浩': SHIPPER_OPTIONS[1],
+  '广州民浩新材料': SHIPPER_OPTIONS[1],
 }
 
 /** 过滤子项，只保留组头行和独立行（用于非 MSDS 文档的汇总计算） */
@@ -228,6 +233,12 @@ function getShipperFromTitle(title?: string | null): string {
     if (key.includes(t) || t.includes(key)) return val
   }
   return SHIPPER_OPTIONS[0]
+}
+
+function getShipperSelectKey(shipperVal: string): string {
+  if (shipperVal === SHIPPER_OPTIONS[0]) return 'HONGHAO'
+  if (shipperVal === SHIPPER_OPTIONS[1]) return 'MINHAO'
+  return shipperVal ? '__other__' : ''
 }
 
 const route = useRoute()
@@ -400,7 +411,7 @@ async function onOrderChange(orderId: number): Promise<void> {
 
       const shipperVal = getShipperFromTitle(ledgerRecord.shipment_title)
       currentOrderInfo.value.shipper = shipperVal
-      shipperSelectValue.value = shipperVal === SHIPPER_OPTIONS[0] ? 'HONGHAO' : (shipperVal ? '__other__' : '')
+      shipperSelectValue.value = getShipperSelectKey(shipperVal)
 
       if (ledgerRecord.pi_no) {
         piList.value = [{ pi_no: ledgerRecord.pi_no, consignee_name: ledgerRecord.consignee_name || '', consignee_address: ledgerRecord.consignee_address || '', destination: ledgerRecord.destination || '' }]
@@ -528,8 +539,8 @@ function onMsdsGenerated(config: any) {
   currentConfig.value = config
 }
 
-onMounted(() => {
-  loadOrderList()
+onMounted(async () => {
+  await loadOrderList()
   if (selectedOrderId.value) onOrderChange(selectedOrderId.value)
   if (selectedLedgerId.value) loadLedgerRecord(selectedLedgerId.value)
 })
@@ -620,7 +631,7 @@ async function loadLedgerRecord(ledgerId: number) {
     // 同步发货人下拉框选中值
     const shipperVal = getShipperFromTitle(record.shipment_title)
     currentOrderInfo.value.shipper = shipperVal
-    shipperSelectValue.value = shipperVal === SHIPPER_OPTIONS[0] ? 'HONGHAO' : (shipperVal ? '__other__' : '')
+    shipperSelectValue.value = getShipperSelectKey(shipperVal)
     // 填充 PI 下拉列表
     if (record.pi_no) {
       piList.value = [{ pi_no: record.pi_no, consignee_name: record.consignee_name || '', consignee_address: record.consignee_address || '', destination: record.destination || '' }]

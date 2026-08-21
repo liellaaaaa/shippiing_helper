@@ -151,17 +151,20 @@ async def load_msds(msds_id: int):
 async def generate_customs(
     order_id: int | None = Query(None),
     ledger_record_id: int | None = Query(None),
+    company_code: str | None = Query(None, description="公司代码：honghao / minhao"),
 ):
     """
     生成出口报关资料工作簿（5个 sheet 的 xlsx）。
 
     优先使用 ledger_record_id（台账记录，含三源完整数据）填充；
     其次使用 order_id（回退兼容）。
+    company_code 控制使用哪家公司的抬头信息（默认 honghao）。
     """
     svc = DocumentService()
     content, doc_key, _ = svc.generate_customs(
         order_id=order_id,
         ledger_record_id=ledger_record_id,
+        company_code=company_code,
     )
     token, config, safe_key = oo_svc.create_config(doc_key, "xlsx")
     _save_doc_to_db(doc_key, "customs", content, order_id=order_id, storage_key=safe_key)

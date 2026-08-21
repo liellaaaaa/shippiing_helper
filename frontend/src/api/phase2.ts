@@ -22,9 +22,9 @@ export const phase2Api = {
   generateMsds(product: string) {
     return apiClient.get('/documents/msds', { params: { product } })
   },
-  generateCustoms(orderId: number | null, ledgerRecordId?: number) {
+  generateCustoms(orderId: number | null, ledgerRecordId?: number, companyCode?: string) {
     return apiClient.get('/documents/customs', {
-      params: { order_id: orderId, ledger_record_id: ledgerRecordId }
+      params: { order_id: orderId, ledger_record_id: ledgerRecordId, company_code: companyCode }
     })
   },
   getDocHistory(orderId: number) {

@@ -241,6 +241,17 @@ function getShipperSelectKey(shipperVal: string): string {
   return shipperVal ? '__other__' : ''
 }
 
+/** 从发货人选择推导公司代码（用于报关资料模板） */
+function getCompanyCodeFromShipper(): string | undefined {
+  const key = shipperSelectValue.value
+  if (key === 'MINHAO') return 'minhao'
+  if (key === 'HONGHAO') return 'honghao'
+  // 未选择或自定义时，尝试从 shipment_title 模糊匹配
+  const title = currentOrderInfo.value.shipment_title || ''
+  if (title.includes('民浩') || title.includes('MINHAO')) return 'minhao'
+  return undefined // 默认 honghao（后端 fallback）
+}
+
 const route = useRoute()
 
 const selectedOrderId = ref<number | null>(null)
@@ -494,7 +505,8 @@ async function openCustomsDocument() {
     return
   }
   try {
-    const res = await phase2Api.generateCustoms(null, selectedLedgerId.value)
+    const companyCode = getCompanyCodeFromShipper()
+    const res = await phase2Api.generateCustoms(null, selectedLedgerId.value, companyCode)
     currentDocKey.value = res.data.documentKey || res.data.docKey || ''
     currentConfig.value = res.data || res
   } catch (e: any) {

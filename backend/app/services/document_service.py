@@ -118,6 +118,40 @@ def clear_markers(ws):
                 cell.value = None
 
 
+# 公司印章位置：(sheet名, 图片索引)
+# 每家公司只用一个印章图片，替换到所有位置
+_STAMP_POSITIONS = [
+    ("报关单", 0),
+    ("发票", 0),
+    ("箱单", 0),
+    ("合同", 0),
+    ("委托书", 2),
+    ("委托书", 3),
+]
+
+STAMPS_DIR = os.path.join(os.path.dirname(TEMPLATES["customs"]), "stamps")
+
+
+def _replace_company_stamps(wb, company_code: str):
+    """按 company_code 用该公司印章替换工作簿中所有印章位置。"""
+    if not company_code:
+        return
+    from openpyxl.drawing.image import Image as XlImage
+    stamp_path = os.path.join(STAMPS_DIR, f"{company_code}.png")
+    if not os.path.exists(stamp_path):
+        return
+    for sheet_name, img_idx in _STAMP_POSITIONS:
+        ws = wb[sheet_name]
+        if img_idx >= len(ws._images):
+            continue
+        old_img = ws._images[img_idx]
+        new_img = XlImage(stamp_path)
+        new_img.width = old_img.width
+        new_img.height = old_img.height
+        new_img.anchor = old_img.anchor
+        ws._images[img_idx] = new_img
+
+
 def replace_placeholder(ws, placeholder: str, value) -> bool:
     """在 worksheet 中查找 {{占位符}} 并替换为 value。返回是否替换成功。"""
     if value is None:
@@ -746,6 +780,7 @@ class DocumentService:
         order_id: int | None = None,       # OrderPiRecord 主键 ID（非业务订单号）
         ledger_record_id: int | None = None,
         order_no: str | None = None,
+        company_code: str | None = None,   # 公司代码：honghao / minhao
     ) -> Tuple[bytes, str, str]:
         """
         生成报关资料工作簿（5个 sheet 的 xlsx）。
@@ -763,6 +798,9 @@ class DocumentService:
         import openpyxl
         from app.services.ledger_service import LedgerService
         from app.services.customs_declaration_service import CustomsDeclarationService
+
+        from app.core.company_config import get_company_profile
+        profile = get_company_profile(company_code)
 
         template_path = TEMPLATES["customs"]
         if not os.path.exists(template_path):
@@ -843,6 +881,18 @@ class DocumentService:
 
         decl_svc = CustomsDeclarationService.get_instance()
 
+        # ── 公司印章替换（按 company_code 切换）───────────────────
+        _replace_company_stamps(wb, profile.get("code", ""))
+
+        # ── 公司信息占位符（始终替换，即使无订单数据）──────────────
+        replace_placeholder(ws_customs, "{{COMPANY_NAME}}", profile["name_cn"])
+        replace_placeholder(ws_customs, "{{TAX_ID}}", profile["tax_id"])
+        replace_placeholder(ws_contract, "{{COMPANY_NAME}}", profile["name_cn"])
+        replace_placeholder(ws_contract, "{{COMPANY_ADDR}}", profile["address_cn"])
+        replace_placeholder(ws_contract, "{{COMPANY_PHONE}}", profile["phone"])
+        replace_placeholder(ws_contract, "{{COMPANY_FAX}}", profile["fax"])
+        ws_contract["G10"] = profile["source_location"]
+
         # ── 无数据：返回未填充模板 ──────────────────────────────────
         if not record:
             buf = BytesIO()
@@ -889,7 +939,6 @@ class DocumentService:
         # Sheet 1: 报关单 — 占位符替换
         # ══════════════════════════════════════════════════════════════
         ws = ws_customs
-        # 固定值：A4 公司名（模板中已预填，保持不变）
         # 表头动态字段
         replace_placeholder(ws, "{{CONSIGNEE}}", consignee)
         replace_placeholder(ws, "{{CONTRACT_NO}}", pi_no)
@@ -914,10 +963,10 @@ class DocumentService:
         for idx, item in enumerate(items):
             row = 20 + idx * 3
 
-        # 业务说明：以下硬编码值适用于宏昊化工出口业务场景
+        # 业务说明：
         # 千克（KG）— 化工品标准计量单位
         # 中国 — 出口报关原产国
-        # 肇庆 — 公司所在地，境内货源地
+        # 境内货源地 — 从 company_config 动态读取
         # 照章征税 — 一般贸易默认征免方式
 
             ws.cell(row, 1, idx + 1)                           # A: 项号
@@ -933,7 +982,7 @@ class DocumentService:
             ws.cell(row, 11, "中国")                            # K: 原产国
             if dest_country_cn:
                 ws.cell(row, 13, dest_country_cn)               # M: 最终目的国
-            ws.cell(row, 16, "肇庆")                            # P: 境内货源地
+            ws.cell(row, 16, profile["source_location"])         # P: 境内货源地
             ws.cell(row, 19, "照章征税")                        # S: 征免
 
             # 申报要素（行 row+1, D 列）— 从 JSON 复制整块，替换成分
@@ -1115,7 +1164,6 @@ class DocumentService:
         if consignee_addr:
             replace_placeholder(ws, "{{CONSIGNEE_ADDR}}", consignee_addr)
             replace_placeholder(ws, "{{BUYER_ADDR}}", consignee_addr)
-        # 固定值：G10 肇庆（模板中已预填，保持不变）
         # 成交方式：从PI数据填充（CIF/EXW/FOB/C&F等）
         replace_placeholder(ws, "{{PRICE_TERM}}", price_term)
         replace_placeholder(ws, "{{DEST_PORT}}", dest_city_cn)

@@ -167,6 +167,97 @@ CITY_CN_MAP: dict[str, str] = {
     "ashgabat": "阿什哈巴德",
 }
 
+# 城市→国家英文名映射：当 destination 只有城市名时，自动推断所属国家
+CITY_TO_COUNTRY: dict[str, str] = {
+    # Turkey
+    "izmit": "turkey", "kocaeli": "turkey", "istanbul": "turkey",
+    "mersin": "turkey", "aliaga": "turkey", "ambarlı": "turkey",
+    # Indonesia
+    "jakarta": "indonesia", "surabaya": "indonesia", "tanjung priok": "indonesia",
+    # Thailand
+    "bangkok": "thailand", "tangkok": "thailand", "laem chabang": "thailand",
+    "lat krabang": "thailand",
+    # Vietnam
+    "ho chi minh": "vietnam", "hcmc": "vietnam", "haiphong": "vietnam",
+    # Philippines
+    "manila": "philippines",
+    # Korea
+    "busan": "korea", "incheon": "korea",
+    # Japan
+    "tokyo": "japan", "yokohama": "japan", "osaka": "japan",
+    # China
+    "shanghai": "china", "ningbo": "china", "qingdao": "china",
+    "tianjin": "china", "dalian": "china", "xiamen": "china",
+    "guangzhou": "china", "shenzhen": "china", "yantian": "china",
+    "shekou": "china", "chiwan": "china",
+    # Taiwan
+    "hong kong": "china", "hkg": "china",
+    "taipei": "taiwan", "kaohsiung": "taiwan", "keelung": "taiwan",
+    # Singapore
+    "singapore port": "singapore", "port of singapore": "singapore",
+    # Sri Lanka
+    "colombo": "sri lanka",
+    # India
+    "chennai": "india", "mumbai": "india", "nhava sheva": "india",
+    "ahmedabad": "india",
+    # Pakistan
+    "karachi": "pakistan",
+    # Bangladesh
+    "chittagong": "bangladesh",
+    # Malaysia
+    "port klang": "malaysia", "penang": "malaysia",
+    # UAE
+    "dubai": "uae", "jebel ali": "uae",
+    # USA
+    "los angeles": "usa", "long beach": "usa", "new york": "usa",
+    # Netherlands
+    "rotterdam": "netherlands",
+    # Germany
+    "hamburg": "germany",
+    # Belgium
+    "antwerp": "belgium",
+    # Poland
+    "gdansk": "poland",
+    # UK
+    "london": "uk", "felixstowe": "uk",
+    # France
+    "le havre": "france",
+    # Spain
+    "barcelona": "spain", "valencia": "spain",
+    # Italy
+    "genoa": "italy",
+    # New Zealand
+    "auckland": "new zealand",
+    # Australia
+    "sydney": "australia", "melbourne": "australia",
+    # Albania
+    "durresi": "albania",
+    # Ivory Coast
+    "abidjan": "ivory coast",
+    # Kenya
+    "mombasa": "kenya",
+    # Nigeria
+    "lagos": "nigeria",
+    # Senegal
+    "dakar": "senegal",
+    # Morocco
+    "casablanca": "morocco",
+    # Egypt
+    "alexandria": "egypt", "port said": "egypt", "damietta": "egypt",
+    # Uzbekistan
+    "tashkent": "uzbekistan", "kokand": "uzbekistan",
+    # Kazakhstan
+    "almaty": "kazakhstan", "astana": "kazakhstan",
+    # Tajikistan
+    "dushanbe": "tajikistan",
+    # Kyrgyzstan
+    "bishkek": "kyrgyzstan",
+    # Turkmenistan
+    "ashgabat": "turkmenistan",
+    # Mexico
+    "cdmx airport": "mexico",
+}
+
 
 def _lookup_city(dest_lower: str) -> str | None:
     """尝试匹配城市名的中文翻译（数据库对照优先，内置字典回退）"""
@@ -194,6 +285,16 @@ def _lookup_country(dest_lower: str) -> str | None:
         return COUNTRY_CN_MAP[dest_lower]
     for key, val in COUNTRY_CN_MAP.items():
         if key in dest_lower or dest_lower in key:
+            return val
+    return None
+
+
+def _lookup_city_country(city_lower: str) -> str | None:
+    """根据城市英文名推断所属国家英文名（用于纯城市名场景）"""
+    if city_lower in CITY_TO_COUNTRY:
+        return CITY_TO_COUNTRY[city_lower]
+    for key, val in CITY_TO_COUNTRY.items():
+        if key in city_lower or city_lower in key:
             return val
     return None
 
@@ -269,7 +370,18 @@ def parse_destination(dest: str) -> tuple[str, str]:
     # 策略3：无逗号，尝试整体匹配城市表
     city_cn = _lookup_city(dest_stripped.lower())
     if city_cn:
+        # 尝试通过城市推断国家
+        country_en = _lookup_city_country(dest_stripped.lower())
+        if country_en:
+            country_cn = _lookup_country(country_en)
+            return (city_cn, country_cn or country_en)
         return (city_cn, dest_stripped)
+
+    # 策略3b：城市名不在翻译表中，但可能在 CITY_TO_COUNTRY 中有映射
+    country_en = _lookup_city_country(dest_stripped.lower())
+    if country_en:
+        country_cn = _lookup_country(country_en)
+        return (dest_stripped, country_cn or country_en)
 
     # 都匹配不到，返回原值
     return (dest_stripped, dest_stripped)

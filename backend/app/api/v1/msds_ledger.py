@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from typing import Optional
 from app.database import SessionLocal
 from app.services.msds_ledger_service import msds_ledger_svc
+from app.services.onlyoffice_service import convert_docx_to_pdf_batch
 
 
 router = APIRouter(prefix="/api/v1/msds-ledger", tags=["msds-ledger"])
@@ -249,10 +250,6 @@ async def batch_generate(request: BatchGenerateRequest):
                     ledger_data["appearance"],
                     "cn"
                 )
-                # Handle PDF conversion if requested
-                if request.output_format == "pdf":
-                    cn_bytes, ext = MSDSGeneratorService.convert_docx_to_pdf(cn_bytes)
-                    cn_filename = os.path.splitext(cn_filename)[0] + ext
                 cn_filename = _unique_filename(cn_filename, used_filenames)
                 generated_files.append((cn_bytes, cn_filename))
 
@@ -268,10 +265,6 @@ async def batch_generate(request: BatchGenerateRequest):
                     ledger_data["appearance"],
                     "en"
                 )
-                # Handle PDF conversion if requested
-                if request.output_format == "pdf":
-                    en_bytes, ext = MSDSGeneratorService.convert_docx_to_pdf(en_bytes)
-                    en_filename = os.path.splitext(en_filename)[0] + ext
                 en_filename = _unique_filename(en_filename, used_filenames)
                 generated_files.append((en_bytes, en_filename))
 
@@ -283,6 +276,20 @@ async def batch_generate(request: BatchGenerateRequest):
                 except:
                     product_name = str(ledger_id)
                 errors.append((ledger_id, product_name, str(e)))
+
+        # Phase 2: Convert all docx to PDF in parallel if requested
+        if request.output_format == "pdf" and generated_files:
+            conversion_tasks = [(content, fname) for content, fname in generated_files]
+            results = await convert_docx_to_pdf_batch(conversion_tasks)
+            converted_files = []
+            for i, (content_bytes, ext) in enumerate(results):
+                original_content, original_name = generated_files[i]
+                name_no_ext = os.path.splitext(original_name)[0]
+                if ext == ".pdf":
+                    converted_files.append((content_bytes, name_no_ext + ".pdf"))
+                else:
+                    converted_files.append((original_content, original_name))
+            generated_files = converted_files
 
         # Package ZIP
         zip_buf = BytesIO()

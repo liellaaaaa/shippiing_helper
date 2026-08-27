@@ -925,7 +925,7 @@ class DocumentService:
         payment_method_cn = _classify_payment_method_cn(payment_terms)
         pi_date = record.pi_date or ""
         today = datetime.now().date()  # 制单日期（制作单据当天）
-        currency = getattr(record, "currency", None) or "CNY"  # 默认人民币
+        currency = getattr(record, "currency", None) or "USD"  # 默认美元
         currency_cn = _currency_to_chinese(currency)  # 币制中文名（美元/人民币）
         total_pallets = sum(it.pallet_count or 0 for it in items)
         total_drums = sum(it.drum_count or 0 for it in items)

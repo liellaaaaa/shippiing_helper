@@ -55,11 +55,17 @@ class BatchGenerateRequest(BaseModel):
 
 
 @router.get("")
-async def list_ledger(keyword: Optional[str] = None):
+async def list_ledger(
+    keyword: Optional[str] = None,
+    page: Optional[int] = Query(None, ge=1, description="页码（从1开始）"),
+    page_size: Optional[int] = Query(None, ge=1, le=500, description="每页条数"),
+    customs_names: Optional[str] = Query(None, description="逗号分隔的报关名称列表，用于按订单过滤"),
+):
     db = SessionLocal()
     try:
-        items = msds_ledger_svc.list_ledger(db, keyword)
-        return {"items": [_to_dict(i) for i in items]}
+        names_list = [n.strip() for n in customs_names.split(",") if n.strip()] if customs_names else None
+        items, total = msds_ledger_svc.list_ledger(db, keyword, page, page_size, names_list)
+        return {"items": [_to_dict(i) for i in items], "total": total}
     finally:
         db.close()
 

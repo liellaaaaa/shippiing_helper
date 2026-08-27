@@ -36,15 +36,25 @@ def _auto_fill_english(data: dict) -> dict:
 
 class MsdsLedgerService:
 
-    def list_ledger(self, db: Session, keyword: Optional[str] = None) -> list:
+    def list_ledger(self, db: Session, keyword: Optional[str] = None,
+                    page: Optional[int] = None, page_size: Optional[int] = None,
+                    customs_names: Optional[list[str]] = None) -> tuple[list, int]:
+        """Return (items, total). When page/page_size are None, return all items (no pagination).
+        When customs_names is provided, filter to only those names."""
         query = db.query(MsdsLedger)
+        if customs_names:
+            query = query.filter(MsdsLedger.customs_name.in_(customs_names))
         if keyword:
             like_pattern = f"%{keyword}%"
             query = query.filter(
                 (MsdsLedger.customs_name.like(like_pattern)) |
                 (MsdsLedger.product_name_en.like(like_pattern))
             )
-        return query.order_by(MsdsLedger.customs_name).all()
+        total = query.count()
+        query = query.order_by(MsdsLedger.customs_name)
+        if page is not None and page_size is not None:
+            query = query.offset((page - 1) * page_size).limit(page_size)
+        return query.all(), total
 
     def get_ledger(self, db: Session, ledger_id: int) -> Optional[MsdsLedger]:
         return db.query(MsdsLedger).filter(MsdsLedger.id == ledger_id).first()

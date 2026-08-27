@@ -34,8 +34,8 @@ export interface BatchGenerateMsdsRequest {
 }
 
 export const msdsLedgerApi = {
-  list(params?: { keyword?: string }) {
-    return apiClient.get<{ items: MsdsLedgerItem[] }>('/msds-ledger', { params })
+  list(params?: { keyword?: string; page?: number; page_size?: number; customs_names?: string }) {
+    return apiClient.get<{ items: MsdsLedgerItem[]; total: number }>('/msds-ledger', { params })
   },
 
   get(id: number) {

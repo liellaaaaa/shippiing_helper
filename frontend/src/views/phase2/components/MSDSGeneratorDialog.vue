@@ -155,6 +155,21 @@
       <el-table-column prop="ph" label="pH值" width="80" />
     </el-table>
 
+    <!-- 分页 -->
+    <div class="pagination-wrap">
+      <el-pagination
+        v-model:current-page="pagination.currentPage"
+        v-model:page-size="pagination.pageSize"
+        :total="pagination.total"
+        :page-sizes="[10, 20, 50, 100]"
+        layout="total, sizes, prev, pager, next, jumper"
+        background
+        small
+        @current-change="onPageChange"
+        @size-change="onPageSizeChange"
+      />
+    </div>
+
     <!-- 单选操作按钮 -->
     <div v-if="!batchMode && selectedItem" class="detail-actions">
       <el-button size="small" @click="showEditDialog">编辑</el-button>
@@ -257,7 +272,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, reactive } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import { msdsLedgerApi, type MsdsLedgerItem, type CompositionItem } from '@/api/msds-ledger'
@@ -287,6 +302,18 @@ const mismatchCount = computed(() => newFormulas.value.filter((f: any) => f.pctM
 const batchMode = ref(false)
 const selectedItems = ref<MsdsLedgerItem[]>([])
 const showBatchGenerate = ref(false)
+
+// 分页相关
+const pagination = reactive({
+  currentPage: 1,
+  pageSize: 20,
+  total: 0,
+})
+// 当有订单上下文时，全量缓存（客户端分页+排序）
+const allOrderItems = ref<MsdsLedgerItem[]>([])
+const hasOrderContext = computed(() => orderItemsNames.value.length > 0)
+// 防止 applyClientPagination 触发 onSelectionChange 清除选中
+let suppressSelectionChange = false
 
 // 表单相关
 const showForm = ref(false)
@@ -394,6 +421,8 @@ watch(() => props.modelValue, (v) => {
   if (v) {
     searchKeyword.value = ''
     showEditList.value = false
+    pagination.currentPage = 1
+    allOrderItems.value = []
     // Extract order items info for filtering and composition check
     if (props.orderItems && props.orderItems.length > 0) {
       const names = [...new Set(props.orderItems.map((it: any) => it.customs_name || it.order?.customs_name || it.pi?.customs_name).filter(Boolean))]
@@ -421,21 +450,21 @@ watch(visible, (v) => emit('update:modelValue', v))
 async function loadLedger() {
   loading.value = true
   try {
-    const params: any = {}
-    if (searchKeyword.value) {
-      params.keyword = searchKeyword.value
+    let items: MsdsLedgerItem[] = []
+
+    if (hasOrderContext.value) {
+      // 有订单上下文：按报关名称过滤，一次性拉取全部匹配项（客户端分页+排序）
+      const params: any = { customs_names: orderItemsNames.value.join(',') }
+      if (searchKeyword.value) params.keyword = searchKeyword.value
+      const res = await msdsLedgerApi.list(params)
+      items = res.data.items || []
+      allOrderItems.value = items
+      applyClientPagination()
+    } else {
+      // 无订单上下文：服务端分页
+      await applyServerPagination()
+      items = ledgerList.value
     }
-    const res = await msdsLedgerApi.list(params)
-    let items = res.data.items || []
-    
-    // Filter by order items' customs_names directly
-    if (orderItemsNames.value.length > 0) {
-      items = items.filter((item: MsdsLedgerItem) => 
-        orderItemsNames.value.includes(item.customs_name)
-      )
-    }
-    
-    ledgerList.value = items
     
     // Detect new formulas - products with same name but different composition
     newFormulas.value = []
@@ -510,11 +539,13 @@ function removeFormulaComp(formula: any, idx: number) {
 }
 
 function onSearch() {
+  pagination.currentPage = 1
   loadLedger()
 }
 
 function onSearchClear() {
   searchKeyword.value = ''
+  pagination.currentPage = 1
   loadLedger()
 }
 
@@ -821,12 +852,21 @@ function toggleBatchMode() {
   batchMode.value = !batchMode.value
   if (!batchMode.value) {
     selectedItems.value = []
+    // 退出批量模式后重新排页（取消选中项置顶）
+    if (hasOrderContext.value) {
+      applyClientPagination()
+    }
   }
   selectedItem.value = null
 }
 
 function onSelectionChange(selection: MsdsLedgerItem[]) {
+  if (suppressSelectionChange) return
   selectedItems.value = selection
+  // 选中变化时重新排序（选中项置顶），仅客户端分页模式
+  if (hasOrderContext.value) {
+    applyClientPagination()
+  }
 }
 
 function showBatchGenerateDialog() {
@@ -846,7 +886,9 @@ function onBatchGenerated() {
 // Auto-select all ledger items matching current order in batch mode
 // Auto-select only the ledger items that precisely match each order item
 function autoSelectMatchingItems() {
-  if (ledgerList.value.length === 0 || orderItemsWithIngredients.value.length === 0) return
+  // 在订单上下文下从 allOrderItems 中匹配；否则从当前页匹配
+  const source = hasOrderContext.value ? allOrderItems.value : ledgerList.value
+  if (source.length === 0 || orderItemsWithIngredients.value.length === 0) return
 
   const selectedIds = new Set<number>()
   const itemsToSelect: MsdsLedgerItem[] = []
@@ -855,7 +897,7 @@ function autoSelectMatchingItems() {
     if (!orderItem.customs_name) continue
 
     // Narrow down candidates by customs_name first
-    const candidates = ledgerList.value.filter(
+    const candidates = source.filter(
       (item: MsdsLedgerItem) => item.customs_name === orderItem.customs_name
     )
     if (candidates.length === 0) continue
@@ -883,6 +925,14 @@ function autoSelectMatchingItems() {
 
   batchMode.value = true
   selectedItem.value = null
+  selectedItems.value = itemsToSelect
+
+  // 有订单上下文时重新排页（选中项置顶）
+  if (hasOrderContext.value) {
+    pagination.currentPage = 1
+    applyClientPagination()
+  }
+
   nextTick(() => {
     if (tableRef.value) {
       itemsToSelect.forEach(item => {
@@ -902,6 +952,60 @@ function onClosed() {
   batchMode.value = false
   selectedItems.value = []
   showBatchGenerate.value = false
+  allOrderItems.value = []
+  pagination.currentPage = 1
+  pagination.total = 0
+}
+
+// ── 分页 & 排序 ──────────────────────────────────────────────
+
+/** 有订单上下文时：客户端分页（全量已缓存） */
+function applyClientPagination() {
+  const selectedIds = new Set(selectedItems.value.map(i => i.id))
+  const selected = allOrderItems.value.filter(i => selectedIds.has(i.id))
+  const unselected = allOrderItems.value.filter(i => !selectedIds.has(i.id))
+  const sorted = [...selected, ...unselected]
+  pagination.total = sorted.length
+  const start = (pagination.currentPage - 1) * pagination.pageSize
+  suppressSelectionChange = true
+  ledgerList.value = sorted.slice(start, start + pagination.pageSize)
+  // 数据变更后 el-table 会清除勾选，需在 nextTick 恢复
+  nextTick(() => {
+    if (tableRef.value && batchMode.value) {
+      selectedItems.value.forEach(item => {
+        tableRef.value.toggleRowSelection(item, true)
+      })
+    }
+    suppressSelectionChange = false
+  })
+}
+
+/** 无订单上下文时：服务端分页 */
+async function applyServerPagination() {
+  const params: any = { page: pagination.currentPage, page_size: pagination.pageSize }
+  if (searchKeyword.value) params.keyword = searchKeyword.value
+  const res = await msdsLedgerApi.list(params)
+  ledgerList.value = res.data.items || []
+  pagination.total = res.data.total || 0
+}
+
+function onPageChange(page: number) {
+  pagination.currentPage = page
+  if (hasOrderContext.value) {
+    applyClientPagination()
+  } else {
+    loadLedger()
+  }
+}
+
+function onPageSizeChange(size: number) {
+  pagination.pageSize = size
+  pagination.currentPage = 1
+  if (hasOrderContext.value) {
+    applyClientPagination()
+  } else {
+    loadLedger()
+  }
 }
 </script>
 
@@ -985,6 +1089,11 @@ function onClosed() {
 .detail-actions {
   display: flex;
   gap: 8px;
+  margin-bottom: 16px;
+}
+.pagination-wrap {
+  display: flex;
+  justify-content: flex-end;
   margin-bottom: 16px;
 }
 .composition-row {

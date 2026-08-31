@@ -488,7 +488,10 @@ const editData = ref({
   items: [] as LedgerItem[],
 })
 
-/** 将平铺 items 转为树形结构（组头包裹子项，独立项直接展示） */
+/** 将平铺 items 转为树形结构（组头包裹子项，独立项直接展示）。
+ *  关键：不创建 spread 副本，而是直接在原始 item 对象上挂载
+ *  rowUid / isGroup / groupName / children 等视图属性，
+ *  以保证 v-model 编辑直接修改 editData.items 中的原始数据。 */
 interface TreeRow extends LedgerItem {
   rowUid: string
   isGroup: boolean
@@ -499,34 +502,23 @@ const treeItems = computed<TreeRow[]>(() => {
   const items = editData.value.items || []
   const result: TreeRow[] = []
   let currentGroup: TreeRow | null = null
-  for (const item of items) {
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i] as TreeRow
+    // 为每行附加稳定的 rowUid（用下标命名，跨重算不变）
+    item.rowUid = `row-${i}`
     if (item.is_group_header) {
-      const group: TreeRow = {
-        ...item,
-        rowUid: generateUuid(),
-        isGroup: true,
-        groupName: item.group_name || item.product_cn || '分组',
-        children: [],
-        internal_code: '', // 组头无内编
-      }
-      result.push(group)
-      currentGroup = group
+      item.isGroup = true
+      item.groupName = item.group_name || item.product_cn || '分组'
+      item.children = []
+      result.push(item)
+      currentGroup = item
     } else if (currentGroup && item.group_id != null && item.group_id === currentGroup.group_id) {
-      // 子项：添加到当前组
-      const child: TreeRow = {
-        ...item,
-        rowUid: generateUuid(),
-        isGroup: false,
-      }
-      currentGroup.children!.push(child)
+      item.isGroup = false
+      currentGroup.children!.push(item)
     } else {
-      // 独立项
+      item.isGroup = false
       currentGroup = null
-      result.push({
-        ...item,
-        rowUid: generateUuid(),
-        isGroup: false,
-      })
+      result.push(item)
     }
   }
   return result
@@ -649,6 +641,15 @@ async function handleSave() {
   saving.value = true
   try {
     const { pi_no: _, ...payload } = editData.value
+    // 剥离 treeItems 视图属性（rowUid/isGroup/groupName/children），只保留业务字段
+    const viewKeys = new Set(['rowUid', 'isGroup', 'groupName', 'children'])
+    payload.items = (payload.items || []).map((item: any) => {
+      const clean: any = {}
+      for (const k of Object.keys(item)) {
+        if (!viewKeys.has(k)) clean[k] = item[k]
+      }
+      return clean
+    })
     await ordersApi.updateLedger(editData.value.order_no, payload as any)
     ElMessage.success('台账已更新')
     isEditing.value = false

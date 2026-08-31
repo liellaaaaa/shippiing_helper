@@ -12,6 +12,7 @@ from app.services.msds_generator_service import MSDSGeneratorService
 from app.services.onlyoffice_service import OnlyOfficeService
 from app.models.shipment_doc import ShipmentDoc
 from app.database import SessionLocal
+from app.core.audit_decorator import audit_action
 
 router = APIRouter(prefix="/api/v1/msds-generator", tags=["msds-generator"])
 msds_gen_svc = MSDSGeneratorService()
@@ -126,6 +127,7 @@ async def get_product_data(product_name: str = Body(..., embed=True)):
 
 
 @router.post("/generate")
+@audit_action("msds_generate_from_ref", "msds-generator")
 async def generate_msds(request: GenerateRequest):
     """
     基于旧 MSDS 文件，生成新的 MSDS 文档。

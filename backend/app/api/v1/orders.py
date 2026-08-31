@@ -24,6 +24,7 @@ from typing import Optional
 from app.api.deps import get_order_service
 from app.services.order_service import OrderService
 from app.services.ledger_service import LedgerService
+from app.core.audit_decorator import audit_action
 from app.schemas.order import (
     PasteParseRequest,
     PasteParseResponse,
@@ -164,6 +165,7 @@ async def parse_paste(
 - `500`: 数据库保存失败（事务回滚）
     """,
 )
+@audit_action("order_save", "orders")
 async def save_order(
     request: OrderSaveRequest,
     service: OrderService = Depends(get_order_service),
@@ -270,6 +272,7 @@ async def merge_preview(
     summary="写入台账",
     description="将三源合并后的完整数据写入台账，每产品一行",
 )
+@audit_action("ledger_write", "orders")
 async def write_ledger(
     request: LedgerWriteRequest,
     service: LedgerService = Depends(get_ledger_service),
@@ -301,6 +304,7 @@ async def check_duplicates(
     summary="更新台账记录",
     description="按订单号更新整单台账记录（删除旧记录 + 重新写入）",
 )
+@audit_action("ledger_update", "orders")
 async def update_ledger(
     order_no: str,
     request: LedgerWriteRequest,
@@ -318,6 +322,7 @@ async def update_ledger(
     summary="删除台账记录",
     description="按订单号删除整单台账记录（所有产品行）",
 )
+@audit_action("ledger_delete", "orders")
 async def delete_ledger(
     order_no: str,
     service: LedgerService = Depends(get_ledger_service),

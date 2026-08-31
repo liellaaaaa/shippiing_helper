@@ -7,6 +7,7 @@ from typing import Optional
 from app.services.export_service import ExportService
 from app.services.save_service import SaveService
 from app.api.deps import get_save_service
+from app.core.audit_decorator import audit_action
 from app.schemas.order_pi_record import (
     SaveRecordRequest,
     SaveRecordResponse,
@@ -41,6 +42,7 @@ async def get_dashboard_orders(
 
 
 @router.get("/export")
+@audit_action("data_export", "dashboard")
 async def export_dashboard_excel(
     search: Optional[str] = Query(None, description="模糊搜索"),
     status: Optional[str] = Query(None, description="状态筛选：pending / confirmed"),
@@ -90,6 +92,7 @@ async def export_dashboard_excel(
 
 
 @router.post("/records", response_model=SaveRecordResponse, summary="落库 — 双轨合并数据写入")
+@audit_action("record_save", "dashboard")
 async def save_order_pi_record(
     request: SaveRecordRequest,
     save_service: SaveService = Depends(get_save_service),
@@ -163,6 +166,7 @@ async def get_order_pi_record(
 
 
 @router.delete("/records/{record_id}", summary="删除订单（含所有产品）")
+@audit_action("record_delete", "dashboard")
 async def delete_order_record(
     record_id: int,
     save_service: SaveService = Depends(get_save_service),

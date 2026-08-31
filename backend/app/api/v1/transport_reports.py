@@ -12,6 +12,7 @@ from app.models.order_item_transport_report import OrderItemTransportReport
 from app.services.transport_service import TransportService
 from app.services.name_mapping_service import get_en_name, get_cn_name
 from app.core.config import TRANSPORT_REPORTS_DIR
+from app.core.audit_decorator import audit_action
 
 router = APIRouter(prefix="/api/v1/transport-reports", tags=["transport-reports"])
 
@@ -143,6 +144,7 @@ async def get_linked_reports(order_item_id: int):
 
 
 @router.post("/link")
+@audit_action("transport_report_link", "transport-reports")
 async def link_report(body: LinkRequest):
     """将运输鉴定报告关联到指定 order_item。"""
     db = SessionLocal()
@@ -184,6 +186,7 @@ async def link_report(body: LinkRequest):
 
 
 @router.delete("/unlink/{link_id}")
+@audit_action("transport_report_unlink", "transport-reports")
 async def unlink_report(link_id: int):
     """取消关联。"""
     db = SessionLocal()
@@ -224,6 +227,7 @@ async def serve_transport_report(filename: str):
 
 
 @router.post("/reindex")
+@audit_action("transport_report_reindex", "transport-reports")
 async def reindex_transport_reports():
     """手动重建索引（管理员用）：扫描 PDF 目录，提取字段，落库。"""
     svc = TransportService()

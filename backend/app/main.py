@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse, Response, JSONResponse
 from jose import jwt, JWTError
 
 from app.core.text_sanitize import strip_surrogates
+from app.core.audit_decorator import AuditMiddleware
 
 
 class SanitizedJSONResponse(JSONResponse):
@@ -80,6 +81,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.add_middleware(AuditMiddleware)
 
 app.include_router(orders_router)
 app.include_router(pi_router)
@@ -254,7 +257,7 @@ async def auth_middleware(request: Request, call_next):
        request.url.path.startswith("/api/v1/data-center") or \
        request.url.path.startswith("/api/v1/declaration-elements") or \
        request.url.path.startswith("/api/v1/declaration-ledger") or \
-       request.url.path.startswith("/api/v1/audit") or \
+       request.url.path.startswith("/api/v1/audit/batch") or \
        request.url.path.startswith("/documentserver"):
         return await call_next(request)
 

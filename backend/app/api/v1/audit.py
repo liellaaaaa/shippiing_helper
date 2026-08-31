@@ -2,7 +2,7 @@
 import json
 from datetime import datetime
 from typing import Optional
-from fastapi import APIRouter, Depends, Query, HTTPException, Request
+from fastapi import APIRouter, Depends, Query, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 import io
 
@@ -22,6 +22,7 @@ async def get_logs(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=500),
     service: AuditService = Depends(get_audit_service),
+    user: dict = Depends(get_current_user),
 ):
     result = service.query_logs(user_name, event_type, module, start_time, end_time, page, page_size)
     logs = [{
@@ -42,6 +43,7 @@ async def get_stats(
     start_time: Optional[datetime] = Query(None),
     end_time: Optional[datetime] = Query(None),
     service: AuditService = Depends(get_audit_service),
+    user: dict = Depends(get_current_user),
 ):
     result = service.get_stats(start_time=start_time, end_time=end_time)
     return result
@@ -52,6 +54,7 @@ async def export_logs(
     start_time: Optional[datetime] = Query(None),
     end_time: Optional[datetime] = Query(None),
     service: AuditService = Depends(get_audit_service),
+    user: dict = Depends(get_current_user),
 ):
     from openpyxl import Workbook
 
@@ -113,6 +116,10 @@ async def batch_log(
     if not isinstance(events, list):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="events must be a list")
 
+    for item in events:
+        if not isinstance(item, dict) or not item.get("event_type"):
+            continue
+
         try:
             action_time = datetime.fromisoformat(item.get("action_time", "").replace("Z", "+00:00"))
         except Exception:
@@ -120,7 +127,7 @@ async def batch_log(
 
         service.log(
             event_type=item.get("event_type"),
-            user_name=item.get("user_name"),
+            user_name=item.get("user_name", "anonymous"),
             module=item.get("module"),
             action_time=action_time,
             detail=item.get("detail"),

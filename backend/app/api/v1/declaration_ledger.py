@@ -14,6 +14,7 @@ from app.schemas.declaration import (
     HsCodeFieldResponse,
     DeclarationProductResponse
 )
+from app.core.audit_decorator import audit_action
 
 router = APIRouter(prefix="/api/v1/declaration-ledger", tags=["declaration-ledger"])
 
@@ -42,6 +43,7 @@ def get_hs_code_detail(
 
 
 @router.post("/hs-codes/{hs_code}/products", response_model=DeclarationProductResponse)
+@audit_action("declaration_product_create", "declaration-ledger")
 def create_product(
     hs_code: str,
     data: ProductCreate,
@@ -61,6 +63,7 @@ def create_product(
 
 
 @router.put("/products/{product_id}", response_model=DeclarationProductResponse)
+@audit_action("declaration_product_update", "declaration-ledger")
 def update_product(
     product_id: int,
     data: ProductUpdate,
@@ -80,6 +83,7 @@ def update_product(
 
 
 @router.delete("/products/{product_id}")
+@audit_action("declaration_product_delete", "declaration-ledger")
 def delete_product(
     product_id: int,
     db: Session = Depends(get_db)
@@ -93,6 +97,7 @@ def delete_product(
 
 
 @router.put("/products/{product_id}/values", response_model=DeclarationProductResponse)
+@audit_action("declaration_values_update", "declaration-ledger")
 def update_values(
     product_id: int,
     data: ValuesUpdate,
@@ -107,6 +112,7 @@ def update_values(
 
 
 @router.post("/fields", response_model=HsCodeFieldResponse)
+@audit_action("declaration_field_create", "declaration-ledger")
 def create_field(
     hs_code: str = Query(..., description="HS Code"),
     data: FieldCreate = ...,
@@ -127,6 +133,7 @@ def create_field(
 
 
 @router.put("/fields/{field_id}", response_model=HsCodeFieldResponse)
+@audit_action("declaration_field_update", "declaration-ledger")
 def update_field(
     field_id: int,
     data: FieldUpdate,
@@ -147,6 +154,7 @@ def update_field(
 
 
 @router.delete("/fields/{field_id}")
+@audit_action("declaration_field_delete", "declaration-ledger")
 def delete_field(
     field_id: int,
     db: Session = Depends(get_db)

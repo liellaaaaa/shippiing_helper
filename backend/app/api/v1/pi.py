@@ -11,6 +11,7 @@ from app.schemas.pi_contract import (
 )
 from app.core.pi_parser import parse_pi_bytes
 from app.services.pi_service import PiService
+from app.core.audit_decorator import audit_action
 from app.database import SessionLocal
 import io
 import os
@@ -45,6 +46,7 @@ router = APIRouter(prefix="/api/v1/pi", tags=["PI合同管理"])
 - `500`: 解析失败
     """,
 )
+@audit_action("pi_upload", "pi")
 async def upload_pi_file(
     file: UploadFile = File(...),
     customer_code: Optional[str] = None,

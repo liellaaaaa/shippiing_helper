@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 from typing import Optional
 from app.database import SessionLocal
 from app.services.declaration_element_service import declaration_element_svc
+from app.core.audit_decorator import audit_action
 
 router = APIRouter(prefix="/api/v1/declaration-elements", tags=["declaration-elements"])
 
@@ -61,6 +62,7 @@ async def get_element(element_id: int):
 
 
 @router.post("")
+@audit_action("element_create", "declaration-elements")
 async def create_element(data: ElementCreate):
     db = SessionLocal()
     try:
@@ -73,6 +75,7 @@ async def create_element(data: ElementCreate):
 
 
 @router.put("/{element_id}")
+@audit_action("element_update", "declaration-elements")
 async def update_element(element_id: int, data: ElementUpdate):
     db = SessionLocal()
     try:
@@ -85,6 +88,7 @@ async def update_element(element_id: int, data: ElementUpdate):
 
 
 @router.delete("/{element_id}")
+@audit_action("element_delete", "declaration-elements")
 async def delete_element(element_id: int):
     db = SessionLocal()
     try:

@@ -12,6 +12,7 @@ from typing import Optional
 from app.database import SessionLocal
 from app.services.msds_ledger_service import msds_ledger_svc
 from app.services.onlyoffice_service import convert_docx_to_pdf_batch
+from app.core.audit_decorator import audit_action
 
 
 router = APIRouter(prefix="/api/v1/msds-ledger", tags=["msds-ledger"])
@@ -83,6 +84,7 @@ async def get_ledger(ledger_id: int):
 
 
 @router.post("")
+@audit_action("msds_ledger_create", "msds-ledger")
 async def create_ledger(data: LedgerCreate):
     db = SessionLocal()
     try:
@@ -93,6 +95,7 @@ async def create_ledger(data: LedgerCreate):
 
 
 @router.put("/{ledger_id}")
+@audit_action("msds_ledger_update", "msds-ledger")
 async def update_ledger(ledger_id: int, data: LedgerUpdate):
     db = SessionLocal()
     try:
@@ -105,6 +108,7 @@ async def update_ledger(ledger_id: int, data: LedgerUpdate):
 
 
 @router.delete("/{ledger_id}")
+@audit_action("msds_ledger_delete", "msds-ledger")
 async def delete_ledger(ledger_id: int):
     db = SessionLocal()
     try:
@@ -115,6 +119,7 @@ async def delete_ledger(ledger_id: int):
 
 
 @router.post("/generate")
+@audit_action("msds_generate", "msds-ledger")
 async def generate_msds(request: GenerateRequest):
     """Generate MSDS from template."""
     import os
@@ -190,6 +195,7 @@ async def generate_msds(request: GenerateRequest):
 
 
 @router.post("/batch-generate")
+@audit_action("msds_batch_generate", "msds-ledger")
 async def batch_generate(request: BatchGenerateRequest):
     """Batch generate MSDS for multiple products. Returns ZIP file."""
     from app.services.msds_generator_service import MSDSGeneratorService

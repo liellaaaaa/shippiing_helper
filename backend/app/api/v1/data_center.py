@@ -12,6 +12,7 @@ from app.models.msds_correction import MSDSCorrection
 from app.services.data_center_service import DataCenterService
 from app.services.msds_service import MSDSService
 from app.core.config import MSDS_DIR, REFERENCES_DIR
+from app.core.audit_decorator import audit_action
 
 router = APIRouter(prefix="/api/v1/data-center", tags=["data-center"])
 
@@ -84,6 +85,7 @@ async def serve_msds_file(file_id: int):
 # POST /upload-corrected/{file_id} — 上传修正版
 # ------------------------------------------------------------
 @router.post("/upload-corrected/{file_id}")
+@audit_action("msds_correction_upload", "data-center")
 async def upload_corrected_msds(
     file_id: int,
     file: UploadFile = File(...),
@@ -113,6 +115,7 @@ async def upload_corrected_msds(
 # POST /reindex — 手动重建索引（管理员用）
 # ------------------------------------------------------------
 @router.post("/reindex")
+@audit_action("msds_reindex", "data-center")
 async def reindex_msds():
     svc = DataCenterService()
     db = SessionLocal()

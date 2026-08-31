@@ -18,6 +18,7 @@ export interface CompositionItem {
   component_en: string
   cas: string
   percentage: string
+  _suggestions?: { name: string; cas?: string }[]
 }
 
 export interface GenerateMsdsRequest {

@@ -165,16 +165,10 @@ const handleRowClick = (row: LedgerRecord) => {
 }
 
 const handleSaved = async () => {
-  console.log('[DEBUG handleSaved] reloading ledger data...')
   await loadData()
-  console.log('[DEBUG handleSaved] recordList count:', recordList.value.length)
   if (selectedRecord.value) {
     const updated = recordList.value.find(r => r.order_no === selectedRecord.value!.order_no)
-    console.log('[DEBUG handleSaved] found updated record:', updated?.order_no, 'items:', updated?.items?.length)
-    if (updated) {
-      console.log('[DEBUG handleSaved] first item customs_ingredients:', updated.items?.[0]?.customs_ingredients)
-      selectedRecord.value = updated
-    }
+    if (updated) selectedRecord.value = updated
   }
 }
 

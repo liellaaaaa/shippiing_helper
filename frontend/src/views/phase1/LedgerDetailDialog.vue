@@ -565,6 +565,10 @@ watch(visible, (val) => {
     isEditing.value = false
   }
 })
+// DEBUG: watch editData.items changes
+watch(() => editData.value.items?.map((it: any) => it.customs_ingredients).join('|'), (newVal) => {
+  console.log('[DEBUG watch] editData.items customs_ingredients changed:', newVal)
+}, { deep: false })
 watch(() => props.record, (r) => {
   if (r) editData.value = cloneRecord(r)
 }, { immediate: true })
@@ -650,11 +654,19 @@ async function handleSave() {
       }
       return clean
     })
-    await ordersApi.updateLedger(editData.value.order_no, payload as any)
+    // DEBUG: log payload items' customs_ingredients to verify edits are captured
+    console.log('[DEBUG handleSave] order_no:', editData.value.order_no)
+    console.log('[DEBUG handleSave] items count:', payload.items?.length)
+    payload.items?.forEach((it: any, i: number) => {
+      console.log(`[DEBUG handleSave] item[${i}] customs_ingredients:`, it.customs_ingredients)
+    })
+    const resp = await ordersApi.updateLedger(editData.value.order_no, payload as any)
+    console.log('[DEBUG handleSave] API response:', resp)
     ElMessage.success('台账已更新')
     isEditing.value = false
     emit('saved')
   } catch (error: any) {
+    console.error('[DEBUG handleSave] API error:', error?.response?.status, error?.response?.data)
     ElMessage.error(error?.response?.data?.detail || '保存失败')
   } finally {
     saving.value = false

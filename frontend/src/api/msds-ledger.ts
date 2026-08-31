@@ -61,4 +61,12 @@ export const msdsLedgerApi = {
   batchGenerate(request: BatchGenerateMsdsRequest) {
     return apiClient.post('/msds-ledger/batch-generate', request, { responseType: 'blob' })
   },
+
+  getAppearanceOptions() {
+    return apiClient.get<{ options: string[] }>('/msds-ledger/reference/appearances')
+  },
+
+  searchIngredients(keyword: string) {
+    return apiClient.get<{ results: { name: string; cas: string }[] }>('/msds-ledger/reference/ingredients', { params: { keyword } })
+  },
 }

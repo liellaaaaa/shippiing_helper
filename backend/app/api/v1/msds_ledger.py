@@ -71,6 +71,54 @@ async def list_ledger(
         db.close()
 
 
+@router.get("/reference/appearances")
+async def get_appearance_options():
+    """返回外观下拉选项：合并 translation_mappings 中的外观值和台账中已有的外观值。"""
+    from app.models.reference_data import TranslationMapping
+    from app.models.msds_ledger import MsdsLedger
+
+    db = SessionLocal()
+    try:
+        mapping_rows = db.query(TranslationMapping.cn).filter_by(mapping_type="appearance").all()
+        options = {row[0] for row in mapping_rows if row[0]}
+
+        ledger_rows = db.query(MsdsLedger.appearance).distinct().all()
+        for row in ledger_rows:
+            if row[0] and row[0].strip():
+                options.add(row[0].strip())
+
+        return {"options": sorted(options)}
+    finally:
+        db.close()
+
+
+@router.get("/reference/ingredients")
+async def search_ingredients(keyword: str = Query("", description="成分名关键词，为空时返回全部")):
+    """搜索成分库，返回成分名和对应的 CAS 号。"""
+    from app.models.reference_data import IngredientMapping
+    import json
+
+    db = SessionLocal()
+    try:
+        rows = db.query(IngredientMapping).all()
+        results = []
+        seen = set()
+        for row in rows:
+            cn_names = json.loads(row.cn_names or "[]")
+            cas_numbers = json.loads(row.cas_numbers or "[]")
+            cas = cas_numbers[0] if cas_numbers else ""
+            for name in cn_names:
+                if not name or name in seen:
+                    continue
+                if keyword and keyword not in name:
+                    continue
+                seen.add(name)
+                results.append({"name": name, "cas": cas})
+        return {"results": results}
+    finally:
+        db.close()
+
+
 @router.get("/{ledger_id}")
 async def get_ledger(ledger_id: int):
     db = SessionLocal()

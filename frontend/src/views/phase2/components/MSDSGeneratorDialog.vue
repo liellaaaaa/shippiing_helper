@@ -58,11 +58,21 @@
             </div>
             <div class="formula-field">
               <label>外观 <span class="req">*</span></label>
-              <el-input
+              <el-select
                 v-model="formula.appearance"
                 size="small"
+                filterable
+                allow-create
+                placeholder="输入或选择外观"
                 :class="{ 'input-error': importErrors[idx]?.includes('外观') }"
-              />
+              >
+                <el-option
+                  v-for="opt in appearanceOptions"
+                  :key="opt"
+                  :label="opt"
+                  :value="opt"
+                />
+              </el-select>
             </div>
             <div class="formula-field">
               <label>离子性 <span class="req">*</span></label>
@@ -102,12 +112,25 @@
                 <tbody>
                   <tr v-for="(comp, ci) in formula.composition" :key="ci">
                     <td>
-                      <el-input
+                      <el-select
                         v-model="comp.component_cn"
                         size="small"
-                        placeholder="必填"
+                        filterable
+                        allow-create
+                        remote
+                        :remote-method="(q: string) => searchIngredientForRow(q, comp)"
+                        placeholder="输入成分名"
+                        @change="(val: string) => onIngredientSelected(val, comp)"
                         :class="{ 'input-error': importErrors[idx]?.includes('成分「组分」') }"
-                      />
+                        style="width: 100%"
+                      >
+                        <el-option
+                          v-for="opt in (comp._suggestions || [])"
+                          :key="opt.name"
+                          :label="opt.name"
+                          :value="opt.name"
+                        />
+                      </el-select>
                     </td>
                     <td><el-input v-model="comp.cas" size="small" placeholder="如 123-45-6" /></td>
                     <td><el-input v-model="comp.percentage" size="small" placeholder="如 30%" /></td>
@@ -192,7 +215,14 @@
           <el-input v-model="formData.customs_name" placeholder="中文报关名称" />
         </el-form-item>
         <el-form-item label="外观" prop="appearance">
-          <el-input v-model="formData.appearance" />
+          <el-select v-model="formData.appearance" filterable allow-create placeholder="输入或选择外观" style="width: 100%">
+            <el-option
+              v-for="opt in appearanceOptions"
+              :key="opt"
+              :label="opt"
+              :value="opt"
+            />
+          </el-select>
         </el-form-item>
         <el-form-item label="离子性" prop="ion_type">
           <el-select v-model="formData.ion_type" placeholder="请选择">
@@ -216,7 +246,26 @@
             </thead>
             <tbody>
               <tr v-for="(item, idx) in formData.composition" :key="idx">
-                <td><el-input v-model="item.component_cn" placeholder="必填" size="small" /></td>
+                <td>
+                  <el-select
+                    v-model="item.component_cn"
+                    size="small"
+                    filterable
+                    allow-create
+                    remote
+                    :remote-method="(q: string) => searchIngredientForRow(q, item)"
+                    placeholder="输入成分名"
+                    @change="(val: string) => onIngredientSelected(val, item)"
+                    style="width: 100%"
+                  >
+                    <el-option
+                      v-for="opt in (item._suggestions || [])"
+                      :key="opt.name"
+                      :label="opt.name"
+                      :value="opt.name"
+                    />
+                  </el-select>
+                </td>
                 <td><el-input v-model="item.cas" placeholder="如 123-45-6" size="small" /></td>
                 <td><el-input v-model="item.percentage" placeholder="如 30%" size="small" /></td>
                 <td><el-button type="danger" link @click="removeComposition(idx)">删除</el-button></td>
@@ -298,6 +347,52 @@ const showEditList = ref(false)
 const importErrors = ref<Record<number, string[]>>({})
 const mismatchCount = computed(() => newFormulas.value.filter((f: any) => f.pctMismatch).length)
 
+// 外观下拉选项
+const appearanceOptions = ref<string[]>([])
+
+// 成分搜索缓存（避免重复请求）
+const ingredientCache = ref<Map<string, { name: string; cas: string }[]>>(new Map())
+
+// 搜索成分（远程）
+async function searchIngredientForRow(query: string, comp: any) {
+  if (!query) {
+    comp._suggestions = []
+    return
+  }
+  const cached = ingredientCache.value.get(query)
+  if (cached) {
+    comp._suggestions = cached
+    return
+  }
+  try {
+    const res = await msdsLedgerApi.searchIngredients(query)
+    const results = res.data.results || []
+    ingredientCache.value.set(query, results)
+    comp._suggestions = results
+  } catch {
+    comp._suggestions = []
+  }
+}
+
+// 选择成分后自动填入 CAS 号
+function onIngredientSelected(val: string, comp: any) {
+  const suggestions = comp._suggestions || []
+  const match = suggestions.find((s: any) => s.name === val)
+  if (match && match.cas) {
+    comp.cas = match.cas
+  }
+}
+
+// 加载外观选项
+async function loadAppearanceOptions() {
+  try {
+    const res = await msdsLedgerApi.getAppearanceOptions()
+    appearanceOptions.value = res.data.options || []
+  } catch {
+    appearanceOptions.value = []
+  }
+}
+
 // 批量选择相关
 const batchMode = ref(false)
 const selectedItems = ref<MsdsLedgerItem[]>([])
@@ -333,7 +428,7 @@ const formRef = ref<FormInstance>()
 
 const formRules: FormRules = {
   customs_name: [{ required: true, message: '请输入报关名称', trigger: 'blur' }],
-  appearance: [{ required: true, message: '请输入外观', trigger: 'blur' }],
+  appearance: [{ required: true, message: '请输入或选择外观', trigger: 'change' }],
   ion_type: [{ required: true, message: '请选择离子性', trigger: 'change' }],
   ph: [{ required: true, message: '请输入pH值', trigger: 'blur' }],
   composition: [{
@@ -342,6 +437,10 @@ const formRules: FormRules = {
         callback(new Error('至少添加一行成分'))
       } else if (value.some((v: any) => !v.component_cn?.trim())) {
         callback(new Error('每行成分的「组分」为必填'))
+      } else if (value.some((v: any) => v.component_cn?.trim() && !v.cas?.trim())) {
+        callback(new Error('填写组分后必须同时填写 CAS 号'))
+      } else if (value.some((v: any) => v.cas?.trim() && !v.component_cn?.trim())) {
+        callback(new Error('填写 CAS 号后必须同时填写组分名'))
       } else {
         callback()
       }
@@ -410,6 +509,8 @@ function validateNewFormulas(): boolean {
     if (!f.ph?.trim()) missing.push('pH值')
     if (!f.composition || f.composition.length === 0) missing.push('成分表')
     else if (f.composition.some((c: any) => !c.component_cn?.trim())) missing.push('成分「组分」')
+    else if (f.composition.some((c: any) => c.component_cn?.trim() && !c.cas?.trim())) missing.push('成分「CAS号」')
+    else if (f.composition.some((c: any) => c.cas?.trim() && !c.component_cn?.trim())) missing.push('成分「组分」')
     if (missing.length) errs[idx] = missing
   })
   importErrors.value = errs
@@ -423,6 +524,7 @@ watch(() => props.modelValue, (v) => {
     showEditList.value = false
     pagination.currentPage = 1
     allOrderItems.value = []
+    loadAppearanceOptions()
     // Extract order items info for filtering and composition check
     if (props.orderItems && props.orderItems.length > 0) {
       const names = [...new Set(props.orderItems.map((it: any) => it.customs_name || it.order?.customs_name || it.pi?.customs_name).filter(Boolean))]
@@ -531,7 +633,7 @@ function addFormulaComp(formula: any) {
   if (!formula.composition) {
     formula.composition = []
   }
-  formula.composition.push({ component_cn: '', component_en: '', cas: '', percentage: '' })
+  formula.composition.push({ component_cn: '', component_en: '', cas: '', percentage: '', _suggestions: [] })
 }
 
 function removeFormulaComp(formula: any, idx: number) {
@@ -595,7 +697,7 @@ function showEditDialog() {
 }
 
 function addComposition() {
-  formData.value.composition.push({ component_cn: '', component_en: '', cas: '', percentage: '' })
+  formData.value.composition.push({ component_cn: '', component_en: '', cas: '', percentage: '', _suggestions: [] })
 }
 
 function removeComposition(idx: number) {

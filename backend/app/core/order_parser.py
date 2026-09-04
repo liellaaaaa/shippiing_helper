@@ -113,7 +113,7 @@ def split_lines(text: str) -> list[str]:
     return [line.strip() for line in lines if line.strip()]
 
 
-def merge_quoted_lines(lines: list[str]) -> list[str]:
+def merge_quoted_lines(lines: list[str], raw_text: str = "") -> list[str]:
     """
     合并被 Excel 引号包围或无引号的单元格换行打断的行。
 
@@ -122,9 +122,31 @@ def merge_quoted_lines(lines: list[str]) -> list[str]:
     逻辑：
     1. 引号模式：若上一行"订单要求"列以 " 开头但未以 " 结尾 → 后续行并入
     2. 列数模式：若上一行有 >=10 列（完整数据行），当前行只有 1 列（无分隔符） → 并入上一行的订单要求
+    3. 空首列补齐：若原始文本中某行以空白开头，且列数少于上一行 → 补齐空首列
     """
     if not lines:
         return lines
+
+    # 检测哪些行在原始文本中以空白开头（表示空首列），并记录原始行
+    empty_leading_cols: dict[int, int] = {}  # line_idx -> 空首列数
+    if raw_text:
+        raw_lines = raw_text.split("\n")
+        raw_idx = 0
+        for line_idx in range(len(lines)):
+            while raw_idx < len(raw_lines):
+                raw = raw_lines[raw_idx]
+                raw_idx += 1
+                if raw.strip():
+                    if raw != raw.lstrip():
+                        # 计算空首列数：找到第一个非空白字符前的 tab 数
+                        first_content = len(raw) - len(raw.lstrip())
+                        tab_count = 0
+                        for ch in raw[:first_content]:
+                            if ch == "\t":
+                                tab_count += 1
+                        # 每个 tab 是一个列分隔符，+1 表示第一个空列
+                        empty_leading_cols[line_idx] = tab_count + 1
+                    break
 
     # 检测分隔符类型
     import re
@@ -221,6 +243,20 @@ def merge_quoted_lines(lines: list[str]) -> list[str]:
                 # 第0列是续行文本，剩余列是上一行被"挤出来"的尾部字段
                 elif len(line_cols) > 1 and len(line_cols) < len(prev_parts):
                     first_col = line_cols[0].strip()
+                    # 空首列补齐：行以空白开头且首列为空 → 缺少前导空列，按空白数补齐
+                    if line[0:1] in (" ", "\t"):
+                        leading = len(line) - len(line.lstrip())
+                        empty_leading_cols = 0
+                        for ch in line[:leading]:
+                            if ch == "\t":
+                                empty_leading_cols += 1
+                            elif ch == " ":
+                                pass  # 连续空格算一个空列前缀
+                        if empty_leading_cols > 0:
+                            line_cols = [""] * empty_leading_cols + line_cols
+                            result.append(line.strip())
+                            i += 1
+                            continue
                     # 判断第0列是否像续行文本（不含日期、数字编号、"是/否"等独立字段特征）
                     looks_like_continuation = (
                         first_col
@@ -242,6 +278,21 @@ def merge_quoted_lines(lines: list[str]) -> list[str]:
                         result[-1] = join_cols(prev_parts)
                         i += 1
                         continue
+
+        # 情况3：两个不完整片段行合并为完整行
+        # 例：7列片段 + 8列片段 = 15列完整行（企业微信单元格内换行导致行被截断）
+        if result:
+            prev_parts = split_cols(result[-1])
+            if (
+                len(prev_parts) < FULL_ROW_MIN_COLS
+                and len(line_cols) < FULL_ROW_MIN_COLS
+                and len(prev_parts) + len(line_cols) >= FULL_ROW_MIN_COLS
+                and not any(normalize_column_name(p) for p in prev_parts)
+                and not any(normalize_column_name(p) for p in line_cols)
+            ):
+                result[-1] = join_cols(prev_parts + line_cols)
+                i += 1
+                continue
 
         # 引号模式检查：若上一行的订单要求列以 " 开头但未以 " 结尾
         if result:
@@ -276,10 +327,14 @@ def parse_header(header_line: str, delimiter: str) -> dict[int, str]:
 
 
 def build_positional_map(col_count: int) -> dict[int, str]:
-    """Build column map from standard Excel column order (positional fallback)."""
+    """Build column map from standard Excel column order (positional fallback).
+
+    Uses len(STANDARD_COLUMN_ORDER) as upper bound instead of col_count,
+    so that merged continuation rows (with extra columns) are fully mapped.
+    """
     col_map: dict[int, str] = {}
     for i, field_name in enumerate(STANDARD_COLUMN_ORDER):
-        if field_name is not None and i < col_count:
+        if field_name is not None:
             col_map[i] = field_name
     return col_map
 
@@ -322,7 +377,7 @@ def parse_pasted_data(
 
     # 先修复引号打断的行，再检测分隔符
     lines = split_lines(raw_text)
-    lines = merge_quoted_lines(lines)
+    lines = merge_quoted_lines(lines, raw_text)
 
     if not lines:
         return [], [], None
@@ -526,7 +581,7 @@ def parse_pi_contract_table(
         return [], [], None
 
     lines = split_lines(raw_text)
-    lines = merge_quoted_lines(lines)
+    lines = merge_quoted_lines(lines, raw_text)
     if not lines:
         return [], [], None
 

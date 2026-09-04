@@ -188,7 +188,7 @@ docker run -d -p 8080:80 onlyoffice/documentserver
 | 模块 | 状态 | 说明 |
 |------|------|------|
 | 项目初始化 | ✅ | Vue 3 + FastAPI + SQLite |
-| 订单粘贴解析 | ✅ | Tab/换行分隔、一单多品、知识库匹配 |
+| 订单粘贴解析 | ✅ | Tab/换行分隔、一单多品、知识库匹配；兼容企业微信 / Excel 粘贴（单元格换行截断合并、空列保留） |
 | PI 文件提取 | ✅ | .xlsx/.xls/.pdf(OCR)、列映射、置信度 |
 | 数据关联 | ✅ | internal_code 关联、订单-PI 合并 |
 | 包装计算 | ✅ | 13种桶型、2种托盘、20GP判断、多行计算器 |
@@ -211,11 +211,24 @@ docker run -d -p 8080:80 onlyoffice/documentserver
 | consignee/destination | ✅ | PI Header 字段从 PDF 提取 |
 | 数据中心（MSDS） | ✅ | 搜索、预览、目录树、修正上传 |
 | 运输鉴定报告 | ✅ | 在 references/ 中搜索 + 预览 |
-| 报关资料 | ✅ | 5 sheet 工作簿生成 |
-| MSDS 台账 | ✅ | MSDS 台账管理 + 批量生成 |
-| 审计日志 | ✅ | 操作审计记录与统计 |
+| 报关资料 | ✅ | 5 sheet 工作簿生成（发票 / 箱单按产品数动态扩展）；支持宏昊 / 民浩双公司模板切换（公司配置 + 占位符 + 印章，按发货人自动推导） |
+| MSDS 台账 | ✅ | MSDS 台账管理 + 批量生成（PDF 走 OnlyOffice 转换服务，并发转换、失败自动回退 docx）；列表分页、外观 / 组分下拉联动 CAS |
+| 审计日志 | ✅ | 覆盖 30 个后端写操作的审计记录与统计（统一装饰器 + 中间件），查询接口需鉴权 |
+| 发货人预设 | ✅ | 宏昊（HONGHAO）/ 民浩（MINHAO）抬头预设与地址映射，按抬头自动匹配选中 |
 
 > Phase 3（报关）已并入 Phase 2：报关资料生成、申报要素自动填充均已完成。
+
+### 2026-08 下旬 ~ 09 收尾更新
+
+| 日期 | 更新 |
+|------|------|
+| 8/14 | 发票页 / 箱单页按产品数动态扩展；订舱单按产品中文名去重合并；合同页公式引用与 B 列取值修复 |
+| 8/20 | 新增民浩（MINHAO）发货人预设与地址映射；修复订单列表加载竞态 |
+| 8/21 | 报关资料支持宏昊 / 民浩双公司模板切换（公司配置 + 模板占位符 + 印章） |
+| 8/26 | 目的港仅填城市名时自动推断运抵国（城市 → 国家映射） |
+| 8/27 | MSDS 批量生成 PDF 改用 OnlyOffice Conversion API 替代 Windows COM（并发转换、失败回退 docx）；报关资料默认币制 CNY → USD；MSDS 台账分页 + 选中置顶 |
+| 8/31 | 审计日志扩展至 30 个写操作；修复订单台账编辑保存不生效；MSDS 台账表单优化（外观下拉、组分 CAS 联动、成对校验），新增 `/reference/appearances`、`/reference/ingredients` |
+| 9/4 | 修复企业微信单元格内换行导致销售订单表整表解析失败（不完整片段行合并 + 行首空白补空首列） |
 
 ## 核心文档
 
@@ -243,6 +256,9 @@ docker run -d -p 8080:80 onlyoffice/documentserver
 | 悲观锁 | 订单级锁（`order_status`, `locked_by`, `locked_at`） |
 | OnlyOffice 回调 | 后端暴露 `POST /api/v1/onlyoffice/callback`，保存成功写 DB + 释放锁 |
 | PDF 解析 | OCR（pymupdf）支持 PDF 格式 PI 文件 |
+| PDF 生成 | OnlyOffice Conversion API（替代 Windows COM，跨平台，失败自动回退 docx） |
+| 审计 | 统一装饰器 + 中间件覆盖写操作，查询接口独立鉴权 |
+| 公司模板 | 报关资料按 `company_code` 切换抬头 / 税号 / 地址 / 印章（宏昊 honghao、民浩 minhao） |
 
 ## 数据模型
 
@@ -267,13 +283,14 @@ Phase 1 落库数据存储在 `order_pi_records` 表（合并记录），不直�
 | 数据关联 | `GET /api/v1/merge/orders`, `GET /api/v1/merge/orders/{id}/comparison` |
 | 包装计算 | `GET /api/v1/packaging/types`, `POST /api/v1/packaging/calculate` |
 | 数据看板 | `GET /api/v1/dashboard/orders`, `POST /api/v1/dashboard/records` |
-| 文档生成 | `POST /api/v1/documents/booking`, `GET /api/v1/documents/msds`, `GET /api/v1/documents/customs` |
+| 文档生成 | `POST /api/v1/documents/booking`, `GET /api/v1/documents/msds`, `GET /api/v1/documents/customs?company_code=honghao\|minhao` |
 | OnlyOffice | `POST /api/v1/onlyoffice/callback`, `GET /api/v1/onlyoffice/download/{key}` |
 | MSDS 台账 | `GET /api/v1/msds-ledger`, `POST /api/v1/msds-ledger/generate` |
 | 数据中心 | `GET /api/v1/data-center/search`, `GET /api/v1/data-center/tree` |
 | 运输报告 | `GET /api/v1/transport-reports/search` |
 | 品名对照 | `GET /api/v1/name-mapping`, `GET /api/v1/name-mapping/lookup` |
 | 审计日志 | `GET /api/v1/audit/logs`, `GET /api/v1/audit/stats` |
+| 参考数据 | `GET /api/v1/reference/appearances`, `GET /api/v1/reference/ingredients` |
 | 健康检查 | `GET /health` |
 
 > 注意：除登录和健康检查外，所有 API 端点均需要认证（携带 `Authorization: Bearer <token>`）。

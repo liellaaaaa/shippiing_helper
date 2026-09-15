@@ -15,7 +15,8 @@ export default defineConfig({
     proxy: {
       '/api': {
         target: 'http://localhost:8000',
-        changeOrigin: true
+        changeOrigin: true,
+        timeout: 300000, // 5 minutes for long-running batch operations
       },
       '/documentserver': {
         target: 'http://localhost:8080',

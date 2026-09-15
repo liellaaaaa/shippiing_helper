@@ -60,7 +60,11 @@ export const msdsLedgerApi = {
   },
 
   batchGenerate(request: BatchGenerateMsdsRequest) {
-    return apiClient.post('/msds-ledger/batch-generate', request, { responseType: 'blob' })
+    // Batch MSDS generation can take >30s for many products (8 products ×2 langs =16 docs + PDF conversion)
+    return apiClient.post('/msds-ledger/batch-generate', request, {
+      responseType: 'blob',
+      timeout: 300000, // 5 minutes for batch operations
+    })
   },
 
   getAppearanceOptions() {

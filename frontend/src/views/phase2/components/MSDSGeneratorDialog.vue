@@ -327,10 +327,11 @@ import { Search } from '@element-plus/icons-vue'
 import { msdsLedgerApi, type MsdsLedgerItem, type CompositionItem } from '@/api/msds-ledger'
 import BatchGenerateDialog from './BatchGenerateDialog.vue'
 
-const props = defineProps<{ modelValue: boolean; orderItems?: any[] }>()
+const props = defineProps<{ modelValue: boolean; orderItems?: any[]; orderNo?: string }>()
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
   'generated': [config: any]
+  'ingredientsUpdated': [data: { internalCode: string; customsIngredients: string }]
 }>()
 
 const visible = ref(props.modelValue)
@@ -475,27 +476,76 @@ function normPct(s: string): string {
   return m ? String(parseFloat(m[1])) : ''
 }
 
-// 成分匹配级别：full = CAS 与含量全部一致；pct = CAS 一致但含量不同；none = CAS 不一致或无法比较
+// 归一化成分名称：去除空白、转小写
+function normName(s: string): string {
+  return (s || '').trim().toLowerCase().replace(/\s+/g, '')
+}
+
+// 成分匹配级别：full = 完全一致；pct = CAS 一致但含量不同；none = 不一致
+// 支持双向匹配：缺 CAS 时用成分名称匹配，缺名称时用 CAS 匹配
 function compositionMatchLevel(orderList: any[], ledgerList: any[]): 'full' | 'pct' | 'none' {
-  const orderMap: Record<string, string> = {}
+  // 构建订单侧的映射
+  const orderCasMap: Record<string, string> = {}
+  const orderNameMap: Record<string, string> = {}
   for (const c of orderList || []) {
     const cas = normCas(c.cas || '').trim()
-    if (cas) orderMap[cas] = normPct(c.percentage)
+    const name = normName(c.component_cn || '')
+    if (cas) orderCasMap[cas] = normPct(c.percentage)
+    else if (name) orderNameMap[name] = normPct(c.percentage)
   }
-  const ledgerMap: Record<string, string> = {}
+  // 构建台账侧的映射
+  const ledgerCasMap: Record<string, string> = {}
+  const ledgerNameMap: Record<string, string> = {}
   for (const c of ledgerList || []) {
     const cas = normCas(c.cas || '').trim()
-    if (cas) ledgerMap[cas] = normPct(c.percentage)
+    const name = normName(c.component_cn || '')
+    if (cas) ledgerCasMap[cas] = normPct(c.percentage)
+    else if (name) ledgerNameMap[name] = normPct(c.percentage)
   }
-  const oKeys = Object.keys(orderMap).sort()
-  const lKeys = Object.keys(ledgerMap).sort()
-  if (oKeys.length === 0 || oKeys.join(',') !== lKeys.join(',')) return 'none'
-  for (const cas of oKeys) {
-    const op = orderMap[cas]
-    const lp = ledgerMap[cas]
-    if (op && lp && op !== lp) return 'pct'
+  const oCasKeys = Object.keys(orderCasMap).sort()
+  const lCasKeys = Object.keys(ledgerCasMap).sort()
+  const oNameKeys = Object.keys(orderNameMap).sort()
+  const lNameKeys = Object.keys(ledgerNameMap).sort()
+
+  // 策略1：订单有 CAS 号时，优先用 CAS 号匹配
+  if (oCasKeys.length > 0) {
+    if (oCasKeys.join(',') !== lCasKeys.join(',')) return 'none'
+    for (const cas of oCasKeys) {
+      const op = orderCasMap[cas]
+      const lp = ledgerCasMap[cas]
+      if (op && lp && op !== lp) return 'pct'
+    }
+    return 'full'
   }
-  return 'full'
+  // 策略2：订单没有 CAS 号时，用成分名称匹配
+  if (oNameKeys.length > 0) {
+    if (oNameKeys.join(',') !== lNameKeys.join(',')) return 'none'
+    for (const name of oNameKeys) {
+      const op = orderNameMap[name]
+      const lp = ledgerNameMap[name]
+      if (op && lp && op !== lp) return 'pct'
+    }
+    return 'full'
+  }
+  // 订单既无 CAS 号也无成分名称
+  return 'none'
+}
+
+// 将结构化成分数据格式化为文本（用于回填 customs_ingredients）
+function formatCompositionToText(composition: any[]): string {
+  if (!composition || composition.length === 0) return ''
+  return composition.map(c => {
+    const parts = []
+    if (c.component_cn) parts.push(c.component_cn)
+    if (c.cas) parts.push(c.cas)
+    if (c.percentage) parts.push(c.percentage)
+    return parts.join(' ')
+  }).join(', ')
+}
+
+// 检查订单成分是否缺少 CAS 号（需要从台账回填）
+function needsCasBackfill(orderComp: any[]): boolean {
+  return orderComp.some(c => !c.cas)
 }
 
 // 校验新配方必填项，返回是否全部通过；失败时填充 importErrors 供界面标红
@@ -578,18 +628,36 @@ async function loadLedger() {
         const parsedComp = parseIngredients(orderItem.customs_ingredients)
         // 与台账同名单据项比对：full = 已在库；pct = CAS 一致但含量不同（按新配方列出并标记）；none = 库里没有
         let matchLevel: 'full' | 'pct' | 'none' = 'none'
+        let matchedLedgerItem: MsdsLedgerItem | null = null
         for (const ledgerItem of items) {
           if (ledgerItem.customs_name !== orderItem.customs_name) continue
           if (!ledgerItem.composition || ledgerItem.composition.length === 0) continue
           const level = compositionMatchLevel(parsedComp, ledgerItem.composition)
           if (level === 'full') {
             matchLevel = 'full'
+            matchedLedgerItem = ledgerItem
             break
           }
-          if (level === 'pct' && matchLevel === 'none') matchLevel = 'pct'
+          if (level === 'pct' && matchLevel === 'none') {
+            matchLevel = 'pct'
+            matchedLedgerItem = ledgerItem
+          }
         }
 
-        if (matchLevel === 'full') continue
+        if (matchLevel === 'full') {
+          // 匹配成功：如果订单缺少 CAS 号但台账有，回填完整数据
+          if (matchedLedgerItem && needsCasBackfill(parsedComp) && !needsCasBackfill(matchedLedgerItem.composition)) {
+            const fullText = formatCompositionToText(matchedLedgerItem.composition)
+            if (fullText) {
+              orderItem.customs_ingredients = fullText
+              // 通知父组件持久化更新
+              if (orderItem.internal_code) {
+                emit('ingredientsUpdated', { internalCode: orderItem.internal_code, customsIngredients: fullText })
+              }
+            }
+          }
+          continue
+        }
 
         // Check if we already added this formula
         const exists = newFormulas.value.some((f: any) => 

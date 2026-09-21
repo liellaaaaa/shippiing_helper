@@ -304,6 +304,15 @@ export const ordersApi = {
     return resp.data
   },
 
+  /** 更新台账产品成分（同时更新 order_pi_records 和 order_items） */
+  updateItemIngredients: async (orderNo: string, internalCode: string, customsIngredients: string) => {
+    const resp = await apiClient.put(
+      `/orders/ledger/${encodeURIComponent(orderNo)}/items/${encodeURIComponent(internalCode)}/ingredients`,
+      { customs_ingredients: customsIngredients }
+    )
+    return resp.data
+  },
+
   saveOrder: async (order: ParsedOrderSchema): Promise<OrderSaveResponse> => {
     const resp = await apiClient.post(`/orders`, { order })
     return resp.data

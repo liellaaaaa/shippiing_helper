@@ -30,6 +30,7 @@ from app.schemas.order import (
     PasteParseResponse,
     OrderSaveRequest,
     OrderSaveResponse,
+    IngredientsUpdateRequest,
 )
 from app.schemas.ledger import (
     PiContractTableParseRequest,
@@ -387,3 +388,22 @@ async def list_ledger(
 ):
     """台账列表"""
     return service.list_ledger(search=search, page=page, page_size=page_size)
+
+
+@router.put(
+    "/ledger/{order_no}/items/{internal_code}/ingredients",
+    summary="更新台账产品成分",
+    description="更新指定台账产品的 customs_ingredients 字段（同时更新 order_pi_records 和 order_items）",
+)
+@audit_action("update_ingredients", "orders")
+async def update_item_ingredients(
+    order_no: str,
+    internal_code: str,
+    request: IngredientsUpdateRequest,
+    service: LedgerService = Depends(get_ledger_service),
+):
+    """更新台账产品的成分数据"""
+    result = service.update_item_ingredients(order_no, internal_code, request.customs_ingredients)
+    if not result["success"]:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=result["message"])
+    return result

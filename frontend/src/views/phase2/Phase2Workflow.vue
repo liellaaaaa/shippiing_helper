@@ -190,7 +190,13 @@
     />
 
     <!-- ── MSDS Generator Dialog ──────────────────── -->
-    <MSDSGeneratorDialog v-model="showMsdsDialog" :order-items="allLedgerItems" @generated="onMsdsGenerated" />
+    <MSDSGeneratorDialog
+      v-model="showMsdsDialog"
+      :order-items="allLedgerItems"
+      :order-no="currentOrderInfo.order_no"
+      @generated="onMsdsGenerated"
+      @ingredients-updated="onIngredientsUpdated"
+    />
 
   </div>
 </template>
@@ -549,6 +555,16 @@ async function onBookingConfirm(fields: import('./components/BookingConfirmDialo
 function onMsdsGenerated(config: any) {
   currentDocKey.value = config.documentKey || config.docKey
   currentConfig.value = config
+}
+
+async function onIngredientsUpdated(data: { internalCode: string; customsIngredients: string }) {
+  const orderNo = currentOrderInfo.value.order_no
+  if (!orderNo) return
+  try {
+    await ordersApi.updateItemIngredients(orderNo, data.internalCode, data.customsIngredients)
+  } catch (e) {
+    console.error('回填成分数据失败:', e)
+  }
 }
 
 onMounted(async () => {

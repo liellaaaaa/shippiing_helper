@@ -825,3 +825,32 @@ class LedgerService:
             return LedgerListResponse(records=result_records, total=total)
         finally:
             db.close()
+
+    def update_item_ingredients(self, order_no: str, internal_code: str, customs_ingredients: str) -> dict:
+        """更新台账产品成分（同时更新 order_pi_records 和 order_items）"""
+        db = SessionLocal()
+        try:
+            # 更新 order_pi_records.components
+            records = db.query(OrderPiRecord).filter_by(
+                order_no=order_no, internal_code=internal_code
+            ).all()
+            if not records:
+                return {"success": False, "message": f"台账记录不存在: order_no={order_no}, internal_code={internal_code}"}
+            for r in records:
+                r.components = customs_ingredients
+            # 同步更新 order_items.customs_ingredients
+            from app.models.order import OrderItem, Order
+            order = db.query(Order).filter_by(order_no=order_no).first()
+            if order:
+                items = db.query(OrderItem).filter_by(
+                    order_id=order.id, internal_code=internal_code
+                ).all()
+                for item in items:
+                    item.customs_ingredients = customs_ingredients
+            db.commit()
+            return {"success": True, "message": f"已更新 {len(records)} 条台账记录的成分数据"}
+        except Exception as e:
+            db.rollback()
+            return {"success": False, "message": str(e)}
+        finally:
+            db.close()

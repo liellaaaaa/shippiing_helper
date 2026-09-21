@@ -95,3 +95,8 @@ class OrderSaveResponse(BaseModel):
     order_id: int
     items_count: int
     message: str
+
+
+class IngredientsUpdateRequest(BaseModel):
+    """更新订单产品成分请求"""
+    customs_ingredients: str

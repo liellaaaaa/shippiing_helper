@@ -30,6 +30,34 @@ def _fmt(value: Any) -> str:
     return "" if value is None else str(value)
 
 
+def _fmt_num(value: Any) -> str:
+    """数量/金额显示：整数去掉 .0，与成品票 QTY:5040KGS 一致。"""
+    if value is None or value == "":
+        return ""
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    if f == int(f) and abs(f) < 1e15:
+        return str(int(f))
+    return str(f)
+
+
+def _coerce_number(text: str) -> Any:
+    """填充后把纯数字串写回数值格，方便 Excel 求和/对齐成品票。"""
+    s = (text or "").strip()
+    if not s:
+        return text
+    try:
+        if re.fullmatch(r"-?\d+", s):
+            return int(s)
+        if re.fullmatch(r"-?\d+\.\d+", s):
+            return float(s)
+    except ValueError:
+        pass
+    return text
+
+
 def _extract_batch_test_fields(batch: Dict[str, Any]) -> Dict[str, str]:
     """从批次 tests[] /扁平字段提取 COA 检测项（报告写什么就填什么）。
 
@@ -118,21 +146,28 @@ def _build_mapping(payload: Dict[str, Any]) -> Dict[str, str]:
         "SEAL_NO": payload.get("seal_no", ""),
         "ITEM_COUNT": len(items),
         "ITEM_DESC": first.get("desc", ""),
-        "ITEM_QTY": first.get("qty", ""),
-        "ITEM_PRICE": first.get("price", ""),
-        "ITEM_AMOUNT": first.get("amount", ""),
+        "ITEM_QTY": _fmt_num(first.get("qty", "")),
+        "ITEM_PRICE": _fmt_num(first.get("price", "")),
+        "ITEM_AMOUNT": _fmt_num(first.get("amount", "")),
         "HS_CODES": payload.get("hs_codes", ""),
         "PO_LINE": po_line,
         "TOTALS_LINE": payload.get("totals_line", ""),
-        "TOTAL_QTY": payload.get("total_qty", ""),
-        "TOTAL_AMOUNT": payload.get("total_amount", ""),
+        "TOTAL_QTY": _fmt_num(payload.get("total_qty", "")),
+        "TOTAL_AMOUNT": _fmt_num(payload.get("total_amount", "")),
         "AMOUNT_WORDS": payload.get("amount_words", ""),
-        "PACKAGES": packages_display,
-        "VOLUME_CBM": payload.get("volume_cbm", ""),
-        "NET_KG": payload.get("net_kg", ""),
-        "GROSS_KG": payload.get("gross_kg", ""),
+        "PACKAGES": _fmt_num(packages_display) if packages_display not in (None, "") else "",
+        "VOLUME_CBM": _fmt_num(payload.get("volume_cbm", "")) if payload.get("volume_cbm", "") not in (None, "") else "",
+        "NET_KG": _fmt_num(payload.get("net_kg", "")),
+        "GROSS_KG": _fmt_num(payload.get("gross_kg", "")),
         "PRODUCT_NAME": payload.get("product_name", ""),
         "SHIPPED_QTY": payload.get("shipped_qty_text", ""),
+        "SI_DESC_BLOCK": payload.get("si_desc_block", ""),
+        "MARKS": payload.get("marks", "N/M"),
+        "REMARK": payload.get("remark", ""),
+        "PACKAGE_UNIT": payload.get("package_unit_label", ""),
+        "FINAL_DEST": payload.get("final_dest", ""),
+        "CONTAINER_QTY": payload.get("container_qty", ""),
+        "PACKING_RANGE": payload.get("packing_range", ""),
         "BATCH_NO": payload.get("batch_no", ""),
         "PROD_DATE": payload.get("prod_date", ""),
         "EXP_DATE": payload.get("exp_date", ""),
@@ -159,14 +194,15 @@ def _build_mapping(payload: Dict[str, Any]) -> Dict[str, str]:
     for idx, it in enumerate(items, 1):
         raw[f"ITEM_NO_{idx}"] = it.get("index", idx)
         raw[f"ITEM_DESC_{idx}"] = it.get("desc", "")
-        raw[f"ITEM_QTY_{idx}"] = it.get("qty", "")
-        raw[f"ITEM_PRICE_{idx}"] = it.get("price", "")
-        raw[f"ITEM_AMOUNT_{idx}"] = it.get("amount", "")
+        raw[f"ITEM_QTY_{idx}"] = _fmt_num(it.get("qty"))
+        raw[f"ITEM_PRICE_{idx}"] = _fmt_num(it.get("price"))
+        raw[f"ITEM_AMOUNT_{idx}"] = _fmt_num(it.get("amount"))
         raw[f"ITEM_HS_{idx}"] = it.get("hs_code", "")
-        raw[f"ITEM_PACKAGES_{idx}"] = it.get("packages_display", it.get("drums", ""))
-        raw[f"ITEM_CBM_{idx}"] = it.get("cbm", "")
+        raw[f"ITEM_PACKAGES_{idx}"] = _fmt_num(it.get("packages_display", it.get("drums", ""))) if it.get("packages_display") or it.get("drums") else ""
+        raw[f"ITEM_CBM_{idx}"] = _fmt_num(it.get("cbm", "")) if it.get("cbm") else ""
         raw[f"ITEM_NET_{idx}"] = it.get("net_kg", "")
         raw[f"ITEM_GROSS_{idx}"] = it.get("gross_kg", "")
+        raw[f"ITEM_PACKING_RANGE_{idx}"] = it.get("packing_range", "")
     return {k: _fmt(v) for k, v in raw.items()}
 
 
@@ -181,7 +217,11 @@ def _fill_workbook_on_sheet(ws, mapping: Dict[str, str]) -> None:
             for key, val in mapping.items():
                 text = text.replace("{{" + key + "}}", val)
             text = _PLACEHOLDER_RE.sub("", text)
-            cell.value = text
+            # 空值标签行（HS CODE: / QTY:KGS）整行清掉
+            if text.strip() in ("HS CODE:", "HS CODE：", "QTY:KGS", "NET WEIGHT:KGS", "H.S.CODE:", "H.S. Code :"):
+                cell.value = None
+                continue
+            cell.value = _coerce_number(text)
 
 
 def _fill_workbook(wb, mapping: Dict[str, str]) -> None:
@@ -218,34 +258,57 @@ def _find_row_containing(ws, token: str) -> Optional[int]:
 
 
 def _expand_ci_detail_rows(ws, n_items: int, payload: Dict[str, Any]) -> None:
-    """CI 多产品：把 1 行明细扩成 N 行，并重写 TOTAL 汇总（避免 SUM 范围过期）。"""
+    """CI 多产品：按成品版式「品名行 + QTY 行 + HS CODE 行」× N 组扩行。
+
+    对齐 CI HT260721A01 / BLUETEC Invoice：每个产品下方跟 NET/QTY 与 H.S.CODE，
+    不再只留一条汇总 QTY/HS 尾巴（船务反馈「有点混乱」）。
+    """
     if n_items <= 1:
         return
     detail_row = _find_row_containing(ws, "{{ITEM_DESC}}")
     if detail_row is None:
         detail_row = _find_row_containing(ws, "{{ITEM_DESC_1}}") or 18
 
-    n_new = n_items - 1
-    merges = _unmerge_from_row(ws, detail_row + 1)
-    ws.insert_rows(detail_row + 1, n_new)
+    block = 3  # 品名 + QTY + HS
+    n_new = block * (n_items - 1)
+    insert_at = detail_row + block
+    merges = _unmerge_from_row(ws, insert_at)
+    ws.insert_rows(insert_at, n_new)
     _apply_merged_ranges(ws, merges, n_new)
 
     src_height = ws.row_dimensions[detail_row].height
+    items = payload.get("items") or []
     for i in range(n_items):
-        row = detail_row + i
-        if i > 0:
-            if src_height:
-                ws.row_dimensions[row].height = src_height
-            for col in range(1, 7):
-                src_cell = ws.cell(detail_row, col)
-                dst_cell = ws.cell(row, col)
-                dst_cell._style = copy.copy(src_cell._style)
+        base = detail_row + i * block
+        for j in range(block):
+            row = base + j
+            if i > 0 or j > 0:
+                src = detail_row + j
+                if src_height and j == 0:
+                    ws.row_dimensions[row].height = src_height
+                for col in range(1, 7):
+                    ws.cell(row, col)._style = copy.copy(ws.cell(src, col)._style)
         idx = i + 1
-        ws.cell(row, 1).value = str(idx)
-        ws.cell(row, 2).value = f"{{{{ITEM_DESC_{idx}}}}}"
-        ws.cell(row, 3).value = f"{{{{ITEM_QTY_{idx}}}}}"
-        ws.cell(row, 4).value = f"{{{{ITEM_PRICE_{idx}}}}}"
-        ws.cell(row, 5).value = f"{{{{ITEM_AMOUNT_{idx}}}}}"
+        it = items[i] if i < len(items) else {}
+        ws.cell(base, 1).value = str(idx)
+        ws.cell(base, 2).value = f"{{{{ITEM_DESC_{idx}}}}}"
+        ws.cell(base, 3).value = f"{{{{ITEM_QTY_{idx}}}}}"
+        ws.cell(base, 4).value = f"{{{{ITEM_PRICE_{idx}}}}}"
+        ws.cell(base, 5).value = f"{{{{ITEM_AMOUNT_{idx}}}}}"
+        ws.cell(base + 1, 1).value = None
+        ws.cell(base + 1, 2).value = f"QTY:{{{{ITEM_QTY_{idx}}}}}KGS"
+        ws.cell(base + 1, 3).value = None
+        ws.cell(base + 1, 4).value = None
+        ws.cell(base + 1, 5).value = None
+        ws.cell(base + 2, 1).value = None
+        # 无 HS 的行整行留空，不打「HS CODE:」空尾巴
+        if it.get("hs_code"):
+            ws.cell(base + 2, 2).value = f"HS CODE:{{{{ITEM_HS_{idx}}}}}"
+        else:
+            ws.cell(base + 2, 2).value = None
+        ws.cell(base + 2, 3).value = None
+        ws.cell(base + 2, 4).value = None
+        ws.cell(base + 2, 5).value = None
 
     # TOTAL 行：写值汇总全部明细（覆盖全量 item 行，避免 SUM 范围过期）
     total_row = None
@@ -260,39 +323,57 @@ def _expand_ci_detail_rows(ws, n_items: int, payload: Dict[str, Any]) -> None:
         total_row = _find_row_containing(ws, "{{TOTAL_AMOUNT}}")
     if total_row is not None:
         _set_cell_value(ws, total_row, 3, payload.get("total_qty", 0))
-        _set_cell_value(ws, total_row, 5, payload.get("total_amount", 0))
+        amount = payload.get("total_amount")
+        _set_cell_value(ws, total_row, 5, amount if amount else None)
 
 
 def _expand_pl_detail_rows(ws, n_items: int, payload: Dict[str, Any]) -> None:
-    """PL 多产品：明细扩成 N 行，TOTAL 重写为全量汇总（避免 SUM 范围过期）。"""
+    """PL 多产品：「装箱号 + 品名 + 件/体积/净/毛」+ QTY + HS × N 组，TOTAL 全量汇总。"""
     if n_items <= 1:
         return
     detail_row = _find_row_containing(ws, "{{ITEM_DESC}}")
     if detail_row is None:
         detail_row = _find_row_containing(ws, "{{ITEM_DESC_1}}") or 17
 
-    n_new = n_items - 1
-    merges = _unmerge_from_row(ws, detail_row + 1)
-    ws.insert_rows(detail_row + 1, n_new)
+    block = 3
+    n_new = block * (n_items - 1)
+    insert_at = detail_row + block
+    merges = _unmerge_from_row(ws, insert_at)
+    ws.insert_rows(insert_at, n_new)
     _apply_merged_ranges(ws, merges, n_new)
 
+    items = payload.get("items") or []
     src_height = ws.row_dimensions[detail_row].height
     for i in range(n_items):
-        row = detail_row + i
-        if i > 0:
-            if src_height:
-                ws.row_dimensions[row].height = src_height
-            for col in range(1, 7):
-                src_cell = ws.cell(detail_row, col)
-                dst_cell = ws.cell(row, col)
-                dst_cell._style = copy.copy(src_cell._style)
+        base = detail_row + i * block
+        for j in range(block):
+            row = base + j
+            if i > 0 or j > 0:
+                src = detail_row + j
+                if src_height and j == 0:
+                    ws.row_dimensions[row].height = src_height
+                for col in range(1, 7):
+                    ws.cell(row, col)._style = copy.copy(ws.cell(src, col)._style)
         idx = i + 1
-        ws.cell(row, 1).value = str(idx)
-        ws.cell(row, 2).value = f"{{{{ITEM_DESC_{idx}}}}}"
-        ws.cell(row, 3).value = f"{{{{ITEM_PACKAGES_{idx}}}}}"
-        ws.cell(row, 4).value = f"{{{{ITEM_CBM_{idx}}}}}"
-        ws.cell(row, 5).value = f"{{{{ITEM_NET_{idx}}}}}"
-        ws.cell(row, 6).value = f"{{{{ITEM_GROSS_{idx}}}}}"
+        it = items[i] if i < len(items) else {}
+        packing_range = it.get("packing_range") or str(idx)
+        ws.cell(base, 1).value = packing_range
+        ws.cell(base, 2).value = f"{{{{ITEM_DESC_{idx}}}}}"
+        ws.cell(base, 3).value = f"{{{{ITEM_PACKAGES_{idx}}}}}"
+        ws.cell(base, 4).value = f"{{{{ITEM_CBM_{idx}}}}}"
+        ws.cell(base, 5).value = f"{{{{ITEM_NET_{idx}}}}}"
+        ws.cell(base, 6).value = f"{{{{ITEM_GROSS_{idx}}}}}"
+        ws.cell(base + 1, 1).value = None
+        ws.cell(base + 1, 2).value = f"QTY:{{{{ITEM_QTY_{idx}}}}}KGS"
+        for col in (3, 4, 5, 6):
+            ws.cell(base + 1, col).value = None
+        ws.cell(base + 2, 1).value = None
+        if it.get("hs_code"):
+            ws.cell(base + 2, 2).value = f"HS CODE:{{{{ITEM_HS_{idx}}}}}"
+        else:
+            ws.cell(base + 2, 2).value = None
+        for col in (3, 4, 5, 6):
+            ws.cell(base + 2, col).value = None
 
     total_row = None
     for row in ws.iter_rows(min_col=1, max_col=6):
@@ -303,8 +384,6 @@ def _expand_pl_detail_rows(ws, n_items: int, payload: Dict[str, Any]) -> None:
         if total_row:
             break
     if total_row is None:
-        total_row = _find_row_containing(ws, "{{GROSS_KG}}")
-        # 明细行也有 GROSS 占位，取靠后的
         rows = [
             r
             for r in range(1, (ws.max_row or 1) + 1)
@@ -316,7 +395,6 @@ def _expand_pl_detail_rows(ws, n_items: int, payload: Dict[str, Any]) -> None:
         if rows:
             total_row = rows[-1]
     if total_row is not None:
-        items = payload.get("items") or []
         _set_cell_value(
             ws,
             total_row,

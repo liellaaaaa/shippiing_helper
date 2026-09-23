@@ -88,6 +88,44 @@ def build_totals_line(packages: Optional[int], pallets: Optional[int]) -> str:
     return f"TOTAL {pk} DRUMS PACKED ON {pl} PALLETS ONLY."
 
 
+def _build_si_desc_block(
+    items: List[Dict[str, Any]],
+    total_qty: float,
+    packages: Optional[int],
+    pallets: Optional[int],
+) -> str:
+    """补料货描块：单品「品名+NET WEIGHT+H.S.CODE+TOTAL」；多品「序号.品名 / HS / QTY」。
+
+    对齐船务部补料成品（WA254 单品块、BLUETEC 多品编号列表）。
+    """
+    if not items:
+        return ""
+    if len(items) == 1:
+        it = items[0]
+        nw = it.get("net_kg") or it.get("qty") or 0
+        qty_txt = f"{int(nw) if float(nw) == int(float(nw)) else nw}"
+        hs = it.get("hs_code") or ""
+        totals = build_totals_line(packages, pallets)
+        parts = [it.get("desc") or "", f"NET WEIGHT:{qty_txt}KGS"]
+        if hs:
+            parts.append(f"H.S.CODE:{hs}")
+        if totals:
+            parts.append(totals)
+        return "\n".join(parts)
+    lines: List[str] = []
+    for i, it in enumerate(items, 1):
+        q = it.get("qty") or 0
+        q_txt = f"{int(q) if float(q) == int(float(q)) else q}"
+        lines.append(f"{i}.{it.get('desc') or ''}")
+        if it.get("hs_code"):
+            lines.append(f"H.S. Code : {it['hs_code']}")
+        lines.append(f"QTY:{q_txt}KGS")
+    totals = build_totals_line(packages, pallets)
+    if totals:
+        lines.append(totals)
+    return "\n".join(lines)
+
+
 def build_clearance_payload(
     record: LedgerRecordResponse,
     company_code: Optional[str] = None,
@@ -124,15 +162,24 @@ def build_clearance_payload(
     total_pallets = 0
     for i, it in enumerate(items, 1):
         qty = float(it.quantity_kg or it.net_weight_kg or 0)
-        price = float(it.unit_price or 0)
-        amount = float(it.total_amount or (qty * price))
+        # 缺单价/金额时留空，不打 0.0（船务反馈：LEVELLING AGENT 第三行 0.0 混乱）
+        price_raw = it.unit_price
+        price: Optional[float] = float(price_raw) if price_raw is not None else None
+        amount_raw = it.total_amount
+        if amount_raw is not None:
+            amount: Optional[float] = float(amount_raw)
+        elif price is not None:
+            amount = qty * price
+        else:
+            amount = None
         nw = float(it.net_weight_kg or qty or 0)
         gw = float(it.gross_weight_kg or nw or 0)
         cbm = float(it.volume_cbm or 0)
         drums = int(it.drum_count or 0)
         pallets = int(it.pallet_count or 0)
         total_qty += qty
-        total_amount += amount
+        if amount is not None:
+            total_amount += amount
         total_net += nw
         total_gross += gw
         total_cbm += cbm
@@ -143,6 +190,7 @@ def build_clearance_payload(
             {
                 "index": i,
                 "desc": desc,
+                "internal_code": it.internal_code or "",
                 "qty": qty,
                 "price": price,
                 "amount": amount,
@@ -153,9 +201,19 @@ def build_clearance_payload(
                 "drums": drums,
                 "pallets": pallets,
                 "packaging": it.packaging_name or "",
-                "packages_display": pallets if package_unit == "pallets" else drums,
+                # 无包装数据留空，不打 0
+                "packages_display": (pallets if package_unit == "pallets" else drums) or "",
             }
         )
+
+    # 同名产品（如两条 LEVELLING AGENT）用内部编号区分，避免发票看起来像重复行
+    seen_desc: dict[str, int] = {}
+    for it in out_items:
+        seen_desc[it["desc"]] = seen_desc.get(it["desc"], 0) + 1
+    for it in out_items:
+        if seen_desc.get(it["desc"], 0) > 1 and it["internal_code"]:
+            if it["internal_code"] not in it["desc"]:
+                it["desc"] = f"{it['desc']} {it['internal_code']}"
 
     packages = ov.packages if ov.packages is not None else total_drums
     pallets = ov.pallets if ov.pallets is not None else total_pallets
@@ -165,6 +223,30 @@ def build_clearance_payload(
     cbm = ov.measure_cbm if ov.measure_cbm is not None else round(total_cbm, 3)
     total_qty = round(total_qty, 3)
     total_amount = round(total_amount, 2)
+
+    # 装箱号区间：单排 1-N；多排按件数累计 1-84 / 85-109（对齐 PL HT260721A01）
+    pk_display = int(packages_display or 0)
+    if len(out_items) <= 1:
+        packing_range = f"1-{pk_display}" if pk_display > 1 else ("1" if pk_display == 1 else "")
+    else:
+        start = 1
+        for i, it in enumerate(out_items, 1):
+            n = int(it.get("packages_display") or 0)
+            if n <= 0:
+                it["packing_range"] = str(i)
+                continue
+            end = start + n - 1
+            it["packing_range"] = f"{start}-{end}" if end > start else str(start)
+            start = end + 1
+        packing_range = ""
+
+    # 无包装数据时留空，不打 0（截图里 PACKING QTY=0 / CBM=0.000 显得混乱）
+    if not packages_display:
+        packages_display_out: Any = ""
+    else:
+        packages_display_out = packages_display
+    volume_out: Any = "" if not cbm else round(cbm, 3)
+    packages_out: Any = "" if not packages else packages
 
     # COA 日期
     batch = ov.batch_no or ""
@@ -227,14 +309,22 @@ def build_clearance_payload(
         "net_kg": net,
         "gross_kg": gross,
         "volume_cbm": cbm,
-        "packages": packages,
+        "packages": packages_out,
         "pallets": pallets,
         "package_unit": package_unit,
-        "packages_display": packages_display,
+        "packages_display": packages_display_out,
+        "volume_cbm": volume_out,
         "totals_line": build_totals_line(packages, pallets),
         "hs_codes": " / ".join([it["hs_code"] for it in out_items if it["hs_code"]]),
         "product_name": out_items[0]["desc"] if out_items else "",
         "shipped_qty_text": f"{int(total_qty) if total_qty == int(total_qty) else total_qty}KG",
+        "si_desc_block": _build_si_desc_block(out_items, total_qty, packages, pallets),
+        "marks": getattr(ov, "marks", None) or "N/M",
+        "remark": getattr(ov, "remark", None) or "",
+        "package_unit_label": "PALLET(S)" if package_unit == "pallets" else "DRUMS",
+        "final_dest": (record.destination or "").strip(),
+        "container_qty": getattr(ov, "container_qty", None) or "",
+        "packing_range": packing_range,
         "batch_no": batch,
         "prod_date": prod_s,
         "exp_date": exp_s,

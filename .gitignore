@@ -57,6 +57,7 @@ Thumbs.db
 # Reference files (large binary .doc/.pdf files)
 references/*
 backend/references/*
+!references/clearance/
 
 # Reference folder (legacy PyQt5 code, not uploaded to repo)
 参考/

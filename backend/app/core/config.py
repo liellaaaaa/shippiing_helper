@@ -13,6 +13,10 @@ TEMPLATES = {
     "msds":    str(ROOT / "references" / "cnMSDS.docx"),
     "msds_en": str(ROOT / "references" / "enMSDS.docx"),
     "customs": str(ROOT / "references" / "出口报关资料-模板.xlsx"),
+    "clearance_ci": str(ROOT / "references" / "clearance" / "CI-public.xlsx"),
+    "clearance_pl": str(ROOT / "references" / "clearance" / "PL-public.xlsx"),
+    "clearance_coa": str(ROOT / "references" / "clearance" / "COA-public.xlsx"),
+    "clearance_si": str(ROOT / "references" / "clearance" / "SI-public.xlsx"),
 }
 
 REFERENCES_DIR = str(ROOT / "references")

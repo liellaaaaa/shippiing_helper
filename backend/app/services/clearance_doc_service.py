@@ -29,6 +29,56 @@ def _fmt(value: Any) -> str:
     return "" if value is None else str(value)
 
 
+def _extract_batch_test_fields(batch: Dict[str, Any]) -> Dict[str, str]:
+    """从批次 tests[] /扁平字段提取 COA 检测项（报告写什么就填什么）。
+
+    tests[] 形状：{key, name_cn, label_en, spec, result}
+    扁平字段（appearance_spec / ph_label / …）优先于 tests[]（前端可编辑覆盖）。
+    """
+    out: Dict[str, str] = {
+        "appearance_spec": "",
+        "appearance_result": "",
+        "ph_label": "",
+        "ph_spec": "",
+        "ph_result": "",
+        "solid_label": "",
+        "solid_spec": "",
+        "solid_result": "",
+        "odour_label": "",
+        "odour_spec": "",
+        "odour_result": "",
+    }
+    for t in batch.get("tests") or []:
+        if not isinstance(t, dict):
+            continue
+        key = (t.get("key") or "").strip().lower()
+        spec = t.get("spec") or ""
+        result = t.get("result") or ""
+        label = t.get("label_en") or ""
+        if key == "appearance":
+            # 外观规格全文保留（含「久置变深」等修饰语）
+            out["appearance_spec"] = spec
+            out["appearance_result"] = result
+        elif key == "ph":
+            out["ph_label"] = label or out["ph_label"]
+            out["ph_spec"] = spec
+            out["ph_result"] = result
+        elif key == "solid":
+            out["solid_label"] = label or out["solid_label"]
+            out["solid_spec"] = spec
+            out["solid_result"] = result
+        elif key == "odour":
+            out["odour_label"] = label or out["odour_label"]
+            out["odour_spec"] = spec
+            out["odour_result"] = result
+    # 前端编辑后的扁平字段覆盖 tests[] 提取值
+    for k in out:
+        flat = batch.get(k)
+        if flat not in (None, ""):
+            out[k] = str(flat)
+    return out
+
+
 def _build_mapping(payload: Dict[str, Any]) -> Dict[str, str]:
     items = payload.get("items") or []
     first = items[0] if items else {}
@@ -91,6 +141,9 @@ def _build_mapping(payload: Dict[str, Any]) -> Dict[str, str]:
         "SOLID_RESULT": payload.get("solid_result", ""),
         "APPEARANCE_SPEC": payload.get("appearance_spec", ""),
         "APPEARANCE_RESULT": payload.get("appearance_result", ""),
+        "ODOUR_LABEL": payload.get("odour_label", ""),
+        "ODOUR_SPEC": payload.get("odour_spec", ""),
+        "ODOUR_RESULT": payload.get("odour_result", ""),
         "BANK_LINE1": payload.get("bank_line1", ""),
         "BANK_LINE2": payload.get("bank_line2", ""),
         "BANK_LINE3": payload.get("bank_line3", ""),
@@ -101,19 +154,23 @@ def _build_mapping(payload: Dict[str, Any]) -> Dict[str, str]:
     return {k: _fmt(v) for k, v in raw.items()}
 
 
+def _fill_workbook_on_sheet(ws, mapping: Dict[str, str]) -> None:
+    for row in ws.iter_rows():
+        for cell in row:
+            if cell.value is None:
+                continue
+            text = str(cell.value)
+            if "{{" not in text:
+                continue
+            for key, val in mapping.items():
+                text = text.replace("{{" + key + "}}", val)
+            text = _PLACEHOLDER_RE.sub("", text)
+            cell.value = text
+
+
 def _fill_workbook(wb, mapping: Dict[str, str]) -> None:
     for ws in wb.worksheets:
-        for row in ws.iter_rows():
-            for cell in row:
-                if cell.value is None:
-                    continue
-                text = str(cell.value)
-                if "{{" not in text:
-                    continue
-                for key, val in mapping.items():
-                    text = text.replace("{{" + key + "}}", val)
-                text = _PLACEHOLDER_RE.sub("", text)
-                cell.value = text
+        _fill_workbook_on_sheet(ws, mapping)
 
 
 def _append_extra_notes(wb, extra_notes) -> None:
@@ -158,12 +215,65 @@ class ClearanceDocService:
 
         cust = customer_code or ov.get("customer_code") or getattr(record, "customer_code", None)
         payload = build_clearance_payload(record, company_code, ov)
-        mapping = _build_mapping(payload)
         wb = self.load_template(doc_type, customer_code=cust)
-        _fill_workbook(wb, mapping)
-        _append_extra_notes(wb, ov.get("extra_notes"))
+
+        # COA 多批次：一批一 sheet（录音：不同批次出货放同一 COA 不同 sheet）
+        batches = ov.get("batches") or []
+        if doc_type == "coa" and isinstance(batches, list) and len(batches) >= 1:
+            self._fill_coa_batches(wb, payload, batches)
+        else:
+            mapping = _build_mapping(payload)
+            _fill_workbook(wb, mapping)
+            _append_extra_notes(wb, ov.get("extra_notes"))
+
         buf = BytesIO()
         wb.save(buf)
         content = buf.getvalue()
         doc_key = f"{doc_type}_{int(time.time())}"
         return content, doc_key, base64.b64encode(content).decode()
+
+    def _fill_coa_batches(self, wb, base_payload: dict, batches: list) -> None:
+        """用检测报告批次填充 COA；多批时一批一 sheet。PI 固定本票。"""
+        template_ws = wb.worksheets[0]
+        # 清空多余 sheet，按批次数复制干净模板（先复制再填，避免拷到已替换占位符的 sheet）
+        while len(wb.worksheets) > 1:
+            wb.remove(wb.worksheets[1])
+        sheets = [template_ws]
+        for _ in range(1, len(batches)):
+            sheets.append(wb.copy_worksheet(template_ws))
+
+        for i, batch in enumerate(batches):
+            ws = sheets[i]
+            ws.title = str(batch.get("batch_no") or f"COA-{i + 1}")[:31]
+            fields = _extract_batch_test_fields(batch)
+
+            p = dict(base_payload)
+            p["batch_no"] = batch.get("batch_no") or p.get("batch_no") or ""
+            if batch.get("quantity_text"):
+                p["shipped_qty_text"] = batch["quantity_text"]
+            # PROD_DATE：批次自带 → 批号推导；多批不继承单批基线日期
+            prod = batch.get("prod_date") or ""
+            if not prod and p["batch_no"]:
+                from app.services.coa_date_service import parse_production_date_from_batch
+
+                pd = parse_production_date_from_batch(p["batch_no"])
+                if pd:
+                    prod = pd.isoformat()
+            p["prod_date"] = prod
+            # 检测项：报告写什么就填什么（含外观「久置变深」）
+            p["appearance_spec"] = fields.get("appearance_spec") or ""
+            p["appearance_result"] = fields.get("appearance_result") or ""
+            p["ph_label"] = fields.get("ph_label") or "PH VALUE"
+            p["ph_spec"] = fields.get("ph_spec") or ""
+            p["ph_result"] = fields.get("ph_result") or ""
+            p["solid_label"] = fields.get("solid_label") or "SOLID CONTENT(%)"
+            p["solid_spec"] = fields.get("solid_spec") or ""
+            p["solid_result"] = fields.get("solid_result") or ""
+            p["odour_label"] = fields.get("odour_label") or ""
+            p["odour_spec"] = fields.get("odour_spec") or ""
+            p["odour_result"] = fields.get("odour_result") or ""
+            # 一票一 COA：PI 固定本票
+            p["coa_pi_no"] = base_payload.get("pi_no") or p.get("coa_pi_no") or ""
+
+            mapping = _build_mapping(p)
+            _fill_workbook_on_sheet(ws, mapping)

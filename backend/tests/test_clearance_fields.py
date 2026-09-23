@@ -92,11 +92,10 @@ def test_coa_dates_from_batch_and_rule():
     assert p["exp_date"] == "2027-06-25"
 
 
-def test_coa_pi_no_tbd_leaves_blank():
-    """TBD-2：默认不填本票 PI，避免跨 PI 填错。"""
+def test_coa_pi_no_defaults_to_shipment_pi():
+    """一票一 COA：默认填本票 PI（录音确认，不再是 TBD）。"""
     p = build_clearance_payload(record=make_record(), company_code="honghao", overrides={})
-    assert p["coa_pi_no"] == "" or p["coa_pi_no"] is None
-    # 显式覆盖时才写入
+    assert p["coa_pi_no"] == "HT260720SZ"
     p2 = build_clearance_payload(
         record=make_record(),
         company_code="honghao",

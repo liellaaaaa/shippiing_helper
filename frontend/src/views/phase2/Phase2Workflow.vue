@@ -80,7 +80,7 @@
             size="small"
             :disabled="!selectedLedgerId"
             v-track="{ event: 'generate_document', module: 'phase2', detail: { doc_type: 'coa' } }"
-            @click="openClearanceDocument('coa')"
+            @click="showCoaReportDialog = true"
           >
             品质证书 COA
           </el-button>
@@ -250,6 +250,12 @@
       @ingredients-updated="onIngredientsUpdated"
     />
 
+    <!-- ── COA 检测报告上传对话框（多批 → 多 sheet） ── -->
+    <CoaReportDialog
+      v-model="showCoaReportDialog"
+      @confirm="onCoaBatchesConfirm"
+    />
+
   </div>
 </template>
 
@@ -260,6 +266,7 @@ import { ElMessage } from 'element-plus'
 import DocumentEditor from './components/DocumentEditor.vue'
 import BookingConfirmDialog from './components/BookingConfirmDialog.vue'
 import MSDSGeneratorDialog from './components/MSDSGeneratorDialog.vue'
+import CoaReportDialog from './components/CoaReportDialog.vue'
 import { phase2Api } from '@/api/phase2'
 import { getOrderList, getOrderComparison, getOrderPiContracts, type OrderListItem } from '@/api/merge'
 import { getDashboardOrders, type DashboardOrder } from '@/api/dashboard'
@@ -349,6 +356,7 @@ function startResize(e: MouseEvent) {
 }
 const showMsdsDialog = ref(false)
 const showBookingDialog = ref(false)
+const showCoaReportDialog = ref(false)
 const selectedBookingTemplate = ref<'xls' | 'xlsx'>('xlsx')
 
 // 一客一模板 + 额外说明
@@ -604,6 +612,37 @@ async function openClearanceDocument(docType: 'si' | 'ci' | 'pl' | 'coa') {
     lastCustomerCode.value = customerCode
   } catch (e: any) {
     ElMessage.error('清关文件生成失败，请稍后重试')
+  }
+}
+
+/** COA：检测报告多批 → 一票一 COA 多 sheet */
+async function onCoaBatchesConfirm(batches: Array<Record<string, unknown>>) {
+  if (!selectedLedgerId.value) {
+    ElMessage.warning('请先从台账列表选择一条记录')
+    return
+  }
+  try {
+    const companyCode = getCompanyCodeFromShipper()
+    const customerCode = currentOrderInfo.value?.customer_code || ''
+    const extraNotes = (clearanceExtraNotes.value || '')
+      .split('\n')
+      .map((s: string) => s.trim())
+      .filter(Boolean)
+    const overrides: Record<string, unknown> = { batches }
+    if (extraNotes.length) overrides.extra_notes = extraNotes
+    const res = await phase2Api.generateClearance('coa', {
+      ledger_record_id: selectedLedgerId.value,
+      customer_code: customerCode || undefined,
+      company_code: companyCode,
+      overrides,
+    })
+    currentDocKey.value = res.data.documentKey || res.data.docKey || ''
+    currentConfig.value = res.data || res
+    lastClearanceType.value = 'coa'
+    lastCompanyCode.value = companyCode
+    lastCustomerCode.value = customerCode
+  } catch (e: any) {
+    ElMessage.error('COA 生成失败，请稍后重试')
   }
 }
 

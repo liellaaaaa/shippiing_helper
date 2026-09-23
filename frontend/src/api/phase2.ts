@@ -27,6 +27,14 @@ export const phase2Api = {
       params: { order_id: orderId, ledger_record_id: ledgerRecordId, company_code: companyCode }
     })
   },
+  /** 解析品质检测报告 .docx → 批次列表（COA 多批填充） */
+  parseCoaReport(file: File) {
+    const formData = new FormData()
+    formData.append('file', file)
+    return apiClient.post('/documents/coa/parse-report', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
   generateClearance(docType: 'ci' | 'pl' | 'coa' | 'si', payload: {
     ledger_record_id: number
     order_id?: number

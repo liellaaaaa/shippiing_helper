@@ -2,7 +2,7 @@ import hashlib, base64
 import os
 from typing import Optional
 
-from fastapi import APIRouter, Query, Body
+from fastapi import APIRouter, Query, Body, File, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import desc
 from app.database import SessionLocal
@@ -261,6 +261,22 @@ async def generate_pl(req: ClearanceGenerateRequest = Body(...)):
     svc = ClearanceDocService()
     content, doc_key, _ = svc.generate("pl", record, req.company_code, req.overrides.model_dump(), customer_code=req.customer_code)
     return _oo_response(content, doc_key, "pl", req.order_id)
+
+
+@router.post("/coa/parse-report")
+async def parse_coa_inspection_report(file: UploadFile = File(...)):
+    """解析品质检测报告 .docx → 批次列表（供 COA 多批填充）。"""
+    from app.services.inspection_report_service import parse_inspection_report
+
+    filename = (file.filename or "").lower()
+    if not filename.endswith(".docx"):
+        return {"error": "仅支持 .docx 检测报告"}
+    content = await file.read()
+    try:
+        batches = parse_inspection_report(content)
+    except Exception as e:  # noqa: BLE001 — 解析失败返回给前端提示
+        return {"error": f"检测报告解析失败: {e}"}
+    return {"batches": batches}
 
 
 @router.post("/coa")

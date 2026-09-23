@@ -42,6 +42,8 @@ class ClearanceOverrides(BaseModel):
     solid_result: Optional[str] = None
     # 客户额外说明行（录音：加一行说明/多写内容）
     extra_notes: Optional[list[str]] = None
+    # COA 多批次（检测报告解析/前端编辑后回传）；一票一 COA，一批一 sheet
+    batches: Optional[list] = None
 
     class Config:
         extra = "ignore"

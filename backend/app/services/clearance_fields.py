@@ -230,8 +230,8 @@ def build_clearance_payload(
         "batch_no": batch,
         "prod_date": prod_s,
         "exp_date": exp_s,
-        "coa_pi_no": ov.coa_pi_no or "",  # TBD-2 默认空
-        "ph_label": ov.ph_label or "",  # TBD-1 默认空 → 模板占位保留
+        "coa_pi_no": ov.coa_pi_no or pi_no,  # 一票一 COA，固定本票 PI（录音确认）
+        "ph_label": ov.ph_label or "",  # 默认取检测报告解析结果
         "solid_label": ov.solid_label or "SOLID CONTENT",
         "appearance_spec": ov.appearance_spec or "",
         "appearance_result": ov.appearance_result or "",

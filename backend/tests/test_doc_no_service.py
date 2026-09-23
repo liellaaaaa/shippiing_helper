@@ -36,3 +36,16 @@ def test_packing_no_idempotent():
 
 def test_packing_no_mh():
     assert to_packing_no("MHBD260304") == "PLBD260304"
+
+
+def test_packing_no_empty():
+    assert to_packing_no("") == ""
+    assert to_packing_no(None) == ""
+
+
+def test_no_digit_prefixes_in():
+    assert to_invoice_no("ABC") == "INABC"
+
+
+def test_strip_whitespace():
+    assert to_invoice_no("  HT260720SZ  ") == "IN260720SZ"

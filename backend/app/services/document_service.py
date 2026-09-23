@@ -15,6 +15,7 @@ from app.models.order import Order, OrderItem
 from app.models.order_pi_record import OrderPiRecord
 from app.models.pi_contract import PiContract, PiContractItem
 from app.services.customs_declaration_service import CustomsDeclarationService
+from app.services import doc_no_service
 from app.core.destination_map import _lookup_city, parse_destination
 
 
@@ -168,21 +169,7 @@ def _to_invoice_no(contract_no: str) -> str:
     """合同号转发票号：将公司代码前缀（HT/HH/MH）替换为 IN，保留地区缩写。
     例: HTPK260304→INPK260304, MHBD260304→INBD260304, HH12345→IN12345, HT260304E01→IN260304E01
     """
-    if not contract_no:
-        return ""
-    # 已是发票号（IN 开头）：保持原样，保证幂等
-    if contract_no.startswith("IN"):
-        return contract_no
-    # 公司代码前缀：替换为 IN，保留后面的地区缩写和数字
-    for prefix in ("HT", "HH", "MH"):
-        if contract_no.startswith(prefix):
-            return "IN" + contract_no[len(prefix):]
-    # 无公司代码前缀：找到第一个数字的位置，取后面的部分
-    m = re.search(r'\d', contract_no)
-    if m:
-        return "IN" + contract_no[m.start():]
-    # 没有数字，直接加 IN 前缀
-    return "IN" + contract_no
+    return doc_no_service.to_invoice_no(contract_no)
 
 
 def _amount_to_chinese_upper(amount: float) -> str:

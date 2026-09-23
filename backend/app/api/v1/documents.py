@@ -237,30 +237,40 @@ def _save_doc_to_db(doc_key: str, doc_type: str, content: bytes, order_id: int =
         db.close()
 
 
+def _generate_clearance_or_error(doc_type: str, req: ClearanceGenerateRequest):
+    """统一清关生成入口：异常返回 JSON error，避免裸 500。"""
+    import traceback
+
+    from app.services.ledger_service import LedgerService
+
+    try:
+        record = LedgerService().get_ledger_record(req.ledger_record_id)
+        if not record:
+            return {"error": f"ledger record not found: {req.ledger_record_id}"}
+        svc = ClearanceDocService()
+        content, doc_key, _ = svc.generate(
+            doc_type,
+            record,
+            req.company_code,
+            req.overrides.model_dump() if req.overrides else {},
+            customer_code=req.customer_code,
+        )
+        return _oo_response(content, doc_key, doc_type, req.order_id)
+    except Exception as e:  # noqa: BLE001 — 前端需要可读错误
+        traceback.print_exc()
+        return {"error": f"{doc_type} generate failed: {e}"}
+
+
 @router.post("/ci")
 async def generate_ci(req: ClearanceGenerateRequest = Body(...)):
     """生成商业发票 CI（清关，非出口报关发票）。"""
-    from app.services.ledger_service import LedgerService
-
-    record = LedgerService().get_ledger_record(req.ledger_record_id)
-    if not record:
-        return {"error": "ledger record not found"}
-    svc = ClearanceDocService()
-    content, doc_key, _ = svc.generate("ci", record, req.company_code, req.overrides.model_dump(), customer_code=req.customer_code)
-    return _oo_response(content, doc_key, "ci", req.order_id)
+    return _generate_clearance_or_error("ci", req)
 
 
 @router.post("/pl")
 async def generate_pl(req: ClearanceGenerateRequest = Body(...)):
     """生成装箱单 PL（清关）。"""
-    from app.services.ledger_service import LedgerService
-
-    record = LedgerService().get_ledger_record(req.ledger_record_id)
-    if not record:
-        return {"error": "ledger record not found"}
-    svc = ClearanceDocService()
-    content, doc_key, _ = svc.generate("pl", record, req.company_code, req.overrides.model_dump(), customer_code=req.customer_code)
-    return _oo_response(content, doc_key, "pl", req.order_id)
+    return _generate_clearance_or_error("pl", req)
 
 
 @router.post("/coa/parse-report")
@@ -282,27 +292,13 @@ async def parse_coa_inspection_report(file: UploadFile = File(...)):
 @router.post("/coa")
 async def generate_coa(req: ClearanceGenerateRequest = Body(...)):
     """生成分析证明 COA（清关）。"""
-    from app.services.ledger_service import LedgerService
-
-    record = LedgerService().get_ledger_record(req.ledger_record_id)
-    if not record:
-        return {"error": "ledger record not found"}
-    svc = ClearanceDocService()
-    content, doc_key, _ = svc.generate("coa", record, req.company_code, req.overrides.model_dump(), customer_code=req.customer_code)
-    return _oo_response(content, doc_key, "coa", req.order_id)
+    return _generate_clearance_or_error("coa", req)
 
 
 @router.post("/si")
 async def generate_si(req: ClearanceGenerateRequest = Body(...)):
     """生成补件 SI（清关，非提单原件）。"""
-    from app.services.ledger_service import LedgerService
-
-    record = LedgerService().get_ledger_record(req.ledger_record_id)
-    if not record:
-        return {"error": "ledger record not found"}
-    svc = ClearanceDocService()
-    content, doc_key, _ = svc.generate("si", record, req.company_code, req.overrides.model_dump(), customer_code=req.customer_code)
-    return _oo_response(content, doc_key, "si", req.order_id)
+    return _generate_clearance_or_error("si", req)
 
 
 @router.post("/templates/save")

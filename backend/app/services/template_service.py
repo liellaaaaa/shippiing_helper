@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Any, Optional
 
 from app.core.config import TEMPLATES
@@ -45,6 +46,9 @@ def get_active_customer_template(
             .order_by(CustomerTemplate.version.desc())
             .first()
         )
+    except Exception:
+        # 表未建/连接异常时回退公共模板，避免整单 500
+        return None
     finally:
         db.close()
 
@@ -53,13 +57,22 @@ def load_template_bytes(
     customer_code: Optional[str], doc_type: str
 ) -> tuple[bytes, str]:
     """返回 (xlsx_bytes, source) source=customer|public。"""
-    row = get_active_customer_template(customer_code, doc_type)
-    if row and row.template_blob:
-        return bytes(row.template_blob), "customer"
+    try:
+        row = get_active_customer_template(customer_code, doc_type)
+        if row and row.template_blob:
+            blob = row.template_blob
+            if isinstance(blob, memoryview):
+                blob = bytes(blob)
+            return blob, "customer"
+    except Exception:
+        pass
     key = _DOC_TYPE_TO_TEMPLATE.get(doc_type)
     if not key:
         raise ValueError(f"Unknown clearance doc_type: {doc_type}")
-    with open(TEMPLATES[key], "rb") as f:
+    path = TEMPLATES[key]
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"clearance template missing: {path}")
+    with open(path, "rb") as f:
         return f.read(), "public"
 
 

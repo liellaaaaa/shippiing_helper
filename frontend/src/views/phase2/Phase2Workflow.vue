@@ -266,7 +266,7 @@ import { ElMessage } from 'element-plus'
 import DocumentEditor from './components/DocumentEditor.vue'
 import BookingConfirmDialog from './components/BookingConfirmDialog.vue'
 import MSDSGeneratorDialog from './components/MSDSGeneratorDialog.vue'
-import CoaReportDialog from './components/CoaReportDialog.vue'
+import CoaReportDialog, { type CoaBatchRow } from './components/CoaReportDialog.vue'
 import { phase2Api } from '@/api/phase2'
 import { getOrderList, getOrderComparison, getOrderPiContracts, type OrderListItem } from '@/api/merge'
 import { getDashboardOrders, type DashboardOrder } from '@/api/dashboard'
@@ -608,7 +608,7 @@ async function openClearanceDocument(docType: 'si' | 'ci' | 'pl' | 'coa') {
     currentDocKey.value = res.data.documentKey || res.data.docKey || ''
     currentConfig.value = res.data || res
     lastClearanceType.value = docType
-    lastCompanyCode.value = companyCode
+    lastCompanyCode.value = companyCode ?? ''
     lastCustomerCode.value = customerCode
   } catch (e: any) {
     ElMessage.error('清关文件生成失败，请稍后重试')
@@ -616,7 +616,7 @@ async function openClearanceDocument(docType: 'si' | 'ci' | 'pl' | 'coa') {
 }
 
 /** COA：检测报告多批 → 一票一 COA 多 sheet */
-async function onCoaBatchesConfirm(batches: Array<Record<string, unknown>>) {
+async function onCoaBatchesConfirm(batches: CoaBatchRow[]) {
   if (!selectedLedgerId.value) {
     ElMessage.warning('请先从台账列表选择一条记录')
     return
@@ -639,7 +639,7 @@ async function onCoaBatchesConfirm(batches: Array<Record<string, unknown>>) {
     currentDocKey.value = res.data.documentKey || res.data.docKey || ''
     currentConfig.value = res.data || res
     lastClearanceType.value = 'coa'
-    lastCompanyCode.value = companyCode
+    lastCompanyCode.value = companyCode ?? ''
     lastCustomerCode.value = customerCode
   } catch (e: any) {
     ElMessage.error('COA 生成失败，请稍后重试')

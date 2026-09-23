@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import base64
+import copy
 import re
 import time
 from io import BytesIO
@@ -84,9 +85,11 @@ def _build_mapping(payload: Dict[str, Any]) -> Dict[str, str]:
     first = items[0] if items else {}
     po_no = payload.get("po_no") or ""
     po_line = f"PO#{po_no}" if payload.get("show_po") and po_no else ""
-    packages_display = (
-        payload.get("pallets") if payload.get("pallets") is not None else payload.get("packages", "")
-    )
+    packages_display = payload.get("packages_display")
+    if packages_display is None:
+        packages_display = (
+            payload.get("pallets") if payload.get("pallets") is not None else payload.get("packages", "")
+        )
     raw: Dict[str, Any] = {
         "COMPANY_NAME_EN": payload.get("company_name_en", ""),
         "COMPANY_ADDR_EN": payload.get("company_addr_en", ""),
@@ -160,10 +163,7 @@ def _build_mapping(payload: Dict[str, Any]) -> Dict[str, str]:
         raw[f"ITEM_PRICE_{idx}"] = it.get("price", "")
         raw[f"ITEM_AMOUNT_{idx}"] = it.get("amount", "")
         raw[f"ITEM_HS_{idx}"] = it.get("hs_code", "")
-        # packages = pallets if set, else drums (matches PACKAGES top-level fallback)
-        raw[f"ITEM_PACKAGES_{idx}"] = (
-            it.get("pallets") if it.get("pallets") is not None else it.get("drums", "")
-        )
+        raw[f"ITEM_PACKAGES_{idx}"] = it.get("packages_display", it.get("drums", ""))
         raw[f"ITEM_CBM_{idx}"] = it.get("cbm", "")
         raw[f"ITEM_NET_{idx}"] = it.get("net_kg", "")
         raw[f"ITEM_GROSS_{idx}"] = it.get("gross_kg", "")
@@ -187,6 +187,84 @@ def _fill_workbook_on_sheet(ws, mapping: Dict[str, str]) -> None:
 def _fill_workbook(wb, mapping: Dict[str, str]) -> None:
     for ws in wb.worksheets:
         _fill_workbook_on_sheet(ws, mapping)
+
+
+def _unmerge_from_row(ws, from_row: int) -> list:
+    """Unmerge ranges starting at from_row; return (min_col, min_row, max_col, max_row) list."""
+    moves = []
+    for mr in list(ws.merged_cells.ranges):
+        if mr.min_row >= from_row:
+            moves.append((mr.min_col, mr.min_row, mr.max_col, mr.max_row))
+            ws.unmerge_cells(str(mr))
+    return moves
+
+
+def _apply_merged_ranges(ws, moves: list, n: int) -> None:
+    for min_col, min_row, max_col, max_row in moves:
+        ws.merge_cells(
+            start_row=min_row + n,
+            start_column=min_col,
+            end_row=max_row + n,
+            end_column=max_col,
+        )
+
+
+def _find_row_containing(ws, token: str) -> Optional[int]:
+    for row in ws.iter_rows():
+        for cell in row:
+            if cell.value is not None and token in str(cell.value):
+                return cell.row
+    return None
+
+
+def _expand_ci_detail_rows(ws, n_items: int, payload: Dict[str, Any]) -> None:
+    """CI 多产品：把 1 行明细扩成 N 行，并重写 TOTAL 汇总（避免 SUM 范围过期）。"""
+    if n_items <= 1:
+        return
+    detail_row = _find_row_containing(ws, "{{ITEM_DESC}}")
+    if detail_row is None:
+        detail_row = _find_row_containing(ws, "{{ITEM_DESC_1}}") or 18
+
+    n_new = n_items - 1
+    merges = _unmerge_from_row(ws, detail_row + 1)
+    ws.insert_rows(detail_row + 1, n_new)
+    _apply_merged_ranges(ws, merges, n_new)
+
+    src_height = ws.row_dimensions[detail_row].height
+    for i in range(n_items):
+        row = detail_row + i
+        if i > 0:
+            if src_height:
+                ws.row_dimensions[row].height = src_height
+            for col in range(1, 7):
+                src_cell = ws.cell(detail_row, col)
+                dst_cell = ws.cell(row, col)
+                dst_cell._style = copy.copy(src_cell._style)
+        idx = i + 1
+        ws.cell(row, 1).value = str(idx)
+        ws.cell(row, 2).value = f"{{{{ITEM_DESC_{idx}}}}}"
+        ws.cell(row, 3).value = f"{{{{ITEM_QTY_{idx}}}}}"
+        ws.cell(row, 4).value = f"{{{{ITEM_PRICE_{idx}}}}}"
+        ws.cell(row, 5).value = f"{{{{ITEM_AMOUNT_{idx}}}}}"
+
+    # TOTAL 行：写值汇总全部明细（覆盖全量 item 行，避免 SUM 范围过期）
+    total_row = _find_row_containing(ws, "{{TOTAL_QTY}}")
+    if total_row is None:
+        total_row = _find_row_containing(ws, "TOTAL:")
+    if total_row is not None:
+        _set_cell_value(ws, total_row, 2, payload.get("total_qty", 0))
+        _set_cell_value(ws, total_row, 5, payload.get("total_amount", 0))
+
+
+def _set_cell_value(ws, row: int, col: int, value: Any) -> None:
+    """Write to the anchor cell if (row, col) falls inside a merge."""
+    cell = ws.cell(row, col)
+    if cell.__class__.__name__ == "MergedCell":
+        for mr in ws.merged_cells.ranges:
+            if mr.min_row <= row <= mr.max_row and mr.min_col <= col <= mr.max_col:
+                ws.cell(mr.min_row, mr.min_col).value = value
+                return
+    cell.value = value
 
 
 def _append_extra_notes(wb, extra_notes) -> None:
@@ -238,6 +316,9 @@ class ClearanceDocService:
         if doc_type == "coa" and isinstance(batches, list) and len(batches) >= 1:
             self._fill_coa_batches(wb, payload, batches)
         else:
+            items = payload.get("items") or []
+            if doc_type == "ci" and len(items) > 1:
+                _expand_ci_detail_rows(wb.worksheets[0], len(items), payload)
             mapping = _build_mapping(payload)
             _fill_workbook(wb, mapping)
             _append_extra_notes(wb, ov.get("extra_notes"))

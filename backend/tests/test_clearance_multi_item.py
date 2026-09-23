@@ -1,5 +1,7 @@
 import pytest
 
+import pytest
+
 from app.schemas.ledger import LedgerItemSchema, LedgerRecordResponse
 from app.services.clearance_doc_service import _build_mapping
 from app.services.clearance_fields import build_clearance_payload
@@ -142,3 +144,115 @@ def test_totals_sum_all_three_items():
     assert p["pallets"] == 7
     assert p["totals_line"] == "TOTAL 28 DRUMS PACKED ON 7 PALLETS ONLY."
     assert p["amount_words"] == "TOTAL USD SEVEN THOUSAND ONLY."
+
+
+def test_package_unit_drums_vs_pallets():
+    p_default = build_clearance_payload(record=make_three_item_record(), company_code="honghao", overrides={})
+    m_default = _build_mapping(p_default)
+    # default pallets: item1 pallets=2
+    assert m_default["ITEM_PACKAGES_1"] == "2"
+    assert m_default["ITEM_PACKAGES_2"] == "4"
+    assert m_default["ITEM_PACKAGES_3"] == "1"
+
+    p_drum = build_clearance_payload(
+        record=make_three_item_record(),
+        company_code="honghao",
+        overrides={"package_unit": "drums"},
+    )
+    m_drum = _build_mapping(p_drum)
+    # drums: item1 drums=8, item2=16, item3=4
+    assert m_drum["ITEM_PACKAGES_1"] == "8"
+    assert m_drum["ITEM_PACKAGES_2"] == "16"
+    assert m_drum["ITEM_PACKAGES_3"] == "4"
+    assert m_drum["PACKAGES"] == "28"
+
+    p_pal = build_clearance_payload(
+        record=make_three_item_record(),
+        company_code="honghao",
+        overrides={"package_unit": "pallets"},
+    )
+    m_pal = _build_mapping(p_pal)
+    assert m_pal["ITEM_PACKAGES_1"] == "2"
+    assert m_pal["PACKAGES"] == "7"
+
+
+def _all_text(content: bytes) -> str:
+    import io
+
+    import openpyxl
+
+    parts = []
+    for ws in openpyxl.load_workbook(io.BytesIO(content)).worksheets:
+        for row in ws.iter_rows():
+            for cell in row:
+                if cell.value is not None:
+                    parts.append(str(cell.value))
+    return "\n".join(parts)
+
+
+def test_generate_ci_three_items_row_expand():
+    from app.services.clearance_doc_service import ClearanceDocService
+
+    svc = ClearanceDocService()
+    content, doc_key, _ = svc.generate("ci", make_three_item_record(), "honghao", {})
+    assert doc_key.startswith("ci_")
+    text = _all_text(content)
+    assert "PRODUCT ALPHA" in text
+    assert "PRODUCT BETA" in text
+    assert "PRODUCT GAMMA" in text
+    assert "{{" not in text
+
+
+def test_generate_ci_three_items_totals():
+    import io
+
+    import openpyxl
+
+    from app.services.clearance_doc_service import ClearanceDocService
+
+    svc = ClearanceDocService()
+    content, _, _ = svc.generate("ci", make_three_item_record(), "honghao", {})
+    wb = openpyxl.load_workbook(io.BytesIO(content))
+    ws = wb.worksheets[0]
+
+    # 3 detail rows + TOTAL values = sum of 3 items
+    descs = []
+    qtys = []
+    amounts = []
+    total_qty = None
+    total_amount = None
+    for row in ws.iter_rows(min_col=1, max_col=5):
+        a, b, c, d, e = (cell.value for cell in row)
+        if a == "TOTAL:":
+            total_qty = float(c if c is not None else b)
+            total_amount = float(e)
+        elif a in ("1", "2", "3") and b in ("PRODUCT ALPHA", "PRODUCT BETA", "PRODUCT GAMMA"):
+            descs.append(b)
+            qtys.append(float(c))
+            amounts.append(float(e))
+
+    assert descs == ["PRODUCT ALPHA", "PRODUCT BETA", "PRODUCT GAMMA"]
+    assert qtys == [1000.0, 2000.0, 500.0]
+    assert amounts == [1500.0, 4000.0, 1500.0]
+    assert total_qty == sum(qtys) == 3500.0
+    assert total_amount == sum(amounts) == 7000.0
+
+
+def test_generate_ci_single_item_unchanged():
+    import io
+
+    import openpyxl
+
+    from app.services.clearance_doc_service import ClearanceDocService
+
+    svc = ClearanceDocService()
+    content, _, _ = svc.generate("ci", make_single_record(), "honghao", {})
+    text = _all_text(content)
+    assert "FIXING AGENT HT-016H" in text
+    assert "{{" not in text
+    wb = openpyxl.load_workbook(io.BytesIO(content))
+    ws = wb.worksheets[0]
+    # single product: one detail row only (row 18 in public template)
+    assert ws.cell(18, 2).value == "FIXING AGENT HT-016H"
+    assert float(ws.cell(18, 3).value) == 4000.0
+    assert float(ws.cell(18, 5).value) == 10400.0

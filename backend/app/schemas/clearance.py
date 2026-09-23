@@ -32,6 +32,7 @@ class ClearanceOverrides(BaseModel):
     show_po: Optional[bool] = None
     po_no: Optional[str] = None
     dest_style: Optional[Literal["port", "country", "custom"]] = None
+    package_unit: Optional[Literal["pallets", "drums"]] = None
     ph_label: Optional[str] = None
     solid_label: Optional[str] = None
     appearance_spec: Optional[str] = None

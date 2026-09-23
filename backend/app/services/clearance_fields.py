@@ -102,6 +102,9 @@ def build_clearance_payload(
     company = get_company_profile(company_code)
     items = _visible_items(record)
     style = dest_style or ov.dest_style or "port"
+    package_unit = (ov.package_unit or "pallets").strip().lower()
+    if package_unit not in ("pallets", "drums"):
+        package_unit = "pallets"
 
     pi_no = record.order_no or ""
     # 台账可能 order_no 即 PI；名称与样例一致
@@ -150,12 +153,13 @@ def build_clearance_payload(
                 "drums": drums,
                 "pallets": pallets,
                 "packaging": it.packaging_name or "",
-                "packages_display": pallets if style == "port" else drums,  # 模板可再映射
+                "packages_display": pallets if package_unit == "pallets" else drums,
             }
         )
 
     packages = ov.packages if ov.packages is not None else total_drums
     pallets = ov.pallets if ov.pallets is not None else total_pallets
+    packages_display = pallets if package_unit == "pallets" else packages
     gross = ov.gross_kg if ov.gross_kg is not None else round(total_gross, 3)
     net = ov.net_kg if ov.net_kg is not None else round(total_net, 3)
     cbm = ov.measure_cbm if ov.measure_cbm is not None else round(total_cbm, 3)
@@ -225,6 +229,8 @@ def build_clearance_payload(
         "volume_cbm": cbm,
         "packages": packages,
         "pallets": pallets,
+        "package_unit": package_unit,
+        "packages_display": packages_display,
         "totals_line": build_totals_line(packages, pallets),
         "hs_codes": " / ".join([it["hs_code"] for it in out_items if it["hs_code"]]),
         "product_name": out_items[0]["desc"] if out_items else "",

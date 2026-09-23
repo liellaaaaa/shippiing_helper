@@ -27,6 +27,16 @@ export const phase2Api = {
       params: { order_id: orderId, ledger_record_id: ledgerRecordId, company_code: companyCode }
     })
   },
+  generateClearance(docType: 'ci' | 'pl' | 'coa' | 'si', payload: {
+    ledger_record_id: number
+    order_id?: number
+    customer_code?: string
+    company_code?: string
+    transport_mode?: 'FCL' | 'LCL'
+    overrides?: Record<string, unknown>
+  }) {
+    return apiClient.post(`/documents/${docType}`, payload)
+  },
   getDocHistory(orderId: number) {
     return apiClient.get(`/documents/history/${orderId}`)
   },

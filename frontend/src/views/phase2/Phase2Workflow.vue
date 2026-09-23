@@ -51,6 +51,39 @@
           >
             报关资料
           </el-button>
+          <el-divider direction="vertical" />
+          <el-button
+            size="small"
+            :disabled="!selectedLedgerId"
+            v-track="{ event: 'generate_document', module: 'phase2', detail: { doc_type: 'si' } }"
+            @click="openClearanceDocument('si')"
+          >
+            订舱补料 SI
+          </el-button>
+          <el-button
+            size="small"
+            :disabled="!selectedLedgerId"
+            v-track="{ event: 'generate_document', module: 'phase2', detail: { doc_type: 'ci' } }"
+            @click="openClearanceDocument('ci')"
+          >
+            发票 CI
+          </el-button>
+          <el-button
+            size="small"
+            :disabled="!selectedLedgerId"
+            v-track="{ event: 'generate_document', module: 'phase2', detail: { doc_type: 'pl' } }"
+            @click="openClearanceDocument('pl')"
+          >
+            装箱单 PL
+          </el-button>
+          <el-button
+            size="small"
+            :disabled="!selectedLedgerId"
+            v-track="{ event: 'generate_document', module: 'phase2', detail: { doc_type: 'coa' } }"
+            @click="openClearanceDocument('coa')"
+          >
+            品质证书 COA
+          </el-button>
         </div>
       </div>
     </div>
@@ -517,6 +550,25 @@ async function openCustomsDocument() {
     currentConfig.value = res.data || res
   } catch (e: any) {
     ElMessage.error('报关资料生成失败，请稍后重试')
+  }
+}
+
+async function openClearanceDocument(docType: 'si' | 'ci' | 'pl' | 'coa') {
+  if (!selectedLedgerId.value) {
+    ElMessage.warning('请先从台账列表选择一条记录')
+    return
+  }
+  try {
+    const companyCode = getCompanyCodeFromShipper()
+    const res = await phase2Api.generateClearance(docType, {
+      ledger_record_id: selectedLedgerId.value,
+      customer_code: currentOrderInfo.value?.customer_code || undefined,
+      company_code: companyCode,
+    })
+    currentDocKey.value = res.data.documentKey || res.data.docKey || ''
+    currentConfig.value = res.data || res
+  } catch (e: any) {
+    ElMessage.error('清关文件生成失败，请稍后重试')
   }
 }
 

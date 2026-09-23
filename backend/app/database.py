@@ -37,4 +37,7 @@ def init_db():
     )
     from app.models.declaration_ledger import HsCodeField, DeclarationProduct, DeclarationValue
     from app.models.user import User
+    from app.models.customer_template import CustomerTemplate  # noqa: F401
+    from app.models.shipment_doc import ShipmentDoc  # noqa: F401
+    from app.models.template import DocumentTemplate  # noqa: F401
     Base.metadata.create_all(bind=engine)

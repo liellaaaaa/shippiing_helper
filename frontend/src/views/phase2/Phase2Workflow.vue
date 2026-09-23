@@ -84,6 +84,13 @@
           >
             品质证书 COA
           </el-button>
+          <el-button
+            size="small"
+            :disabled="!selectedLedgerId"
+            @click="saveAsCustomerTemplate"
+          >
+            存为本客户模板
+          </el-button>
         </div>
       </div>
     </div>
@@ -175,6 +182,18 @@
             <div class="info-row">
               <span class="info-label">桶数/托盘数</span>
               <el-input v-if="selectedOrderId || selectedLedgerId" v-model="currentOrderInfo.drum_count" size="small" placeholder="可编辑" />
+              <span v-else class="info-value muted">—</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">额外说明</span>
+              <el-input
+                v-if="selectedOrderId || selectedLedgerId"
+                v-model="clearanceExtraNotes"
+                type="textarea"
+                :autosize="{ minRows: 2 }"
+                size="small"
+                placeholder="额外说明，每行一句"
+              />
               <span v-else class="info-value muted">—</span>
             </div>
 
@@ -331,6 +350,12 @@ function startResize(e: MouseEvent) {
 const showMsdsDialog = ref(false)
 const showBookingDialog = ref(false)
 const selectedBookingTemplate = ref<'xls' | 'xlsx'>('xlsx')
+
+// 一客一模板 + 额外说明
+const lastClearanceType = ref<'si' | 'ci' | 'pl' | 'coa' | null>(null)
+const lastCustomerCode = ref('')
+const lastCompanyCode = ref('')
+const clearanceExtraNotes = ref('')
 
 // Editable order info fields
 const currentOrderInfo = ref({
@@ -560,15 +585,47 @@ async function openClearanceDocument(docType: 'si' | 'ci' | 'pl' | 'coa') {
   }
   try {
     const companyCode = getCompanyCodeFromShipper()
+    const customerCode = currentOrderInfo.value?.customer_code || ''
+    // 一客一模板：后端按 customer_code 优先加载；extra_notes 支持加行说明
+    const extraNotes = (clearanceExtraNotes.value || '')
+      .split('\n')
+      .map((s: string) => s.trim())
+      .filter(Boolean)
     const res = await phase2Api.generateClearance(docType, {
       ledger_record_id: selectedLedgerId.value,
-      customer_code: currentOrderInfo.value?.customer_code || undefined,
+      customer_code: customerCode || undefined,
       company_code: companyCode,
+      overrides: extraNotes.length ? { extra_notes: extraNotes } : {},
     })
     currentDocKey.value = res.data.documentKey || res.data.docKey || ''
     currentConfig.value = res.data || res
+    lastClearanceType.value = docType
+    lastCompanyCode.value = companyCode
+    lastCustomerCode.value = customerCode
   } catch (e: any) {
     ElMessage.error('清关文件生成失败，请稍后重试')
+  }
+}
+
+async function saveAsCustomerTemplate() {
+  if (!lastCustomerCode.value) {
+    ElMessage.warning('当前订单无客户编码，无法存为本客户模板')
+    return
+  }
+  if (!lastClearanceType.value) {
+    ElMessage.warning('请先生成一份清关文件')
+    return
+  }
+  try {
+    await phase2Api.saveCustomerTemplate({
+      customer_code: lastCustomerCode.value,
+      doc_type: lastClearanceType.value,
+      company_code: lastCompanyCode.value || undefined,
+      // 不带 template_base64：从公共/已有客户模板复制作起点；之后可在模板库改加行
+    })
+    ElMessage.success(`已存为 ${lastCustomerCode.value} 的 ${lastClearanceType.value.toUpperCase()} 模板，下次自动套用`)
+  } catch (e: any) {
+    ElMessage.error('保存客户模板失败')
   }
 }
 

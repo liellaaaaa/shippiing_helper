@@ -37,6 +37,20 @@ export const phase2Api = {
   }) {
     return apiClient.post(`/documents/${docType}`, payload)
   },
+  /** 另存为本客户模板（一客一模板） */
+  saveCustomerTemplate(payload: {
+    customer_code: string
+    doc_type: 'ci' | 'pl' | 'coa' | 'si'
+    company_code?: string
+    template_base64?: string
+    options?: Record<string, unknown>
+    created_by?: string
+  }) {
+    return apiClient.post('/documents/templates/save', payload)
+  },
+  listCustomerTemplates(customerCode?: string) {
+    return apiClient.get('/documents/templates', { params: { customer_code: customerCode } })
+  },
   getDocHistory(orderId: number) {
     return apiClient.get(`/documents/history/${orderId}`)
   },

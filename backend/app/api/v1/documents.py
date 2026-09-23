@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy import desc
 from app.database import SessionLocal
 from app.models.shipment_doc import ShipmentDoc
-from app.schemas.clearance import ClearanceGenerateRequest
+from app.schemas.clearance import ClearanceGenerateRequest, CustomerTemplateSaveRequest
 from app.services.clearance_doc_service import ClearanceDocService
 from app.services.document_service import DocumentService
 from app.services.onlyoffice_service import OnlyOfficeService
@@ -244,7 +244,7 @@ async def generate_ci(req: ClearanceGenerateRequest = Body(...)):
     if not record:
         return {"error": "ledger record not found"}
     svc = ClearanceDocService()
-    content, doc_key, _ = svc.generate("ci", record, req.company_code, req.overrides.model_dump())
+    content, doc_key, _ = svc.generate("ci", record, req.company_code, req.overrides.model_dump(), customer_code=req.customer_code)
     return _oo_response(content, doc_key, "ci", req.order_id)
 
 
@@ -257,7 +257,7 @@ async def generate_pl(req: ClearanceGenerateRequest = Body(...)):
     if not record:
         return {"error": "ledger record not found"}
     svc = ClearanceDocService()
-    content, doc_key, _ = svc.generate("pl", record, req.company_code, req.overrides.model_dump())
+    content, doc_key, _ = svc.generate("pl", record, req.company_code, req.overrides.model_dump(), customer_code=req.customer_code)
     return _oo_response(content, doc_key, "pl", req.order_id)
 
 
@@ -270,7 +270,7 @@ async def generate_coa(req: ClearanceGenerateRequest = Body(...)):
     if not record:
         return {"error": "ledger record not found"}
     svc = ClearanceDocService()
-    content, doc_key, _ = svc.generate("coa", record, req.company_code, req.overrides.model_dump())
+    content, doc_key, _ = svc.generate("coa", record, req.company_code, req.overrides.model_dump(), customer_code=req.customer_code)
     return _oo_response(content, doc_key, "coa", req.order_id)
 
 
@@ -283,5 +283,47 @@ async def generate_si(req: ClearanceGenerateRequest = Body(...)):
     if not record:
         return {"error": "ledger record not found"}
     svc = ClearanceDocService()
-    content, doc_key, _ = svc.generate("si", record, req.company_code, req.overrides.model_dump())
+    content, doc_key, _ = svc.generate("si", record, req.company_code, req.overrides.model_dump(), customer_code=req.customer_code)
     return _oo_response(content, doc_key, "si", req.order_id)
+
+
+@router.post("/templates/save")
+async def save_customer_template(req: CustomerTemplateSaveRequest = Body(...)):
+    """另存为本客户模板：首次做完后沉淀定制版式（可加行/改固定文案）。"""
+    import base64 as b64mod
+
+    from app.services import template_service
+
+    try:
+        if req.template_base64:
+            blob = b64mod.b64decode(req.template_base64)
+        else:
+            # 复制当前（客户已有或公共）模板作起点
+            blob, _src = template_service.load_template_bytes(req.customer_code, req.doc_type)
+        saved = template_service.save_customer_template(
+            customer_code=req.customer_code,
+            doc_type=req.doc_type,
+            template_blob=blob,
+            company_code=req.company_code,
+            options=req.options or {},
+            created_by=req.created_by or "system",
+            file_name=req.file_name,
+        )
+        return saved
+    except ValueError as e:
+        return {"error": str(e)}
+
+
+@router.get("/templates")
+async def list_customer_templates(customer_code: str | None = Query(None)):
+    from app.services import template_service
+
+    return {"items": template_service.list_customer_templates(customer_code)}
+
+
+@router.delete("/templates/{template_id}")
+async def delete_customer_template(template_id: int):
+    from app.services import template_service
+
+    ok = template_service.delete_customer_template(template_id)
+    return {"ok": ok}

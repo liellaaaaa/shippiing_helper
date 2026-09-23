@@ -1,4 +1,4 @@
-"""清关文件生成入参"""
+"""清关文件生成入参 + 客户模板保存"""
 from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 class ClearanceOverrides(BaseModel):
     """人工/订舱/货代覆盖值；None 表示不覆盖"""
+
     container_no: Optional[str] = None
     seal_no: Optional[str] = None
     vessel: Optional[str] = None
@@ -39,6 +40,8 @@ class ClearanceOverrides(BaseModel):
     ph_result: Optional[str] = None
     solid_spec: Optional[str] = None
     solid_result: Optional[str] = None
+    # 客户额外说明行（录音：加一行说明/多写内容）
+    extra_notes: Optional[list[str]] = None
 
     class Config:
         extra = "ignore"
@@ -51,6 +54,22 @@ class ClearanceGenerateRequest(BaseModel):
     company_code: Optional[str] = "honghao"
     transport_mode: Optional[Literal["FCL", "LCL"]] = "FCL"
     overrides: ClearanceOverrides = Field(default_factory=ClearanceOverrides)
+
+    class Config:
+        extra = "ignore"
+
+
+class CustomerTemplateSaveRequest(BaseModel):
+    """另存为本客户模板（一客一模板）。"""
+
+    customer_code: str
+    doc_type: Literal["ci", "pl", "coa", "si"]
+    company_code: Optional[str] = None
+    # 为空则复制当前公共/已有客户模板作起点
+    template_base64: Optional[str] = None
+    options: Optional[dict] = None
+    file_name: Optional[str] = None
+    created_by: Optional[str] = None
 
     class Config:
         extra = "ignore"

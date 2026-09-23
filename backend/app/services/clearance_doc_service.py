@@ -87,7 +87,7 @@ def _build_mapping(payload: Dict[str, Any]) -> Dict[str, str]:
     packages_display = (
         payload.get("pallets") if payload.get("pallets") is not None else payload.get("packages", "")
     )
-    raw = {
+    raw: Dict[str, Any] = {
         "COMPANY_NAME_EN": payload.get("company_name_en", ""),
         "COMPANY_ADDR_EN": payload.get("company_addr_en", ""),
         "COMPANY_TEL_EN": payload.get("company_tel_en", ""),
@@ -113,6 +113,7 @@ def _build_mapping(payload: Dict[str, Any]) -> Dict[str, str]:
         "BL_NO": payload.get("bl_no", ""),
         "CONTAINER_NO": payload.get("container_no", ""),
         "SEAL_NO": payload.get("seal_no", ""),
+        "ITEM_COUNT": len(items),
         "ITEM_DESC": first.get("desc", ""),
         "ITEM_QTY": first.get("qty", ""),
         "ITEM_PRICE": first.get("price", ""),
@@ -151,6 +152,21 @@ def _build_mapping(payload: Dict[str, Any]) -> Dict[str, str]:
         "BANK_LINE5": payload.get("bank_line5", ""),
         "BANK_LINE6": payload.get("bank_line6", ""),
     }
+    # Multi-item rows: ITEM_*_1..N (legacy ITEM_* stay as aliases of item 1)
+    for idx, it in enumerate(items, 1):
+        raw[f"ITEM_NO_{idx}"] = it.get("index", idx)
+        raw[f"ITEM_DESC_{idx}"] = it.get("desc", "")
+        raw[f"ITEM_QTY_{idx}"] = it.get("qty", "")
+        raw[f"ITEM_PRICE_{idx}"] = it.get("price", "")
+        raw[f"ITEM_AMOUNT_{idx}"] = it.get("amount", "")
+        raw[f"ITEM_HS_{idx}"] = it.get("hs_code", "")
+        # packages = pallets if set, else drums (matches PACKAGES top-level fallback)
+        raw[f"ITEM_PACKAGES_{idx}"] = (
+            it.get("pallets") if it.get("pallets") is not None else it.get("drums", "")
+        )
+        raw[f"ITEM_CBM_{idx}"] = it.get("cbm", "")
+        raw[f"ITEM_NET_{idx}"] = it.get("net_kg", "")
+        raw[f"ITEM_GROSS_{idx}"] = it.get("gross_kg", "")
     return {k: _fmt(v) for k, v in raw.items()}
 
 

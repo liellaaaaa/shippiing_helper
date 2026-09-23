@@ -156,9 +156,11 @@ def build_clearance_payload(
 
     packages = ov.packages if ov.packages is not None else total_drums
     pallets = ov.pallets if ov.pallets is not None else total_pallets
-    gross = ov.gross_kg if ov.gross_kg is not None else total_gross
-    net = ov.net_kg if ov.net_kg is not None else total_net
-    cbm = ov.measure_cbm if ov.measure_cbm is not None else total_cbm
+    gross = ov.gross_kg if ov.gross_kg is not None else round(total_gross, 3)
+    net = ov.net_kg if ov.net_kg is not None else round(total_net, 3)
+    cbm = ov.measure_cbm if ov.measure_cbm is not None else round(total_cbm, 3)
+    total_qty = round(total_qty, 3)
+    total_amount = round(total_amount, 2)
 
     # COA 日期
     batch = ov.batch_no or ""

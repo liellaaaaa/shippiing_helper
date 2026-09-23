@@ -7,12 +7,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from typing import Any, Optional
 
 from app.core.config import TEMPLATES
 from app.database import SessionLocal
 from app.models.customer_template import CustomerTemplate
+
+logger = logging.getLogger(__name__)
 
 _DOC_TYPE_TO_TEMPLATE = {
     "ci": "clearance_ci",

@@ -1,5 +1,7 @@
 import hashlib, base64
 import os
+from typing import Optional
+
 from fastapi import APIRouter, Query, Body
 from pydantic import BaseModel
 from sqlalchemy import desc
@@ -151,9 +153,9 @@ async def load_msds(msds_id: int):
 
 @router.get("/customs")
 async def generate_customs(
-    order_id: int | None = Query(None),
-    ledger_record_id: int | None = Query(None),
-    company_code: str | None = Query(None, description="公司代码：honghao / minhao"),
+    order_id: Optional[int] = Query(None),
+    ledger_record_id: Optional[int] = Query(None),
+    company_code: Optional[str] = Query(None, description="公司代码：honghao / minhao"),
 ):
     """
     生成出口报关资料工作簿（5个 sheet 的 xlsx）。
@@ -315,7 +317,7 @@ async def save_customer_template(req: CustomerTemplateSaveRequest = Body(...)):
 
 
 @router.get("/templates")
-async def list_customer_templates(customer_code: str | None = Query(None)):
+async def list_customer_templates(customer_code: Optional[str] = Query(None)):
     from app.services import template_service
 
     return {"items": template_service.list_customer_templates(customer_code)}

@@ -1,7 +1,5 @@
 import pytest
 
-import pytest
-
 from app.schemas.ledger import LedgerItemSchema, LedgerRecordResponse
 from app.services.clearance_doc_service import _build_mapping
 from app.services.clearance_fields import build_clearance_payload

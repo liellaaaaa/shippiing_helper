@@ -152,7 +152,7 @@ def test_wa318_multi_item_ci_pl_alignment():
     ci_total_qty = ci_total_amount = None
     for row in ci_ws.iter_rows(min_col=1, max_col=5):
         a, b, c, d, e = (cell.value for cell in row)
-        if a == "TOTAL:":
+        if a == "TOTAL:" or b == "TOTAL:":
             ci_total_qty = float(c if c is not None else b)
             ci_total_amount = float(e)
     assert ci_total_qty == 6000.0
@@ -163,7 +163,7 @@ def test_wa318_multi_item_ci_pl_alignment():
     pl_total_pkg = pl_total_cbm = pl_total_net = pl_total_gross = None
     for row in pl_ws.iter_rows(min_col=1, max_col=6):
         a, b, c, d, e, f = (cell.value for cell in row)
-        if a == "TOTAL:":
+        if a == "TOTAL:" or b == "TOTAL:":
             pl_total_pkg = float(c)
             pl_total_cbm = float(d)
             pl_total_net = float(e)

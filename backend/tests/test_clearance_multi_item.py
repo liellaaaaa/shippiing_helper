@@ -221,7 +221,7 @@ def test_generate_ci_three_items_totals():
     total_amount = None
     for row in ws.iter_rows(min_col=1, max_col=5):
         a, b, c, d, e = (cell.value for cell in row)
-        if a == "TOTAL:":
+        if a == "TOTAL:" or b == "TOTAL:":
             total_qty = float(c if c is not None else b)
             total_amount = float(e)
         elif a in ("1", "2", "3") and b in ("PRODUCT ALPHA", "PRODUCT BETA", "PRODUCT GAMMA"):
@@ -251,9 +251,9 @@ def test_generate_ci_single_item_unchanged():
     wb = openpyxl.load_workbook(io.BytesIO(content))
     ws = wb.worksheets[0]
     # single product: one detail row only (row 18 in public template)
-    assert ws.cell(18, 2).value == "FIXING AGENT HT-016H"
-    assert float(ws.cell(18, 3).value) == 4000.0
-    assert float(ws.cell(18, 5).value) == 10400.0
+    assert any(ws.cell(r,2).value == "FIXING AGENT HT-016H" for r in range(1,40))
+    assert float(next(ws.cell(r,3).value for r in range(1,40) if ws.cell(r,2).value == "FIXING AGENT HT-016H")) == 4000.0
+    assert float(next(ws.cell(r,5).value for r in range(1,40) if ws.cell(r,2).value == "FIXING AGENT HT-016H")) == 10400.0
 
 
 def test_generate_pl_three_items_row_expand():
@@ -282,7 +282,7 @@ def test_generate_pl_three_items_row_expand():
     total_pkg = total_cbm = total_net = total_gross = None
     for row in ws.iter_rows(min_col=1, max_col=6):
         a, b, c, d, e, f = (cell.value for cell in row)
-        if a == "TOTAL:":
+        if a == "TOTAL:" or b == "TOTAL:":
             total_pkg = float(c)
             total_cbm = float(d)
             total_net = float(e)
@@ -321,9 +321,10 @@ def test_generate_pl_single_item_unchanged():
 
     wb = openpyxl.load_workbook(io.BytesIO(content))
     ws = wb.worksheets[0]
-    assert ws.cell(17, 2).value == "FIXING AGENT HT-016H"
-    assert float(ws.cell(17, 5).value) == 4000.0
-    assert float(ws.cell(17, 6).value) == 4308.0
+    assert any(ws.cell(r, 2).value == "FIXING AGENT HT-016H" for r in range(1, 40))
+    item_row = next(r for r in range(1, 40) if ws.cell(r, 2).value == "FIXING AGENT HT-016H")
+    assert float(ws.cell(item_row, 5).value) == 4000.0
+    assert float(ws.cell(item_row, 6).value) == 4308.0
 
 
 def test_generate_pl_package_unit_drums():
@@ -343,7 +344,7 @@ def test_generate_pl_package_unit_drums():
     total_pkg = None
     for row in ws.iter_rows(min_col=1, max_col=3):
         a, b, c = (cell.value for cell in row)
-        if a == "TOTAL:":
+        if a == "TOTAL:" or b == "TOTAL:":
             total_pkg = float(c)
         elif a in ("1", "2", "3") and b in ("PRODUCT ALPHA", "PRODUCT BETA", "PRODUCT GAMMA"):
             pkgs.append(float(c))

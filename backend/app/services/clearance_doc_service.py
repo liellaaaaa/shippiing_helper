@@ -248,11 +248,18 @@ def _expand_ci_detail_rows(ws, n_items: int, payload: Dict[str, Any]) -> None:
         ws.cell(row, 5).value = f"{{{{ITEM_AMOUNT_{idx}}}}}"
 
     # TOTAL 行：写值汇总全部明细（覆盖全量 item 行，避免 SUM 范围过期）
-    total_row = _find_row_containing(ws, "{{TOTAL_QTY}}")
+    total_row = None
+    for row in ws.iter_rows(min_col=1, max_col=6):
+        for cell in row:
+            if isinstance(cell.value, str) and cell.value.strip() in ("TOTAL:", "TOTAL"):
+                total_row = cell.row
+                break
+        if total_row:
+            break
     if total_row is None:
-        total_row = _find_row_containing(ws, "TOTAL:")
+        total_row = _find_row_containing(ws, "{{TOTAL_AMOUNT}}")
     if total_row is not None:
-        _set_cell_value(ws, total_row, 2, payload.get("total_qty", 0))
+        _set_cell_value(ws, total_row, 3, payload.get("total_qty", 0))
         _set_cell_value(ws, total_row, 5, payload.get("total_amount", 0))
 
 
@@ -287,9 +294,27 @@ def _expand_pl_detail_rows(ws, n_items: int, payload: Dict[str, Any]) -> None:
         ws.cell(row, 5).value = f"{{{{ITEM_NET_{idx}}}}}"
         ws.cell(row, 6).value = f"{{{{ITEM_GROSS_{idx}}}}}"
 
-    total_row = _find_row_containing(ws, "{{NET_KG}}")
+    total_row = None
+    for row in ws.iter_rows(min_col=1, max_col=6):
+        for cell in row:
+            if isinstance(cell.value, str) and cell.value.strip() in ("TOTAL:", "TOTAL"):
+                total_row = cell.row
+                break
+        if total_row:
+            break
     if total_row is None:
-        total_row = _find_row_containing(ws, "TOTAL:")
+        total_row = _find_row_containing(ws, "{{GROSS_KG}}")
+        # 明细行也有 GROSS 占位，取靠后的
+        rows = [
+            r
+            for r in range(1, (ws.max_row or 1) + 1)
+            if any(
+                isinstance(ws.cell(r, c).value, str) and "{{GROSS_KG}}" in str(ws.cell(r, c).value)
+                for c in range(1, 7)
+            )
+        ]
+        if rows:
+            total_row = rows[-1]
     if total_row is not None:
         items = payload.get("items") or []
         _set_cell_value(

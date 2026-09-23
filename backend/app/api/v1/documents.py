@@ -5,6 +5,8 @@ from pydantic import BaseModel
 from sqlalchemy import desc
 from app.database import SessionLocal
 from app.models.shipment_doc import ShipmentDoc
+from app.schemas.clearance import ClearanceGenerateRequest
+from app.services.clearance_doc_service import ClearanceDocService
 from app.services.document_service import DocumentService
 from app.services.onlyoffice_service import OnlyOfficeService
 
@@ -192,6 +194,20 @@ async def get_doc_history(order_id: int):
         db.close()
 
 
+def _oo_response(content: bytes, doc_key: str, doc_type: str, order_id: int | None, file_ext: str = "xlsx") -> dict:
+    """OnlyOffice config + download/callback URLs (same shape as generate_customs)."""
+    token, config, safe_key = oo_svc.create_config(doc_key, file_ext)
+    _save_doc_to_db(doc_key, doc_type, content, order_id=order_id, storage_key=safe_key)
+    api_base = os.getenv("API_BASE_URL", "http://localhost:8000")
+    callback_base = os.getenv("ONLYOFFICE_CALLBACK_BASE_URL", "http://host.docker.internal:8000")
+    return {
+        **config,
+        "url": f"{callback_base}/api/v1/onlyoffice/download/{safe_key}",
+        "downloadUrl": f"{api_base}/api/v1/onlyoffice/download/{safe_key}",
+        "callbackUrl": f"{callback_base}/api/v1/onlyoffice/callback?doc_key={safe_key}",
+    }
+
+
 def _save_doc_to_db(doc_key: str, doc_type: str, content: bytes, order_id: int = None, storage_key: str = None):
     """
     Save generated document to DB so OnlyOffice can download it.
@@ -210,10 +226,62 @@ def _save_doc_to_db(doc_key: str, doc_type: str, content: bytes, order_id: int =
             file_blob=base64.b64encode(content).decode(),
             content_hash=content_hash,
             version=1,
-            file_name=f"{doc_key}.{'xlsx' if doc_type in ('booking', 'customs') else 'docx'}",
+            file_name=f"{doc_key}.{'xlsx' if doc_type in ('booking', 'customs', 'ci', 'pl', 'coa', 'si') else 'docx'}",
             created_by="system",
         )
         db.add(doc)
         db.commit()
     finally:
         db.close()
+
+
+@router.post("/ci")
+async def generate_ci(req: ClearanceGenerateRequest = Body(...)):
+    """生成商业发票 CI（清关，非出口报关发票）。"""
+    from app.services.ledger_service import LedgerService
+
+    record = LedgerService().get_ledger_record(req.ledger_record_id)
+    if not record:
+        return {"error": "ledger record not found"}
+    svc = ClearanceDocService()
+    content, doc_key, _ = svc.generate("ci", record, req.company_code, req.overrides.model_dump())
+    return _oo_response(content, doc_key, "ci", req.order_id)
+
+
+@router.post("/pl")
+async def generate_pl(req: ClearanceGenerateRequest = Body(...)):
+    """生成装箱单 PL（清关）。"""
+    from app.services.ledger_service import LedgerService
+
+    record = LedgerService().get_ledger_record(req.ledger_record_id)
+    if not record:
+        return {"error": "ledger record not found"}
+    svc = ClearanceDocService()
+    content, doc_key, _ = svc.generate("pl", record, req.company_code, req.overrides.model_dump())
+    return _oo_response(content, doc_key, "pl", req.order_id)
+
+
+@router.post("/coa")
+async def generate_coa(req: ClearanceGenerateRequest = Body(...)):
+    """生成分析证明 COA（清关）。"""
+    from app.services.ledger_service import LedgerService
+
+    record = LedgerService().get_ledger_record(req.ledger_record_id)
+    if not record:
+        return {"error": "ledger record not found"}
+    svc = ClearanceDocService()
+    content, doc_key, _ = svc.generate("coa", record, req.company_code, req.overrides.model_dump())
+    return _oo_response(content, doc_key, "coa", req.order_id)
+
+
+@router.post("/si")
+async def generate_si(req: ClearanceGenerateRequest = Body(...)):
+    """生成补件 SI（清关，非提单原件）。"""
+    from app.services.ledger_service import LedgerService
+
+    record = LedgerService().get_ledger_record(req.ledger_record_id)
+    if not record:
+        return {"error": "ledger record not found"}
+    svc = ClearanceDocService()
+    content, doc_key, _ = svc.generate("si", record, req.company_code, req.overrides.model_dump())
+    return _oo_response(content, doc_key, "si", req.order_id)

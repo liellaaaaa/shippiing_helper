@@ -1,9 +1,22 @@
-"""清关四单生成：用 payload 填充 public 模板占位符。"""
+# -*- coding: utf-8 -*-
+"""清关四单：读公共模板 → 填占位符（MSDS 风格）→ 返回 xlsx bytes。
+
+对齐 MSDS `generate_msds_from_template` + `_fill_placeholder`：
+- 可在「标签：{{KEY}}」整串中做子串替换，保留前后文
+- 只改单元格值，不破坏 openpyxl 样式（边框/合并/字体）
+- 模板只读加载；未提供值的占位符替换为空（可标黄由 UI 层处理）
+
+与订舱 `fill_booking_template` 的差异：
+- 订舱走 zip XML 以保留 shapes；清关模板由脚本生成、无 shapes，
+  openpyxl 足够，且要支持「标签+占位」混排。
+"""
+from __future__ import annotations
+
 import base64
 import re
 import time
 from io import BytesIO
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Optional
 
 import openpyxl
 
@@ -18,122 +31,90 @@ _DOC_TYPE_TO_TEMPLATE = {
     "si": "clearance_si",
 }
 
-_PLACEHOLDER_RE = re.compile(r"\{\{[^}]*\}\}")
+_PLACEHOLDER_RE = re.compile(r"\{\{([A-Z0-9_]+)\}\}")
 
 
-def _fmt(value: Any) -> str:
-    if value is None:
-        return ""
-    return str(value)
-
-
-def _build_mapping(payload: Dict[str, Any]) -> Dict[str, str]:
+def _item_aliases(payload: dict[str, Any]) -> dict[str, Any]:
+    """明细别名：ITEM_DESC / ITEM_QTY ... 取第一行（MVP 单产品）。"""
+    alias: dict[str, Any] = {}
     items = payload.get("items") or []
-    first = items[0] if items else {}
-    po_no = payload.get("po_no") or ""
-    show_po = payload.get("show_po")
-    po_line = f"PO#{po_no}" if show_po and po_no else ""
-    pallets = payload.get("pallets")
-    packages = payload.get("packages")
-    packages_display = pallets if pallets is not None else packages
-
-    raw = {
-        "COMPANY_NAME_EN": payload.get("company_name_en", ""),
-        "COMPANY_ADDR_EN": payload.get("company_addr_en", ""),
-        "COMPANY_TEL_EN": payload.get("company_tel_en", ""),
-        "CONSIGNEE_NAME": payload.get("consignee_name", ""),
-        "CONSIGNEE_ADDR": payload.get("consignee_addr", ""),
-        "CONSIGNEE_TAX": payload.get("consignee_tax", ""),
-        "NOTIFY": payload.get("notify", ""),
-        "NOTIFY_ADDR": payload.get("notify_addr", ""),
-        "DEST_AGENT_NAME": payload.get("dest_agent_name", ""),
-        "DEST_AGENT_ADDR": payload.get("dest_agent_addr", ""),
-        "DEST_AGENT_TAX": payload.get("dest_agent_tax", ""),
-        "DEST_AGENT_TEL": payload.get("dest_agent_tel", ""),
-        "INVOICE_NO": payload.get("invoice_no", ""),
-        "PACKING_NO": payload.get("packing_no", ""),
-        "PI_NO": payload.get("pi_no", ""),
-        "INVOICE_DATE": payload.get("invoice_date", ""),
-        "PRICE_TERM": payload.get("price_term", ""),
-        "PAYMENT_TERMS": payload.get("payment_terms", ""),
-        "ROUTE": payload.get("route", ""),
-        "LOADING_PORT": payload.get("loading_port", ""),
-        "DISCHARGE_PORT": payload.get("discharge_port", ""),
-        "VESSEL": payload.get("vessel", ""),
-        "BL_NO": payload.get("bl_no", ""),
-        "CONTAINER_NO": payload.get("container_no", ""),
-        "SEAL_NO": payload.get("seal_no", ""),
-        "ITEM_DESC": first.get("desc", ""),
-        "ITEM_QTY": first.get("qty", ""),
-        "ITEM_PRICE": first.get("price", ""),
-        "ITEM_AMOUNT": first.get("amount", ""),
-        "HS_CODES": payload.get("hs_codes", ""),
-        "PO_LINE": po_line,
-        "TOTALS_LINE": payload.get("totals_line", ""),
-        "TOTAL_QTY": payload.get("total_qty", ""),
-        "TOTAL_AMOUNT": payload.get("total_amount", ""),
-        "AMOUNT_WORDS": payload.get("amount_words", ""),
-        "PACKAGES": packages_display,
-        "VOLUME_CBM": payload.get("volume_cbm", ""),
-        "NET_KG": payload.get("net_kg", ""),
-        "GROSS_KG": payload.get("gross_kg", ""),
-        "PRODUCT_NAME": payload.get("product_name", ""),
-        "SHIPPED_QTY": payload.get("shipped_qty_text", ""),
-        "BATCH_NO": payload.get("batch_no", ""),
-        "PROD_DATE": payload.get("prod_date", ""),
-        "EXP_DATE": payload.get("exp_date", ""),
-        "COA_PI_NO": payload.get("coa_pi_no", ""),
-        "PH_LABEL": payload.get("ph_label", ""),
-        "PH_SPEC": payload.get("ph_spec", ""),
-        "PH_RESULT": payload.get("ph_result", ""),
-        "SOLID_LABEL": payload.get("solid_label", ""),
-        "SOLID_SPEC": payload.get("solid_spec", ""),
-        "SOLID_RESULT": payload.get("solid_result", ""),
-        "APPEARANCE_SPEC": payload.get("appearance_spec", ""),
-        "APPEARANCE_RESULT": payload.get("appearance_result", ""),
-        "BANK_LINE1": payload.get("bank_line1", ""),
-        "BANK_LINE2": payload.get("bank_line2", ""),
-        "BANK_LINE3": payload.get("bank_line3", ""),
-        "BANK_LINE4": payload.get("bank_line4", ""),
-        "BANK_LINE5": payload.get("bank_line5", ""),
-        "BANK_LINE6": payload.get("bank_line6", ""),
-    }
-    return {k: _fmt(v) for k, v in raw.items()}
+    if items:
+        it = items[0]
+        alias["ITEM_DESC"] = it.get("desc") or ""
+        alias["ITEM_QTY"] = it.get("qty") if it.get("qty") is not None else ""
+        alias["ITEM_PRICE"] = it.get("price") if it.get("price") is not None else ""
+        alias["ITEM_AMOUNT"] = it.get("amount") if it.get("amount") is not None else ""
+    else:
+        alias.update({"ITEM_DESC": "", "ITEM_QTY": "", "ITEM_PRICE": "", "ITEM_AMOUNT": ""})
+    alias["PO_LINE"] = f"PO#{payload['po_no']}" if payload.get("show_po") and payload.get("po_no") else ""
+    alias["VOLUME_CBM"] = payload.get("volume_cbm", "")
+    alias["NET_KG"] = payload.get("net_kg", "")
+    alias["GROSS_KG"] = payload.get("gross_kg", "")
+    # PL 的 PACKAGES 列：样例 WA318=托、WA254=桶；默认托
+    alias["PACKAGES"] = payload.get("pallets") if payload.get("pallets") is not None else payload.get("packages", "")
+    alias["SHIPPED_QTY"] = payload.get("shipped_qty_text", "")
+    alias["PRODUCT_NAME"] = payload.get("product_name", "")
+    alias["DISCHARGE_PORT"] = payload.get("discharge_port", "")
+    alias["LOADING_PORT"] = payload.get("loading_port", "")
+    alias["VESSEL"] = payload.get("vessel", "")
+    alias["BL_NO"] = payload.get("bl_no", "")
+    for key in (
+        "DEST_AGENT_NAME",
+        "DEST_AGENT_ADDR",
+        "DEST_AGENT_TAX",
+        "DEST_AGENT_TEL",
+        "BANK_LINE1",
+        "BANK_LINE2",
+        "BANK_LINE3",
+        "BANK_LINE4",
+        "BANK_LINE5",
+        "BANK_LINE6",
+    ):
+        alias[key] = payload.get(key.lower(), "")
+    return alias
 
 
-def _fill_workbook(wb, mapping: Dict[str, str]) -> None:
+def fill_workbook(wb: openpyxl.Workbook, payload: dict[str, Any]) -> None:
+    """MSDS 式填充：支持整格 {{KEY}} 与「标签：{{KEY}}」混排。"""
+    mapping: dict[str, Any] = {k.upper(): v for k, v in payload.items() if not isinstance(v, (list, dict))}
+    mapping.update({k.upper(): v for k, v in _item_aliases(payload).items()})
+
+    def _sub(text: str) -> str:
+        def repl(m: re.Match) -> str:
+            key = m.group(1).upper()
+            val = mapping.get(key, "")
+            return "" if val is None else str(val)
+
+        out = _PLACEHOLDER_RE.sub(repl, text)
+        # 清掉未映射残留
+        return _PLACEHOLDER_RE.sub("", out)
+
     for ws in wb.worksheets:
         for row in ws.iter_rows():
             for cell in row:
-                if cell.value is None:
-                    continue
-                text = str(cell.value)
-                if "{{" not in text:
-                    continue
-                for key, val in mapping.items():
-                    text = text.replace("{{" + key + "}}", val)
-                text = _PLACEHOLDER_RE.sub("", text)
-                cell.value = text
+                if isinstance(cell.value, str) and "{{" in cell.value:
+                    cell.value = _sub(cell.value)
 
 
 class ClearanceDocService:
-    """加载 public 模板并填充 {{PLACEHOLDER}}，生成清关四单。"""
+    def load_template(self, doc_type: str) -> openpyxl.Workbook:
+        key = _DOC_TYPE_TO_TEMPLATE.get(doc_type)
+        if not key:
+            raise ValueError(f"Unknown clearance doc_type: {doc_type}")
+        path = TEMPLATES[key]
+        return openpyxl.load_workbook(path)
 
     def generate(
         self,
         doc_type: str,
         record: LedgerRecordResponse,
         company_code: Optional[str] = None,
-        overrides: Optional[Union[Dict[str, Any], Any]] = None,
-    ) -> Tuple[bytes, str, str]:
-        template_key = _DOC_TYPE_TO_TEMPLATE.get(doc_type)
-        if template_key is None:
-            raise ValueError(f"Unknown clearance doc_type: {doc_type}")
-        template_path = TEMPLATES[template_key]
+        overrides: Optional[dict] = None,
+    ) -> tuple[bytes, str, str]:
+        """返回 (xlsx_bytes, doc_key, b64)。"""
         payload = build_clearance_payload(record, company_code, overrides or {})
-        mapping = _build_mapping(payload)
-        wb = openpyxl.load_workbook(template_path)
-        _fill_workbook(wb, mapping)
+        wb = self.load_template(doc_type)
+        fill_workbook(wb, payload)
         buf = BytesIO()
         wb.save(buf)
         content = buf.getvalue()

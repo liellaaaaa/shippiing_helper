@@ -256,6 +256,68 @@ def _expand_ci_detail_rows(ws, n_items: int, payload: Dict[str, Any]) -> None:
         _set_cell_value(ws, total_row, 5, payload.get("total_amount", 0))
 
 
+def _expand_pl_detail_rows(ws, n_items: int, payload: Dict[str, Any]) -> None:
+    """PL 多产品：明细扩成 N 行，TOTAL 重写为全量汇总（避免 SUM 范围过期）。"""
+    if n_items <= 1:
+        return
+    detail_row = _find_row_containing(ws, "{{ITEM_DESC}}")
+    if detail_row is None:
+        detail_row = _find_row_containing(ws, "{{ITEM_DESC_1}}") or 17
+
+    n_new = n_items - 1
+    merges = _unmerge_from_row(ws, detail_row + 1)
+    ws.insert_rows(detail_row + 1, n_new)
+    _apply_merged_ranges(ws, merges, n_new)
+
+    src_height = ws.row_dimensions[detail_row].height
+    for i in range(n_items):
+        row = detail_row + i
+        if i > 0:
+            if src_height:
+                ws.row_dimensions[row].height = src_height
+            for col in range(1, 7):
+                src_cell = ws.cell(detail_row, col)
+                dst_cell = ws.cell(row, col)
+                dst_cell._style = copy.copy(src_cell._style)
+        idx = i + 1
+        ws.cell(row, 1).value = str(idx)
+        ws.cell(row, 2).value = f"{{{{ITEM_DESC_{idx}}}}}"
+        ws.cell(row, 3).value = f"{{{{ITEM_PACKAGES_{idx}}}}}"
+        ws.cell(row, 4).value = f"{{{{ITEM_CBM_{idx}}}}}"
+        ws.cell(row, 5).value = f"{{{{ITEM_NET_{idx}}}}}"
+        ws.cell(row, 6).value = f"{{{{ITEM_GROSS_{idx}}}}}"
+
+    total_row = _find_row_containing(ws, "{{NET_KG}}")
+    if total_row is None:
+        total_row = _find_row_containing(ws, "TOTAL:")
+    if total_row is not None:
+        items = payload.get("items") or []
+        _set_cell_value(
+            ws,
+            total_row,
+            3,
+            payload.get("packages_display", sum(it.get("packages_display") or 0 for it in items)),
+        )
+        _set_cell_value(
+            ws,
+            total_row,
+            4,
+            payload.get("volume_cbm", sum(it.get("cbm") or 0 for it in items)),
+        )
+        _set_cell_value(
+            ws,
+            total_row,
+            5,
+            payload.get("net_kg", sum(it.get("net_kg") or 0 for it in items)),
+        )
+        _set_cell_value(
+            ws,
+            total_row,
+            6,
+            payload.get("gross_kg", sum(it.get("gross_kg") or 0 for it in items)),
+        )
+
+
 def _set_cell_value(ws, row: int, col: int, value: Any) -> None:
     """Write to the anchor cell if (row, col) falls inside a merge."""
     cell = ws.cell(row, col)
@@ -319,6 +381,8 @@ class ClearanceDocService:
             items = payload.get("items") or []
             if doc_type == "ci" and len(items) > 1:
                 _expand_ci_detail_rows(wb.worksheets[0], len(items), payload)
+            elif doc_type == "pl" and len(items) > 1:
+                _expand_pl_detail_rows(wb.worksheets[0], len(items), payload)
             mapping = _build_mapping(payload)
             _fill_workbook(wb, mapping)
             _append_extra_notes(wb, ov.get("extra_notes"))

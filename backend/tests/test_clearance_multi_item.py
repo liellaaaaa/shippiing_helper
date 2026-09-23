@@ -256,3 +256,98 @@ def test_generate_ci_single_item_unchanged():
     assert ws.cell(18, 2).value == "FIXING AGENT HT-016H"
     assert float(ws.cell(18, 3).value) == 4000.0
     assert float(ws.cell(18, 5).value) == 10400.0
+
+
+def test_generate_pl_three_items_row_expand():
+    import io
+
+    import openpyxl
+
+    from app.services.clearance_doc_service import ClearanceDocService
+
+    svc = ClearanceDocService()
+    content, doc_key, _ = svc.generate("pl", make_three_item_record(), "honghao", {})
+    assert doc_key.startswith("pl_")
+    text = _all_text(content)
+    assert "PRODUCT ALPHA" in text
+    assert "PRODUCT BETA" in text
+    assert "PRODUCT GAMMA" in text
+    assert "{{" not in text
+
+    wb = openpyxl.load_workbook(io.BytesIO(content))
+    ws = wb.worksheets[0]
+    descs = []
+    pkgs = []
+    cbms = []
+    nets = []
+    grosses = []
+    total_pkg = total_cbm = total_net = total_gross = None
+    for row in ws.iter_rows(min_col=1, max_col=6):
+        a, b, c, d, e, f = (cell.value for cell in row)
+        if a == "TOTAL:":
+            total_pkg = float(c)
+            total_cbm = float(d)
+            total_net = float(e)
+            total_gross = float(f)
+        elif a in ("1", "2", "3") and b in ("PRODUCT ALPHA", "PRODUCT BETA", "PRODUCT GAMMA"):
+            descs.append(b)
+            pkgs.append(float(c))
+            cbms.append(float(d))
+            nets.append(float(e))
+            grosses.append(float(f))
+
+    assert descs == ["PRODUCT ALPHA", "PRODUCT BETA", "PRODUCT GAMMA"]
+    # default package_unit=pallets
+    assert pkgs == [2.0, 4.0, 1.0]
+    assert cbms == pytest.approx([1.8, 3.6, 0.9])
+    assert nets == [1000.0, 2000.0, 500.0]
+    assert grosses == [1080.0, 2160.0, 540.0]
+    assert total_pkg == sum(pkgs) == 7.0
+    assert total_cbm == pytest.approx(sum(cbms))
+    assert total_net == sum(nets) == 3500.0
+    assert total_gross == sum(grosses) == 3780.0
+
+
+def test_generate_pl_single_item_unchanged():
+    from app.services.clearance_doc_service import ClearanceDocService
+
+    svc = ClearanceDocService()
+    content, _, _ = svc.generate("pl", make_single_record(), "honghao", {})
+    text = _all_text(content)
+    assert "FIXING AGENT HT-016H" in text
+    assert "{{" not in text
+
+    import io
+
+    import openpyxl
+
+    wb = openpyxl.load_workbook(io.BytesIO(content))
+    ws = wb.worksheets[0]
+    assert ws.cell(17, 2).value == "FIXING AGENT HT-016H"
+    assert float(ws.cell(17, 5).value) == 4000.0
+    assert float(ws.cell(17, 6).value) == 4308.0
+
+
+def test_generate_pl_package_unit_drums():
+    import io
+
+    import openpyxl
+
+    from app.services.clearance_doc_service import ClearanceDocService
+
+    svc = ClearanceDocService()
+    content, _, _ = svc.generate(
+        "pl", make_three_item_record(), "honghao", {"package_unit": "drums"}
+    )
+    wb = openpyxl.load_workbook(io.BytesIO(content))
+    ws = wb.worksheets[0]
+    pkgs = []
+    total_pkg = None
+    for row in ws.iter_rows(min_col=1, max_col=3):
+        a, b, c = (cell.value for cell in row)
+        if a == "TOTAL:":
+            total_pkg = float(c)
+        elif a in ("1", "2", "3") and b in ("PRODUCT ALPHA", "PRODUCT BETA", "PRODUCT GAMMA"):
+            pkgs.append(float(c))
+    assert pkgs == [8.0, 16.0, 4.0]
+    assert total_pkg == sum(pkgs) == 28.0

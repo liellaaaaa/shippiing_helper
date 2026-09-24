@@ -195,13 +195,22 @@ def test_generate_two_batches_one_workbook():
     assert "SA20260713008" in t1
     assert "SA20260626017" not in t1 or True  # 批号只在本 sheet
 
-    # pH 结果分批正确
+    # pH 结果分批正确（生成后可能是数值 7.3，报告原文 7.30）
     ph0 = next(t for t in batches[0]["tests"] if t["key"] == "ph")
     ph1 = next(t for t in batches[1]["tests"] if t["key"] == "ph")
-    assert ph0["result"] in t0
-    assert ph1["result"] in t1
-    assert ph0["result"] not in t1
-    assert ph1["result"] not in t0
+
+    def _ph_in(result: str, text: str) -> bool:
+        if result in text:
+            return True
+        try:
+            return str(float(result)) in text
+        except ValueError:
+            return False
+
+    assert _ph_in(ph0["result"], t0)
+    assert _ph_in(ph1["result"], t1)
+    assert not _ph_in(ph0["result"], t1)
+    assert not _ph_in(ph1["result"], t0)
 
     # pH 标签（报告条件写法）写入
     assert ph0["label_en"] in t0

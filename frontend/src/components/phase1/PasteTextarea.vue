@@ -41,11 +41,13 @@ HT260304E01\tTOA-DOVECHEM\tSILI-001\t有机硅柔软剂\t25\t2400`
 
 function handlePaste(_e: ClipboardEvent) {
   setTimeout(() => {
-    const raw = text.value
-    // Temporarily bypass smartRepair to test
-    text.value = raw
-    emit('update:modelValue', raw)
+    syncText(text.value)
   }, 0)
+}
+
+function syncText(val: string) {
+  text.value = val
+  emit('update:modelValue', val)
 }
 
 // TEMPORARILY DISABLED FOR TESTING
@@ -53,6 +55,7 @@ function handlePaste(_e: ClipboardEvent) {
 
 function handleParse() {
   if (!text.value.trim()) return
+  syncText(text.value)
   emit('parse', text.value)
 }
 
@@ -64,6 +67,11 @@ function handleClear() {
 
 watch(() => props.modelValue, (val) => {
   if (val !== text.value) text.value = val ?? ''
+})
+
+// 任意输入（含程序化）都同步到父组件，否则 merge-preview 会拿到空文本
+watch(text, (val) => {
+  if (val !== props.modelValue) emit('update:modelValue', val)
 })
 </script>
 

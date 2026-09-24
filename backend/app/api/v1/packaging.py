@@ -25,6 +25,7 @@ class CalculateRequest(BaseModel):
     use_pallet: bool = False
     pallet_name: Optional[str] = None
     actual_fill_kg: Optional[float] = None
+    pallets_override: Optional[int] = None
 
 
 class PackingScheme(BaseModel):
@@ -79,12 +80,32 @@ def calculate_packaging(req: CalculateRequest):
     """
     try:
         if req.use_pallet:
-            # 返回所有打卡板方案
+            if req.pallet_name:
+                r = calculate(
+                    req.packaging_name,
+                    req.order_qty_kg,
+                    use_pallet=True,
+                    pallet_name=req.pallet_name,
+                    actual_fill_kg=req.actual_fill_kg,
+                    pallets_override=req.pallets_override,
+                )
+                return PackingScheme(
+                    drums=r.drums,
+                    pallets=r.pallets,
+                    drums_per_pallet=r.drums_per_pallet,
+                    pallet_type=r.pallet_type,
+                    total_cbm=r.total_cbm,
+                    total_weight_kg=r.total_weight_kg,
+                    fits_20gp=r.fits_20gp,
+                    fits_40gp=r.fits_40gp,
+                    recommended=r.recommended,
+                    remainder=r.remainder,
+                    full_pallets=r.full_pallets,
+                )
             schemes = calculate_all_schemes(req.packaging_name, req.order_qty_kg, actual_fill_kg=req.actual_fill_kg)
-            schemes = [s for s in schemes if s.pallet_type is not None or s.pallets == 0]
+            schemes = [s for s in schemes if s.pallet_type is not None]
             if not schemes:
                 raise ValueError("无可用方案")
-            # 返回推荐的第一个方案（优先20GP可装的）
             best = next((s for s in schemes if s.fits_20gp), schemes[0])
             return PackingScheme(
                 drums=best.drums,
@@ -96,11 +117,17 @@ def calculate_packaging(req: CalculateRequest):
                 fits_20gp=best.fits_20gp,
                 fits_40gp=best.fits_40gp,
                 recommended=best.recommended,
-                remainder=best.drums - best.full_pallets * best.drums_per_pallet if best.drums_per_pallet else 0,
+                remainder=best.remainder,
                 full_pallets=best.full_pallets,
             )
         else:
-            r = calculate(req.packaging_name, req.order_qty_kg, use_pallet=False, actual_fill_kg=req.actual_fill_kg)
+            r = calculate(
+                req.packaging_name,
+                req.order_qty_kg,
+                use_pallet=False,
+                actual_fill_kg=req.actual_fill_kg,
+                pallets_override=req.pallets_override,
+            )
             return PackingScheme(
                 drums=r.drums,
                 pallets=r.pallets,
@@ -135,7 +162,7 @@ def calculate_all_packaging_schemes(req: CalculateRequest):
                 "fits_20gp": s.fits_20gp,
                 "fits_40gp": s.fits_40gp,
                 "recommended": s.recommended,
-                "remainder": s.drums - s.full_pallets * s.drums_per_pallet if s.drums_per_pallet else 0,
+                "remainder": s.remainder,
                 "full_pallets": s.full_pallets,
             }
             for s in schemes

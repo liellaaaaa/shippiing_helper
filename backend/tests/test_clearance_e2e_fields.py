@@ -69,7 +69,7 @@ def test_wa318_ci_pl_alignment():
     assert "7.92" in pl_text or "7.920" in pl_text
     assert "IN260720SZ" in ci_text
     assert "PL260720SZ" in pl_text
-    assert "TOTAL 32 DRUMS PACKED ON 8 PALLETS ONLY." in ci_text
+    assert "TOTAL: 32 DRUMS PACKED ON 8 PALLETS" in ci_text
     assert "10400" in ci_text or "10400.0" in ci_text
 
 
@@ -158,7 +158,7 @@ def test_wa318_multi_item_ci_pl_alignment():
     assert ci_total_qty == 6000.0
     assert ci_total_amount == 14000.0
 
-    # PL TOTAL = net 6000 / gross 6462 / cbm 11.88 / packages(pallets) 12
+    # PL TOTAL = net 6000 / gross 6462 / cbm 11.88 / packages(drums) 48
     pl_ws = openpyxl.load_workbook(io.BytesIO(pl)).worksheets[0]
     pl_total_pkg = pl_total_cbm = pl_total_net = pl_total_gross = None
     for row in pl_ws.iter_rows(min_col=1, max_col=6):
@@ -168,7 +168,7 @@ def test_wa318_multi_item_ci_pl_alignment():
             pl_total_cbm = float(d)
             pl_total_net = float(e)
             pl_total_gross = float(f)
-    assert pl_total_pkg == 12.0
+    assert pl_total_pkg == 48.0
     assert pl_total_cbm == round(7.92 + 3.96, 3)
     assert pl_total_net == 6000.0
     assert pl_total_gross == 6462.0

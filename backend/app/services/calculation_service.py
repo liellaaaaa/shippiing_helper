@@ -85,6 +85,8 @@ class CalculationService:
     ) -> float:
         """
         总毛重 = drums × gross_per_drum + pallets × pallet_weight
+        （gross_per_drum = 装入量+桶皮；末桶不满时请用 packaging_service 的
+         net + drums*tare + pallets*pal_wt）
         """
         return drums * gross_per_drum + pallets * pallet_weight
 

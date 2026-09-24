@@ -69,7 +69,7 @@ def test_generate_ci(svc):
     assert "HT260720SZ" in text
     assert "FIXING AGENT HT-016H" in text
     assert "WHLU5694625" in text
-    assert "TOTAL 32 DRUMS PACKED ON 8 PALLETS ONLY." in text
+    assert "TOTAL: 32 DRUMS PACKED ON 8 PALLETS" in text
     assert "{{" not in text
     assert "BENEFICIARY BANK" in text
 
@@ -130,7 +130,7 @@ def test_generate_si(svc):
     text = _all_text(openpyxl.load_workbook(io.BytesIO(content)))
     assert "WAN HAI 289 / S086" in text
     assert "STAR CONCORD" in text
-    assert "订舱补料" in text or "SHIPPING INSTRUCTION" in text
+    assert "补料" in text or "订舱补料" in text or "SHIPPING INSTRUCTION" in text
 
 
 def test_unknown_doc_type(svc):

@@ -97,10 +97,10 @@ def test_three_item_mapping_has_indexed_keys():
         assert float(m[f"ITEM_AMOUNT_{i}"]) == amount
         assert m[f"ITEM_HS_{i}"] == hs
 
-    # PL extras
-    assert m["ITEM_PACKAGES_1"] == "2"
-    assert m["ITEM_PACKAGES_2"] == "4"
-    assert m["ITEM_PACKAGES_3"] == "1"
+    # PL extras（默认件数=drums）
+    assert m["ITEM_PACKAGES_1"] == "8"
+    assert m["ITEM_PACKAGES_2"] == "16"
+    assert m["ITEM_PACKAGES_3"] == "4"
     assert float(m["ITEM_CBM_1"]) == 1.8
     assert float(m["ITEM_NET_2"]) == 2000.0
     assert float(m["ITEM_GROSS_3"]) == 540.0
@@ -122,9 +122,9 @@ def test_single_item_still_fills_legacy_aliases():
 
     assert m["ITEM_COUNT"] == "1"
     assert m["ITEM_DESC"] == "FIXING AGENT HT-016H"
-    assert m["ITEM_QTY"] == "4000.0"
+    assert m["ITEM_QTY"] == "4000"
     assert m["ITEM_PRICE"] == "2.6"
-    assert m["ITEM_AMOUNT"] == "10400.0"
+    assert m["ITEM_AMOUNT"] == "10400"
     assert m["ITEM_NO_1"] == "1"
     assert m["ITEM_DESC_1"] == "FIXING AGENT HT-016H"
     assert m["ITEM_HS_1"] == "340241"
@@ -140,17 +140,17 @@ def test_totals_sum_all_three_items():
     assert p["volume_cbm"] == pytest.approx(6.3)
     assert p["packages"] == 28
     assert p["pallets"] == 7
-    assert p["totals_line"] == "TOTAL 28 DRUMS PACKED ON 7 PALLETS ONLY."
+    assert p["totals_line"] == "TOTAL: 28 DRUMS PACKED ON 7 PALLETS"
     assert p["amount_words"] == "TOTAL USD SEVEN THOUSAND ONLY."
 
 
 def test_package_unit_drums_vs_pallets():
     p_default = build_clearance_payload(record=make_three_item_record(), company_code="honghao", overrides={})
     m_default = _build_mapping(p_default)
-    # default pallets: item1 pallets=2
-    assert m_default["ITEM_PACKAGES_1"] == "2"
-    assert m_default["ITEM_PACKAGES_2"] == "4"
-    assert m_default["ITEM_PACKAGES_3"] == "1"
+    # default drums（对齐成品 PL 件数列）
+    assert m_default["ITEM_PACKAGES_1"] == "8"
+    assert m_default["ITEM_PACKAGES_2"] == "16"
+    assert m_default["ITEM_PACKAGES_3"] == "4"
 
     p_drum = build_clearance_payload(
         record=make_three_item_record(),
@@ -158,7 +158,6 @@ def test_package_unit_drums_vs_pallets():
         overrides={"package_unit": "drums"},
     )
     m_drum = _build_mapping(p_drum)
-    # drums: item1 drums=8, item2=16, item3=4
     assert m_drum["ITEM_PACKAGES_1"] == "8"
     assert m_drum["ITEM_PACKAGES_2"] == "16"
     assert m_drum["ITEM_PACKAGES_3"] == "4"
@@ -287,7 +286,7 @@ def test_generate_pl_three_items_row_expand():
             total_cbm = float(d)
             total_net = float(e)
             total_gross = float(f)
-        elif a in ("1", "2", "3") and b in ("PRODUCT ALPHA", "PRODUCT BETA", "PRODUCT GAMMA"):
+        elif b in ("PRODUCT ALPHA", "PRODUCT BETA", "PRODUCT GAMMA"):
             descs.append(b)
             pkgs.append(float(c))
             cbms.append(float(d))
@@ -295,12 +294,12 @@ def test_generate_pl_three_items_row_expand():
             grosses.append(float(f))
 
     assert descs == ["PRODUCT ALPHA", "PRODUCT BETA", "PRODUCT GAMMA"]
-    # default package_unit=pallets
-    assert pkgs == [2.0, 4.0, 1.0]
+    # default package_unit=drums（对齐成品件数列）
+    assert pkgs == [8.0, 16.0, 4.0]
     assert cbms == pytest.approx([1.8, 3.6, 0.9])
     assert nets == [1000.0, 2000.0, 500.0]
     assert grosses == [1080.0, 2160.0, 540.0]
-    assert total_pkg == sum(pkgs) == 7.0
+    assert total_pkg == sum(pkgs) == 28.0
     assert total_cbm == pytest.approx(sum(cbms))
     assert total_net == sum(nets) == 3500.0
     assert total_gross == sum(grosses) == 3780.0
@@ -346,7 +345,7 @@ def test_generate_pl_package_unit_drums():
         a, b, c = (cell.value for cell in row)
         if a == "TOTAL:" or b == "TOTAL:":
             total_pkg = float(c)
-        elif a in ("1", "2", "3") and b in ("PRODUCT ALPHA", "PRODUCT BETA", "PRODUCT GAMMA"):
+        elif b in ("PRODUCT ALPHA", "PRODUCT BETA", "PRODUCT GAMMA"):
             pkgs.append(float(c))
     assert pkgs == [8.0, 16.0, 4.0]
     assert total_pkg == sum(pkgs) == 28.0

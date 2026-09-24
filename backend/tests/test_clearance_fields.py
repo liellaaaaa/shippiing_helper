@@ -52,7 +52,7 @@ def test_basic_numbers():
     assert p["invoice_no"] == "IN260720SZ"
     assert p["packing_no"] == "PL260720SZ"
     assert p["container_no"] == "WHLU5694625"
-    assert p["totals_line"] == "TOTAL 32 DRUMS PACKED ON 8 PALLETS ONLY."
+    assert p["totals_line"] == "TOTAL: 32 DRUMS PACKED ON 8 PALLETS"
     assert p["items"][0]["desc"] == "FIXING AGENT HT-016H"
     assert p["items"][0]["amount"] == 10400.0
 

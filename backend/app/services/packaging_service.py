@@ -52,6 +52,7 @@ class PackingResult:
     fits_40gp: bool
     recommended: str
     full_pallets: int = 0  # 整板数 = drums // drums_per_pallet
+    remainder: int = 0  # 尾板件数（仅展示，托数已含尾板）
 
 
 # === 订单级别汇总计算新增 ===
@@ -222,51 +223,70 @@ def find_pallet(name: str) -> Optional[PalletSpec]:
     return None
 
 
+def _fill_kg(pkg_net: float, actual_fill_kg: Optional[float]) -> float:
+    if actual_fill_kg is not None and actual_fill_kg > 0:
+        return float(actual_fill_kg)
+    return float(pkg_net)
+
+
+def _packages(quantity_kg: float, fill_kg: float) -> int:
+    if quantity_kg <= 0 or fill_kg <= 0:
+        return 0
+    return math.ceil(quantity_kg / fill_kg)
+
+
+def _pallets_for(drums: int, drums_per_pallet: int) -> tuple[int, int, int]:
+    """返回 (总托数含尾板, 整板数, 尾板件数)"""
+    if drums <= 0 or drums_per_pallet <= 0:
+        return 0, 0, 0
+    full = drums // drums_per_pallet
+    remainder = drums % drums_per_pallet
+    total = full + (1 if remainder else 0)
+    return total, full, remainder
+
+
 def calculate(
     packaging_name: str,
     order_qty_kg: float,
     use_pallet: bool = False,
     pallet_name: Optional[str] = None,
     actual_fill_kg: Optional[float] = None,
+    pallets_override: Optional[int] = None,
 ) -> PackingResult:
     """
-    核心计算函数
+    核心计算（全系统唯一公式）
 
-    参数:
-        packaging_name: 包装种类名称，如 "125kg新款胶桶"
-        order_qty_kg: 订单总净重 kg
-        use_pallet: 是否打卡板
-        pallet_name: 托盘规格，如 "1.1*1.1m"（use_pallet=True 时必填）
-        actual_fill_kg: 每桶实际装入量，None时用标称净重
-
-    返回:
-        PackingResult
+        fill     = actual_fill_kg ?? 标称净重
+        packages = ceil(qty / fill)
+        net      = qty
+        pallets  = ceil(packages / 每板件数)   # 可被 pallets_override 覆盖
+        gross    = net + packages*tare + pallets*托重
+        volume   = packages*桶CBM + pallets*托CBM
     """
     pkg = find_package(packaging_name)
     if not pkg:
         raise ValueError(f"未找到包装种类: {packaging_name}")
 
-    # 桶数 = ceil(order_qty / fill_kg)
-    fill_kg = actual_fill_kg if actual_fill_kg and actual_fill_kg > 0 else pkg.net_kg
-    drums = math.ceil(order_qty_kg / fill_kg)
+    fill_kg = _fill_kg(pkg.net_kg, actual_fill_kg)
+    drums = _packages(order_qty_kg, fill_kg)
+    net = float(order_qty_kg or 0)
+    drum_tare = drums * pkg.tare_kg
 
     if not use_pallet:
-        # 模式A：不打卡板
         pallets = 0
         drums_per_pallet = 0
         pallet_type = None
         full_pallets = 0
-        total_cbm = drums * pkg.cbm
-        total_weight = drums * pkg.gross_kg
+        remainder_val = 0
+        pallet_tare = 0.0
+        pallet_cbm = 0.0
     else:
-        # 模式B：打卡板
         if not pallet_name:
             raise ValueError("use_pallet=True 时必须指定 pallet_name")
         pallet = find_pallet(pallet_name)
         if not pallet:
             raise ValueError(f"未找到托盘种类: {pallet_name}")
 
-        # 确定每托盘桶数
         if "1.0*1.0" in pallet_name:
             drums_per_pallet = pkg.pallet_qty_1x1 or 0
         elif "1.1*1.1" in pallet_name:
@@ -277,16 +297,16 @@ def calculate(
         if drums_per_pallet == 0:
             raise ValueError(f"{packaging_name} 无法使用 {pallet_name} 打卡板")
 
-        full_pallets = drums // drums_per_pallet
-        remainder_val = drums - full_pallets * drums_per_pallet
-        # pallets 存整板数，remainder = drums - pallets*per_pallet（可正可负）
-        pallets = full_pallets
+        auto_pallets, full_pallets, remainder_val = _pallets_for(drums, drums_per_pallet)
+        pallets = auto_pallets if pallets_override is None else max(0, int(pallets_override))
         pallet_type = pallet_name
+        pallet_tare = pallets * pallet.weight_kg
+        pallet_cbm = pallets * pallet.cbm
 
-        total_cbm = drums * pkg.cbm + pallets * pallet.cbm
-        total_weight = drums * pkg.gross_kg + pallets * pallet.weight_kg
+    total_cbm = drums * pkg.cbm + pallet_cbm
+    # 毛重 = 净含量 + 桶皮 + 托盘
+    total_weight = net + drum_tare + pallet_tare
 
-    # 货柜判断
     specs = get_container_specs()
     spec_20gp = specs["20GP"]
     spec_40gp = specs["40GP"]
@@ -311,7 +331,8 @@ def calculate(
         fits_20gp=fits_20gp,
         fits_40gp=fits_40gp,
         recommended=recommended,
-        full_pallets=full_pallets,
+        full_pallets=full_pallets if use_pallet else 0,
+        remainder=remainder_val if use_pallet else 0,
     )
 
 
@@ -351,36 +372,23 @@ def calculate_single_product(
     barrel_type: str,
     pallet_spec: str = "1.1*1.1m",
     actual_fill_kg: Optional[float] = None,
+    pallets_override: Optional[int] = None,
 ) -> ProductPackagingResult:
     """
-    计算单个产品的包装需求
-
-    Args:
-        packaging_name: 包装类型名称，如 "125kg新款胶桶"
-        quantity_kg: 订单总净重 kg
-        specification_kg: 单桶/单袋净重 kg
-        barrel_type: 包装方式: "胶桶" / "纸桶" / "编织袋" / "IBC"
-        pallet_spec: 卡板规格
-        actual_fill_kg: 每桶实际装入量，None时用specification_kg
-
-    Returns:
-        ProductPackagingResult: 单产品包装计算结果
+    单产品包装：packages=ceil(qty/fill)，pallets=ceil(packages/cap)，
+    gross=qty+packages*tare+pallets*托重，volume=packages*cbm+pallets*托cbm
     """
     pkg = find_package(packaging_name)
     if not pkg:
         raise ValueError(f"未找到包装种类: {packaging_name}")
 
-    # 桶数 = ceil(order_qty / fill_kg)
-    fill_kg = actual_fill_kg if actual_fill_kg and actual_fill_kg > 0 else specification_kg
-    drums = math.ceil(quantity_kg / fill_kg)
+    fill_kg = _fill_kg(specification_kg or pkg.net_kg, actual_fill_kg)
+    drums = _packages(quantity_kg, fill_kg)
+    net = float(quantity_kg or 0)
+    drum_tare = drums * pkg.tare_kg
+    drum_cbm = drums * pkg.cbm
 
-    # 不打卡板模式：当 pallet_spec 为空/None 时，直接计算桶数体积毛重，无卡板贡献
-    if not pallet_spec:
-        drum_tare = drums * pkg.tare_kg
-        drum_cbm = drums * pkg.cbm
-        total_volume = drum_cbm
-        gross_weight = drums * pkg.gross_kg
-
+    if not pallet_spec or not pkg.is_palletizable:
         return ProductPackagingResult(
             product_name=packaging_name,
             packaging_name=packaging_name,
@@ -391,16 +399,15 @@ def calculate_single_product(
             pallet_spec="",
             full_pallets=0,
             remainder=0,
-            net_weight_kg=quantity_kg,
+            net_weight_kg=net,
             drum_tare_kg=round(drum_tare, 1),
             pallet_tare_kg=0,
-            gross_weight_kg=round(gross_weight, 1),
+            gross_weight_kg=round(net + drum_tare, 1),
             drum_cbm=round(drum_cbm, 4),
             pallet_cbm=0,
-            total_volume_cbm=round(total_volume, 4),
+            total_volume_cbm=round(drum_cbm, 4),
         )
 
-    # 确定每托盘桶数
     if "1.0*1.0" in pallet_spec:
         drums_per_pallet = pkg.pallet_qty_1x1 or 0
     elif "1.1*1.1" in pallet_spec:
@@ -409,26 +416,33 @@ def calculate_single_product(
         drums_per_pallet = 0
 
     if drums_per_pallet == 0:
-        # 编织袋类产品不需要卡板
-        full_pallets = 0
-        remainder = quantity_kg  # 全是待处理（不打卡板）
-        pallets = 0
-        drum_tare = drums * pkg.tare_kg
-        pallet_tare = 0
-        drum_cbm = drums * pkg.cbm
-        pallet_cbm = 0
-    else:
-        full_pallets = drums // drums_per_pallet
-        remainder = drums - full_pallets * drums_per_pallet  # 可正可负
-        pallets = full_pallets
-        pallet = find_pallet(pallet_spec)
-        drum_tare = drums * pkg.tare_kg
-        pallet_tare = pallets * pallet.weight_kg if pallet else 0
-        drum_cbm = drums * pkg.cbm
-        pallet_cbm = pallets * pallet.cbm if pallet else 0
+        return ProductPackagingResult(
+            product_name=packaging_name,
+            packaging_name=packaging_name,
+            specification_kg=specification_kg,
+            drums=drums,
+            drums_per_pallet=0,
+            pallets=0,
+            pallet_spec=pallet_spec,
+            full_pallets=0,
+            remainder=0,
+            net_weight_kg=net,
+            drum_tare_kg=round(drum_tare, 1),
+            pallet_tare_kg=0,
+            gross_weight_kg=round(net + drum_tare, 1),
+            drum_cbm=round(drum_cbm, 4),
+            pallet_cbm=0,
+            total_volume_cbm=round(drum_cbm, 4),
+        )
 
+    auto_pallets, full_pallets, remainder = _pallets_for(drums, drums_per_pallet)
+    pallets = auto_pallets if pallets_override is None else max(0, int(pallets_override))
+    pallet = find_pallet(pallet_spec)
+    pallet_tare = pallets * pallet.weight_kg if pallet else 0
+    pallet_cbm = pallets * pallet.cbm if pallet else 0
     total_volume = drum_cbm + pallet_cbm
-    gross_weight = drums * pkg.gross_kg + (pallets * find_pallet(pallet_spec).weight_kg if pallets > 0 and pallet_spec in ["1.0*1.0m", "1.1*1.1m"] else 0)
+    # 毛重 = 净含量 + 桶皮 + 托盘
+    gross_weight = net + drum_tare + pallet_tare
 
     return ProductPackagingResult(
         product_name=packaging_name,
@@ -440,7 +454,7 @@ def calculate_single_product(
         pallet_spec=pallet_spec,
         full_pallets=full_pallets,
         remainder=remainder,
-        net_weight_kg=quantity_kg,
+        net_weight_kg=net,
         drum_tare_kg=round(drum_tare, 1),
         pallet_tare_kg=round(pallet_tare, 1),
         gross_weight_kg=round(gross_weight, 1),
@@ -494,6 +508,7 @@ def calculate_order_packaging(products: list[OrderProductInput]) -> OrderPackagi
         total_pallet_cbm += result.pallet_cbm
 
     total_volume = total_drum_cbm + total_pallet_cbm
+    # 毛重 = 净含量 + 桶皮 + 托盘（与单品 gross_weight_kg 同源）
     total_weight = total_net_weight + total_drum_tare + total_pallet_tare
 
     # 按卡板规格分组
@@ -561,27 +576,26 @@ def calculate_remainder_contribution(
     mode: str,  # "full_pallet_merge" | "full_pallet_independent" | "no_pallet"
 ) -> tuple:
     """
-    计算余数桶对总体积/总重量的贡献。
+    仅用于「合板」场景：把未计入行托数的尾板合并时的额外托贡献。
+    行上的 gross/volume 已含全部件数的桶皮/桶体积，这里**不得**再加桶皮。
 
     mode:
-      - full_pallet_merge:       所有余数合并到1块共享余数板（体积=1块板CBM，重量=板重+各行余数桶皮重）
-      - full_pallet_independent: 每个有余数的行各自开1块余数板
-      - no_pallet:               无托盘装载，只加余数桶自身体积和毛重
+      - full_pallet_merge:       合并尾板 → +N 块托的体积/托重
+      - full_pallet_independent: 每行独立尾板 → +1 块托（若行托数未含）
+      - no_pallet:               无额外贡献（货载体积毛重已在行内）
     """
-    if remainder_drums <= 0:
-        return 0.0, 0.0
-
-    pkg = find_package(packaging_name)
-    if not pkg:
+    if remainder_drums <= 0 or mode == "no_pallet":
         return 0.0, 0.0
 
     pallet = find_pallet(pallet_spec) if pallet_spec else None
+    if not pallet:
+        return 0.0, 0.0
 
-    if mode in ("full_pallet_merge", "full_pallet_independent"):
-        extra_volume = pallet.cbm if pallet else 0.0
-        extra_weight = (remainder_drums * pkg.tare_kg) + (pallet.weight_kg if pallet else 0.0)
-    else:  # no_pallet
-        extra_volume = remainder_drums * pkg.cbm
-        extra_weight = remainder_drums * pkg.gross_kg  # 毛重，不再是净重
+    if mode == "full_pallet_independent":
+        extra_volume = pallet.cbm
+        extra_weight = pallet.weight_kg
+    else:  # full_pallet_merge 由调用方传入合并后的托数语义：1 次调用算 1 组
+        extra_volume = pallet.cbm
+        extra_weight = pallet.weight_kg
 
     return round(extra_volume, 4), round(extra_weight, 1)

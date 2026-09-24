@@ -79,13 +79,14 @@ def build_route(loading: str, dest: str, dest_style: str) -> Tuple[str, str]:
 
 
 def build_totals_line(packages: Optional[int], pallets: Optional[int]) -> str:
+    """对齐成品：TOTAL: 3 DRUMS PACKED ON 1 PALLET"""
     pk = int(packages or 0)
     pl = int(pallets or 0)
     if pk <= 0 and pl <= 0:
         return ""
     if pl <= 0:
-        return f"TOTAL {pk} PACKAGES ONLY."
-    return f"TOTAL {pk} DRUMS PACKED ON {pl} PALLETS ONLY."
+        return f"TOTAL: {pk} PACKAGES"
+    return f"TOTAL: {pk} DRUMS PACKED ON {pl} PALLET" + ("S" if pl != 1 else "")
 
 
 def _build_si_desc_block(
@@ -140,9 +141,9 @@ def build_clearance_payload(
     company = get_company_profile(company_code)
     items = _visible_items(record)
     style = dest_style or ov.dest_style or "port"
-    package_unit = (ov.package_unit or "pallets").strip().lower()
+    package_unit = (ov.package_unit or "drums").strip().lower()
     if package_unit not in ("pallets", "drums"):
-        package_unit = "pallets"
+        package_unit = "drums"
 
     pi_no = record.order_no or ""
     # 台账可能 order_no 即 PI；名称与样例一致
@@ -173,7 +174,7 @@ def build_clearance_payload(
         else:
             amount = None
         nw = float(it.net_weight_kg or qty or 0)
-        gw = float(it.gross_weight_kg or nw or 0)
+        gw = float(it.gross_weight_kg or 0)  # 无包装结果时留空，不回落净重
         cbm = float(it.volume_cbm or 0)
         drums = int(it.drum_count or 0)
         pallets = int(it.pallet_count or 0)

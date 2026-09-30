@@ -1,5 +1,5 @@
 from app.schemas.ledger import LedgerItemSchema, LedgerRecordResponse
-from app.services.clearance_fields import build_clearance_payload
+from app.services.clearance_fields import _amount_words_usd, build_clearance_payload
 
 
 def make_record() -> LedgerRecordResponse:
@@ -117,3 +117,43 @@ def test_bank_block_flag():
         overrides={"show_bank_block": False},
     )
     assert p_off["bank_line1"] == ""
+
+
+def test_amount_words_basic():
+    assert _amount_words_usd(1) == "TOTAL USD ONE ONLY."
+    assert _amount_words_usd(7000) == "TOTAL USD SEVEN THOUSAND ONLY."
+    assert _amount_words_usd(10400) == "TOTAL USD TEN THOUSAND AND FOUR HUNDRED ONLY."
+
+
+def test_amount_words_million_scale_no_index_error():
+    # S4: n>=2,000,000 曾触发 ones[h] 越界；1,234,567 曾错写成 TWELVE HUNDRED…
+    assert _amount_words_usd(1234567) == (
+        "TOTAL USD ONE MILLION TWO HUNDRED AND THIRTY-FOUR THOUSAND"
+        " AND FIVE HUNDRED AND SIXTY-SEVEN ONLY."
+    )
+    assert _amount_words_usd(2000000) == "TOTAL USD TWO MILLION ONLY."
+    assert _amount_words_usd(12345678) == (
+        "TOTAL USD TWELVE MILLION THREE HUNDRED AND FORTY-FIVE THOUSAND"
+        " AND SIX HUNDRED AND SEVENTY-EIGHT ONLY."
+    )
+    # 不得抛异常
+    for v in (1, 1234567, 2000000, 12345678, 1_000_000_000):
+        _amount_words_usd(v)
+
+
+def test_amount_words_keeps_cents():
+    assert _amount_words_usd(1.25) == "TOTAL USD ONE AND TWENTY-FIVE CENTS ONLY."
+    assert _amount_words_usd(1234.56) == (
+        "TOTAL USD ONE THOUSAND AND TWO HUNDRED AND THIRTY-FOUR"
+        " AND FIFTY-SIX CENTS ONLY."
+    )
+    assert _amount_words_usd(0.5) == "TOTAL USD FIFTY CENTS ONLY."
+    # 无小数时不追加 CENTS
+    assert "CENTS" not in _amount_words_usd(2000000)
+
+
+def test_amount_words_invalid_input():
+    assert _amount_words_usd(0) == ""
+    assert _amount_words_usd(-1) == ""
+    assert _amount_words_usd(None) == ""
+    assert _amount_words_usd("abc") == ""

@@ -4,6 +4,7 @@ TBD 约束（V2 §12）：
 - TBD-2 COA PI No 默认留空，仅 overrides.coa_pi_no 写入
 - TBD-1 pH 条件默认用报告/overrides，不写死 20%
 """
+import math
 from datetime import date as _date
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -27,13 +28,21 @@ def _visible_items(record: LedgerRecordResponse) -> List:
 
 
 def _amount_words_usd(amount: float) -> str:
-    """英文金额大写（美元）。样例风格：TOTAL USD TEN THOUSAND AND FOUR HUNDRED ONLY."""
+    """英文金额大写（美元）。样例风格：TOTAL USD TEN THOUSAND AND FOUR HUNDRED ONLY.
+
+    按 THOUSAND/MILLION/BILLION 分段展开；保留美分（有小数时追加 AND XX CENTS）。
+    """
     try:
-        n = int(round(float(amount)))
+        value = float(amount)
     except (TypeError, ValueError):
         return ""
-    if n <= 0:
+    if not math.isfinite(value) or value <= 0:
         return ""
+    total_cents = int(round(value * 100))
+    if total_cents <= 0:
+        return ""
+    dollars, cents = divmod(total_cents, 100)
+
     ones = [
         "", "ONE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN", "EIGHT", "NINE",
         "TEN", "ELEVEN", "TWELVE", "THIRTEEN", "FOURTEEN", "FIFTEEN", "SIXTEEN",
@@ -52,13 +61,34 @@ def _amount_words_usd(amount: float) -> str:
         h, r = divmod(x, 100)
         return ones[h] + " HUNDRED" + ((" AND " + under_1000(r)) if r else "")
 
-    if n < 1000:
-        words = under_1000(n)
-    else:
-        th, rest = divmod(n, 1000)
-        words = under_1000(th) + " THOUSAND"
-        if rest:
-            words += " AND " + under_1000(rest)
+    def int_words(n: int) -> str:
+        """按 billion/million/thousand 分段展开，避免 under_1000 收到 >=1000。"""
+        if n <= 0:
+            return ""
+        if n < 1000:
+            return under_1000(n)
+        for div, name in (
+            (10 ** 12, "TRILLION"),
+            (10 ** 9, "BILLION"),
+            (10 ** 6, "MILLION"),
+            (10 ** 3, "THOUSAND"),
+        ):
+            if n >= div:
+                head, rest = divmod(n, div)
+                words = f"{int_words(head)} {name}"
+                if rest:
+                    # 样例：TEN THOUSAND AND FOUR HUNDRED —— 末段 <1000 用 AND 连接
+                    if rest < 1000:
+                        words += " AND " + under_1000(rest)
+                    else:
+                        words += " " + int_words(rest)
+                return words
+        return under_1000(n)
+
+    words = int_words(dollars)
+    if cents:
+        cents_part = f"{under_1000(cents)} CENTS"
+        words = f"{words} AND {cents_part}" if words else cents_part
     return f"TOTAL USD {words} ONLY."
 
 

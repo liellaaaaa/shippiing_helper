@@ -81,6 +81,9 @@ class SaveService:
         first_record_id = None
         from app.models.order import PackagingType
 
+        # PI 是单值，仅单品订单可回退缺失的数量/单价/金额
+        is_single_item = len(order_d.items) == 1
+
         for i, item in enumerate(order_d.items):
             record = OrderPiRecord()
 
@@ -100,27 +103,33 @@ class SaveService:
             record.product_en = item.product_en
             record.spec_kg = item.spec_kg
 
-            # 数量/单价/金额 — PI 只填充缺失值（PI 是单值，不应覆盖每个产品各自的字段）
+            # 数量/单价/金额 — PI 是单值，仅单品订单可回退缺失值；多品留空（None）
             if item.quantity_kg is not None and item.quantity_kg != 0:
                 record.quantity_kg = item.quantity_kg
-            elif pi_d and pi_d.quantity is not None:
+            elif is_single_item and pi_d and pi_d.quantity is not None:
                 record.quantity_kg = pi_d.quantity
-            else:
+            elif is_single_item:
                 record.quantity_kg = item.quantity_kg
+            else:
+                record.quantity_kg = None
 
             if item.unit_price is not None and item.unit_price != 0:
                 record.unit_price = item.unit_price
-            elif pi_d and pi_d.unit_price is not None:
+            elif is_single_item and pi_d and pi_d.unit_price is not None:
                 record.unit_price = pi_d.unit_price
-            else:
+            elif is_single_item:
                 record.unit_price = item.unit_price
+            else:
+                record.unit_price = None
 
             if item.total_amount is not None and item.total_amount != 0:
                 record.total_amount = item.total_amount
-            elif pi_d and pi_d.total_amount is not None:
+            elif is_single_item and pi_d and pi_d.total_amount is not None:
                 record.total_amount = pi_d.total_amount
-            else:
+            elif is_single_item:
                 record.total_amount = item.total_amount
+            else:
+                record.total_amount = None
 
             # H.S.Code — 优先 PI
             if pi_d and pi_d.hs_code:

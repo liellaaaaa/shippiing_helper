@@ -1,17 +1,14 @@
 """
-数据中心服务：MSDS 参考文件的搜索、预览、修正上传。
+数据中心服务：MSDS 参考文件的搜索、预览、目录树。
 搜索采用"文件名 > 品名 > 全文"三级优先级。
-修正上传采用时间戳版本策略，永不覆盖原文件。
 """
 import logging
 import os
 import re
-from datetime import datetime
 from typing import Optional
 
 from app.database import SessionLocal
 from app.models.msds_index import MSDSIndex
-from app.models.msds_correction import MSDSCorrection
 from app.services.msds_service import MSDSService
 
 
@@ -156,87 +153,7 @@ class DataCenterService:
         return record.file_path if record else None
 
     # ------------------------------------------------------------
-    # 5. upload_corrected_msds — 时间戳版本策略
-    # ------------------------------------------------------------
-    def upload_corrected_msds(
-        self,
-        file_id: int,
-        file_content: bytes,
-        original_filename: str,
-        user: str = "admin",
-        db_session=None,
-    ) -> dict:
-        """
-        永不覆盖原文件。将上传文件以时间戳命名保存到同目录，
-        原 MSDSIndex 元数据更新为新文件路径，
-        修正历史记录到 MSDSCorrection 表。
-        """
-        if db_session is None:
-            db_session = SessionLocal()
-
-        try:
-            record = db_session.query(MSDSIndex).filter(MSDSIndex.id == file_id).first()
-            if not record:
-                return {"error": "MSDS record not found"}
-
-            # 解析扩展名
-            ext = os.path.splitext(original_filename)[1].lower()
-            file_format = "pdf" if ext == ".pdf" else "doc"
-
-            # 生成时间戳文件名
-            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-            base = os.path.splitext(original_filename)[0]
-            new_filename = f"{base}_{ts}{ext}"
-
-            # 保存到原文件所在目录
-            dir_path = os.path.dirname(record.file_path)
-            new_path = os.path.join(dir_path, new_filename)
-
-            with open(new_path, "wb") as f:
-                f.write(file_content)
-
-            # 从新文件提取文本/属性，更新 MSDSIndex
-            text = self._msds.extract_text(new_path)
-            props = self._msds.extract_physical_props(text)
-
-            record.file_path = new_path
-            record.physical_form = props.get("physical_form") or record.physical_form
-            record.ion_type = props.get("ion_type") or record.ion_type
-            record.ph = props.get("ph") or record.ph
-            record.file_format = file_format
-            record.loaded = 1
-
-            # 写修正历史
-            correction = MSDSCorrection(
-                msds_index_id=file_id,
-                file_format=file_format,
-                upload_timestamp=datetime.now(),
-                product_name=props.get("physical_form") or record.product_name_cn,
-                corrected_by=user,
-                original_filename=original_filename,
-                new_filename=new_filename,
-            )
-            db_session.add(correction)
-            db_session.commit()
-
-            # 更新模块级全局索引缓存
-            _INDEX_CACHE[record.filename] = {
-                "text": text,
-                "props": props,
-                "product_name": props.get("physical_form") or record.product_name_cn,
-            }
-
-            return {
-                "success": True,
-                "new_filename": new_filename,
-                "file_path": new_path,
-                "file_format": file_format,
-            }
-        finally:
-            db_session.close()
-
-    # ------------------------------------------------------------
-    # 6. get_directory_tree — 返回目录树结构
+    # 5. get_directory_tree — 返回目录树结构
     # ------------------------------------------------------------
     def get_directory_tree(self, root_dir: str) -> list[dict]:
         """

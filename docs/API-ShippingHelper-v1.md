@@ -101,7 +101,6 @@
 | **数据中心** | | |
 | GET | `/api/v1/data-center/search` | 数据中心搜索（MSDS） |
 | GET | `/api/v1/data-center/files/{file_id}` | 预览 MSDS 文件 |
-| POST | `/api/v1/data-center/upload-corrected/{file_id}` | 上传修正版 MSDS |
 | POST | `/api/v1/data-center/reindex` | 重建数据中心索引 |
 | GET | `/api/v1/data-center/summary/{file_id}` | 获取 MSDS 摘要 |
 | GET | `/api/v1/data-center/tree` | 获取 references/ 目录树 |

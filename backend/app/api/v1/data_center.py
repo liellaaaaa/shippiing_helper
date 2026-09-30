@@ -1,20 +1,33 @@
 """
-数据中心 API：搜索 MSDS 参考文件、预览、修正上传。
+数据中心 API：搜索 MSDS 参考文件、预览、目录树。
 """
 import os
-from datetime import datetime
+from pathlib import Path
+from urllib.parse import quote
 
-from fastapi import APIRouter, Query, UploadFile, File, HTTPException
+from fastapi import APIRouter, Query, HTTPException
 from fastapi.responses import FileResponse
 from app.database import SessionLocal
 from app.models.msds_index import MSDSIndex
-from app.models.msds_correction import MSDSCorrection
 from app.services.data_center_service import DataCenterService
-from app.services.msds_service import MSDSService
 from app.core.config import MSDS_DIR, REFERENCES_DIR
 from app.core.audit_decorator import audit_action
 
 router = APIRouter(prefix="/api/v1/data-center", tags=["data-center"])
+
+_MEDIA_TYPES = {
+    ".pdf": "application/pdf",
+    ".doc": "application/msword",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".xls": "application/vnd.ms-excel",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".json": "application/json",
+}
+
+
+def _content_disposition(filename: str, disposition: str = "attachment") -> str:
+    """RFC 5987 Content-Disposition，兼容中文文件名（Latin-1 header 安全）。"""
+    return f"{disposition}; filename=\"file\"; filename*=UTF-8''{quote(filename)}"
 
 
 # ------------------------------------------------------------
@@ -64,49 +77,15 @@ async def serve_msds_file(file_id: int):
             raise HTTPException(status_code=404, detail="File not found on disk")
 
         ext = os.path.splitext(file_path)[1].lower()
-        media_types = {
-            ".pdf": "application/pdf",
-            ".doc": "application/msword",
-            ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        }
-        media_type = media_types.get(ext, "application/octet-stream")
+        media_type = _MEDIA_TYPES.get(ext, "application/octet-stream")
 
-        headers = {"Content-Disposition": "inline; filename*=utf-8''"}
+        filename = os.path.basename(file_path)
+        headers = {"Content-Disposition": _content_disposition(filename, "inline")}
         return FileResponse(
             file_path,
             media_type=media_type,
             headers=headers,
         )
-    finally:
-        db.close()
-
-
-# ------------------------------------------------------------
-# POST /upload-corrected/{file_id} — 上传修正版
-# ------------------------------------------------------------
-@router.post("/upload-corrected/{file_id}")
-@audit_action("msds_correction_upload", "data-center")
-async def upload_corrected_msds(
-    file_id: int,
-    file: UploadFile = File(...),
-    user: str = Query("admin"),
-):
-    content = await file.read()
-    original_filename = file.filename or "unknown"
-
-    svc = DataCenterService()
-    db = SessionLocal()
-    try:
-        result = svc.upload_corrected_msds(
-            file_id=file_id,
-            file_content=content,
-            original_filename=original_filename,
-            user=user,
-            db_session=db,
-        )
-        if "error" in result:
-            raise HTTPException(status_code=404, detail=result["error"])
-        return result
     finally:
         db.close()
 
@@ -168,28 +147,24 @@ async def get_data_center_tree():
 @router.get("/file")
 async def serve_file_by_path(path: str = Query(...)):
     """根据 file_path 直接读取 references/ 下的文件用于预览/下载"""
-    # 安全检查：确保路径在 REFERENCES_DIR 内
-    real_path = os.path.normpath(path)
-    if not real_path.startswith(os.path.normpath(REFERENCES_DIR)):
+    # 安全检查：resolve 后必须落在 REFERENCES_DIR 内（拒绝同前缀兄弟目录与符号链接逃逸）
+    try:
+        request_path = Path(path).resolve()
+        references_root = Path(REFERENCES_DIR).resolve()
+    except (OSError, ValueError, RuntimeError):
         raise HTTPException(status_code=403, detail="Access denied")
 
-    if not os.path.exists(real_path):
+    if not request_path.is_relative_to(references_root):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    if not request_path.is_file():
         raise HTTPException(status_code=404, detail="File not found on disk")
 
-    ext = os.path.splitext(real_path)[1].lower()
-    media_types = {
-        ".pdf": "application/pdf",
-        ".doc": "application/msword",
-        ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        ".xls": "application/vnd.ms-excel",
-        ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        ".json": "application/json",
-    }
-    media_type = media_types.get(ext, "application/octet-stream")
+    ext = request_path.suffix.lower()
+    media_type = _MEDIA_TYPES.get(ext, "application/octet-stream")
 
     # PDF 用 inline 显示（预览），其他用 attachment（下载）
     disposition = "inline" if ext == ".pdf" else "attachment"
-    filename = os.path.basename(real_path)
-    headers = {"Content-Disposition": f"{disposition}; filename*=utf-8''{filename}"}
+    headers = {"Content-Disposition": _content_disposition(request_path.name, disposition)}
 
-    return FileResponse(real_path, media_type=media_type, headers=headers)
+    return FileResponse(str(request_path), media_type=media_type, headers=headers)

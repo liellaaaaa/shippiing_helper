@@ -209,7 +209,7 @@ docker run -d -p 8080:80 onlyoffice/documentserver
 | Phase 2 前端页面 | ✅ | Phase2Workflow + ReferencePanel + DocumentEditor |
 | PI 上传 (.pdf) | ✅ | 支持 PDF via OCR |
 | consignee/destination | ✅ | PI Header 字段从 PDF 提取 |
-| 数据中心（MSDS） | ✅ | 搜索、预览、目录树、修正上传 |
+| 数据中心（MSDS） | ✅ | 搜索、预览、目录树 |
 | 运输鉴定报告 | ✅ | 在 references/ 中搜索 + 预览 |
 | 报关资料 | ✅ | 5 sheet 工作簿生成（发票 / 箱单按产品数动态扩展）；支持宏昊 / 民浩双公司模板切换（公司配置 + 占位符 + 印章，按发货人自动推导） |
 | MSDS 台账 | ✅ | MSDS 台账管理 + 批量生成（PDF 走 OnlyOffice 转换服务，并发转换、失败自动回退 docx）；列表分页、外观 / 组分下拉联动 CAS |

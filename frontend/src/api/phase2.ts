@@ -93,14 +93,6 @@ export const phase2Api = {
   getDataCenterSummary(fileId: number) {
     return apiClient.get(`/data-center/summary/${fileId}`)
   },
-  uploadCorrectedMsds(fileId: number, file: File, user: string = 'admin') {
-    const formData = new FormData()
-    formData.append('file', file)
-    return apiClient.post(`/data-center/upload-corrected/${fileId}`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      params: { user },
-    })
-  },
   reindexDataCenter() {
     return apiClient.post('/data-center/reindex')
   },

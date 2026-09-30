@@ -81,35 +81,9 @@
         </div>
         <div class="action-row">
           <button class="action-btn" @click="downloadFile">下载</button>
-          <button class="action-btn action-btn--primary" @click="showUploadDialog = true">修正上传</button>
         </div>
       </div>
     </div>
-
-    <!-- 修正上传弹窗 -->
-    <el-dialog v-model="showUploadDialog" title="修正上传MSDS" width="420px">
-      <div class="upload-dialog-body">
-        <p class="upload-hint">上传修正后的 MSDS 文件（系统将保留原文件，以时间戳命名新版本）：</p>
-        <input ref="uploadInput" type="file" accept=".pdf,.doc,.docx" style="display:none" @change="onUploadFileSelected" />
-        <div class="upload-zone" @click="uploadInput?.click()">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".5">
-            <polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/>
-            <path d="M20.39 18.39A5 5 0 0 1 18 18h-1.61a2 2 0 0 1-2-2V9l-3-3H9a2 2 0 0 1-2-2v-.61A5 5 0 0 1 9 4.61L7.1 7.58a2 2 0 0 1-2.83 0L2.41 9.41A2 2 0 0 1 4.24 11.66l4.24 4.24a2 2 0 0 1 0 2.83L7.17 17.59a2 2 0 1 1 2.83 0l4.24-4.24"/>
-          </svg>
-          <span>点击选择文件</span>
-          <em>PDF / DOC / DOCX</em>
-        </div>
-        <div v-if="uploadFileName" class="upload-file-name">
-          已选择：{{ uploadFileName }}
-        </div>
-      </div>
-      <template #footer>
-        <el-button @click="showUploadDialog = false">取消</el-button>
-        <el-button type="primary" :loading="uploading" :disabled="!uploadFileName" @click="confirmUpload">
-          上传
-        </el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
@@ -147,11 +121,6 @@ const results = ref<MsdsResult[]>([])
 const allResults = ref<MsdsResult[]>([])  // 保留原始搜索结果
 const selectedId = ref<number | null>(null)
 const summary = ref<Partial<MsdsResult>>({})
-const showUploadDialog = ref(false)
-const uploadInput = ref<HTMLInputElement>()
-const uploadFileName = ref('')
-const uploading = ref(false)
-const fileToUpload = ref<File | null>(null)
 const searchLanguage = ref('all')
 
 // 语言切换时重新过滤
@@ -228,31 +197,6 @@ function downloadFile() {
   a.download = summary.value.filename || 'msds'
   a.target = '_blank'
   a.click()
-}
-
-function onUploadFileSelected(e: Event) {
-  const file = (e.target as HTMLInputElement).files?.[0]
-  if (!file) return
-  fileToUpload.value = file
-  uploadFileName.value = file.name
-}
-
-async function confirmUpload() {
-  if (!fileToUpload.value || !selectedId.value) return
-  uploading.value = true
-  try {
-    await phase2Api.uploadCorrectedMsds(selectedId.value, fileToUpload.value)
-    ElMessage.success('上传成功，文件已保存为时间戳版本')
-    showUploadDialog.value = false
-    fileToUpload.value = null
-    uploadFileName.value = ''
-    // 重新搜索以刷新列表
-    await search()
-  } catch {
-    ElMessage.error('上传失败')
-  } finally {
-    uploading.value = false
-  }
 }
 </script>
 
@@ -465,30 +409,4 @@ async function confirmUpload() {
   color: var(--el-text-color-placeholder);
 }
 .doc-preview-hint .action-btn { width: auto; padding: 0 20px; margin-top: 8px; }
-
-/* ── 上传弹窗 ─────────────────────────────────────────── */
-.upload-dialog-body { padding: 8px 0; }
-.upload-hint { font-size: 13px; color: var(--el-text-color-secondary); margin-bottom: 16px; }
-.upload-zone {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  height: 90px;
-  border: 1.5px dashed var(--el-border-color);
-  border-radius: 8px;
-  color: var(--el-text-color-secondary);
-  font-size: 13px;
-  cursor: pointer;
-  transition: border-color 0.2s, color 0.2s;
-}
-.upload-zone:hover { border-color: var(--el-color-primary); color: var(--el-color-primary); }
-.upload-zone em { font-style: normal; font-size: 11px; color: var(--el-text-color-placeholder); }
-.upload-file-name {
-  margin-top: 10px;
-  font-size: 12px;
-  color: var(--el-color-primary);
-  text-align: center;
-}
 </style>

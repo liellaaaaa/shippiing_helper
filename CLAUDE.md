@@ -336,7 +336,6 @@ shipping_helper/
 - `GET /api/v1/data-center/search` — MSDS 搜索
 - `GET /api/v1/data-center/tree` — 目录树
 - `GET /api/v1/data-center/file` — 按路径读取文件
-- `POST /api/v1/data-center/upload-corrected/{id}` — 上传修正版
 - `POST /api/v1/data-center/reindex` — 重建索引
 
 ### MSDS 生成器
@@ -570,7 +569,7 @@ docker run -d -p 8080:80 onlyoffice/documentserver
 | Phase 2 前端页面 | ✅ 完成 | Phase2Workflow + ReferencePanel + DocumentEditor 组件 |
 | PI 上传（.pdf） | ✅ 完成 | PiUploadDragger 支持 .pdf OCR |
 | 收货人/目的港 | ✅ 完成 | PI Header 字段从 PDF 提取 |
-| 数据中心（MSDS） | ✅ 完成 | 搜索、预览、目录树、修正上传 |
+| 数据中心（MSDS） | ✅ 完成 | 搜索、预览、目录树 |
 | 运输鉴定报告 | ✅ 完成 | 在 references/ 中搜索 + 预览 |
 | 报关资料 | ✅ 完成 | `GET /api/v1/documents/customs`（5 sheet 工作簿） |
 

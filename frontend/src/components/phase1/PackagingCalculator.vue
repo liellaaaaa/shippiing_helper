@@ -541,15 +541,17 @@ function applyRemainderMode() {
 }
 
 function recalcSummary() {
-  const s = { total_drums: 0, total_pallets: 0, total_cbm: 0, total_weight_kg: 0, fits_20gp: true, fits_40gp: true }
+  const s = { total_drums: 0, total_pallets: 0, total_cbm: 0, total_weight_kg: 0, fits_20gp: false, fits_40gp: false }
   for (const r of rows.value) {
     s.total_drums += r.drums || 0
     s.total_pallets += r.pallets || 0
     s.total_cbm += r.total_cbm || 0
     s.total_weight_kg += r.total_weight_kg || 0
-    if (!r.fits_20gp) s.fits_20gp = false
-    if (!r.fits_40gp) s.fits_40gp = false
   }
+  // 合计货柜判断：直接比 total_cbm/total_weight_kg 与柜限（与后端 packaging_service/calculation_service 同口径）
+  // 禁止行级 fits AND —— 两行各 15m³ 合计 30m³ 不能仍显示 20GP
+  s.fits_20gp = s.total_cbm <= 28 && s.total_weight_kg <= 21000
+  s.fits_40gp = s.total_cbm <= 56 && s.total_weight_kg <= 27000
   summary.value = s
 }
 

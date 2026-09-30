@@ -245,6 +245,32 @@ def _pallets_for(drums: int, drums_per_pallet: int) -> tuple[int, int, int]:
     return total, full, remainder
 
 
+def _resolve_pallets(
+    drums: int,
+    drums_per_pallet: int,
+    pallets_override: Optional[int],
+) -> tuple[int, int, int]:
+    """返回 (总托数, 整板数, 尾板件数)。
+
+    pallets_override 生效后，full/remainder 按实际托数重算，
+    保证 full + (remainder>0) ≤ pallets（override=0 时全为 0）。
+    """
+    auto_pallets, auto_full, auto_remainder = _pallets_for(drums, drums_per_pallet)
+    if pallets_override is None:
+        return auto_pallets, auto_full, auto_remainder
+
+    pallets = max(0, int(pallets_override))
+    if pallets == 0 or drums <= 0 or drums_per_pallet <= 0:
+        return pallets, 0, 0
+
+    full = min(pallets, drums // drums_per_pallet)
+    placed = full * drums_per_pallet
+    leftover = drums - placed
+    # 尾板只在仍有空托位时计入；托数不够时装不下的部分不记入 remainder
+    remainder = leftover if (leftover > 0 and full < pallets) else 0
+    return pallets, full, remainder
+
+
 def calculate(
     packaging_name: str,
     order_qty_kg: float,
@@ -252,6 +278,7 @@ def calculate(
     pallet_name: Optional[str] = None,
     actual_fill_kg: Optional[float] = None,
     pallets_override: Optional[int] = None,
+    drums_per_pallet: Optional[int] = None,
 ) -> PackingResult:
     """
     核心计算（全系统唯一公式）
@@ -262,6 +289,8 @@ def calculate(
         pallets  = ceil(packages / 每板件数)   # 可被 pallets_override 覆盖
         gross    = net + packages*tare + pallets*托重
         volume   = packages*桶CBM + pallets*托CBM
+
+    drums_per_pallet: 自定义每板件数（不传则用包装类型默认容量）
     """
     pkg = find_package(packaging_name)
     if not pkg:
@@ -287,7 +316,9 @@ def calculate(
         if not pallet:
             raise ValueError(f"未找到托盘种类: {pallet_name}")
 
-        if "1.0*1.0" in pallet_name:
+        if drums_per_pallet is not None:
+            drums_per_pallet = int(drums_per_pallet)
+        elif "1.0*1.0" in pallet_name:
             drums_per_pallet = pkg.pallet_qty_1x1 or 0
         elif "1.1*1.1" in pallet_name:
             drums_per_pallet = pkg.pallet_qty_1_1x1_1 or 0
@@ -297,8 +328,9 @@ def calculate(
         if drums_per_pallet == 0:
             raise ValueError(f"{packaging_name} 无法使用 {pallet_name} 打卡板")
 
-        auto_pallets, full_pallets, remainder_val = _pallets_for(drums, drums_per_pallet)
-        pallets = auto_pallets if pallets_override is None else max(0, int(pallets_override))
+        pallets, full_pallets, remainder_val = _resolve_pallets(
+            drums, drums_per_pallet, pallets_override
+        )
         pallet_type = pallet_name
         pallet_tare = pallets * pallet.weight_kg
         pallet_cbm = pallets * pallet.cbm
@@ -373,15 +405,19 @@ def calculate_single_product(
     pallet_spec: str = "1.1*1.1m",
     actual_fill_kg: Optional[float] = None,
     pallets_override: Optional[int] = None,
+    product_name: Optional[str] = None,
 ) -> ProductPackagingResult:
     """
     单产品包装：packages=ceil(qty/fill)，pallets=ceil(packages/cap)，
     gross=qty+packages*tare+pallets*托重，volume=packages*cbm+pallets*托cbm
+
+    product_name: 真实产品名（缺省时回退为包装名，兼容旧调用）
     """
     pkg = find_package(packaging_name)
     if not pkg:
         raise ValueError(f"未找到包装种类: {packaging_name}")
 
+    display_name = product_name if product_name else packaging_name
     fill_kg = _fill_kg(specification_kg or pkg.net_kg, actual_fill_kg)
     drums = _packages(quantity_kg, fill_kg)
     net = float(quantity_kg or 0)
@@ -390,7 +426,7 @@ def calculate_single_product(
 
     if not pallet_spec or not pkg.is_palletizable:
         return ProductPackagingResult(
-            product_name=packaging_name,
+            product_name=display_name,
             packaging_name=packaging_name,
             specification_kg=specification_kg,
             drums=drums,
@@ -417,7 +453,7 @@ def calculate_single_product(
 
     if drums_per_pallet == 0:
         return ProductPackagingResult(
-            product_name=packaging_name,
+            product_name=display_name,
             packaging_name=packaging_name,
             specification_kg=specification_kg,
             drums=drums,
@@ -435,8 +471,7 @@ def calculate_single_product(
             total_volume_cbm=round(drum_cbm, 4),
         )
 
-    auto_pallets, full_pallets, remainder = _pallets_for(drums, drums_per_pallet)
-    pallets = auto_pallets if pallets_override is None else max(0, int(pallets_override))
+    pallets, full_pallets, remainder = _resolve_pallets(drums, drums_per_pallet, pallets_override)
     pallet = find_pallet(pallet_spec)
     pallet_tare = pallets * pallet.weight_kg if pallet else 0
     pallet_cbm = pallets * pallet.cbm if pallet else 0
@@ -445,7 +480,7 @@ def calculate_single_product(
     gross_weight = net + drum_tare + pallet_tare
 
     return ProductPackagingResult(
-        product_name=packaging_name,
+        product_name=display_name,
         packaging_name=packaging_name,
         specification_kg=specification_kg,
         drums=drums,
@@ -497,6 +532,7 @@ def calculate_order_packaging(products: list[OrderProductInput]) -> OrderPackagi
             barrel_type=prod.barrel_type,
             pallet_spec=prod.pallet_spec,
             actual_fill_kg=prod.actual_fill_kg,
+            product_name=prod.product_name,
         )
         product_details.append(result)
         total_drums += result.drums

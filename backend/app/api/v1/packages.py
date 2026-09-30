@@ -3,11 +3,29 @@
 from fastapi import APIRouter, Query, Depends, HTTPException
 from typing import Optional
 from app.services.calculation_service import CalculationService, CONTAINER_LIMITS
+from app.services.packaging_service import calculate as packaging_calculate
 from app.models.order import PackagingType
 from app.database import get_db
 
 
 router = APIRouter(prefix="/api/v1/packages", tags=["包装计算"])
+
+# API pallet_spec → packaging_service 托盘名（托盘 CBM/皮重以 DB pallets 表为准）
+PALLET_NAME_MAP = {
+    "1.0x1.0": "1.0*1.0m",
+    "1.0*1.0": "1.0*1.0m",
+    "1.0*1.0m": "1.0*1.0m",
+    "1.1x1.1": "1.1*1.1m",
+    "1.1*1.1": "1.1*1.1m",
+    "1.1*1.1m": "1.1*1.1m",
+}
+
+
+def _resolve_pallet_name(pallet_spec: str) -> str:
+    name = PALLET_NAME_MAP.get(pallet_spec)
+    if not name:
+        raise HTTPException(status_code=400, detail=f"未知托盘规格：{pallet_spec}")
+    return name
 
 
 @router.get("/calculate")
@@ -31,38 +49,58 @@ async def calculate_package(
     - transport_mode=sea：返回桶数、卡板数、体积、毛重、集装箱推荐
     - transport_mode=air：返回计费重量对比（实重/IATA×167/航司÷6000）
     - transport_mode=land：返回总件数、毛重、体积、公路限重警告
+
+    计算口径与 packaging_service.calculate 一致：
+    packages=ceil(qty/fill)，pallets=ceil(packages/cap) 含尾板，
+    gross=net+packages*tare+pallets*托重，volume=packages*桶CBM+pallets*托CBM。
     """
     service = CalculationService()
 
-    # 查询包装类型信息
+    # 查询包装类型信息（响应字段 + 校验存在）
     packaging = db.query(PackagingType).filter_by(name=packaging_name).first()
     if not packaging:
         raise HTTPException(status_code=404, detail=f"未找到包装类型：{packaging_name}")
 
-    # 确定单板容量
-    if pallet_spec == "1.0x1.0":
-        capacity = packaging.pallet_qty_1x1 or 0
-    else:
-        capacity = packaging.pallet_qty_1_1x1_1 or 0
+    # 统一走 packaging_service.calculate（托盘 CBM/皮重从 DB pallets 表取）
+    try:
+        if no_pallet:
+            result = packaging_calculate(packaging_name, quantity_kg, use_pallet=False)
+        else:
+            pallet_name = _resolve_pallet_name(pallet_spec)
+            # 显式容量 / 包装默认容量；容量为 0 时与旧行为一致 → 按不打卡板算
+            if pallet_qty is not None:
+                effective_cap = int(pallet_qty)
+            elif pallet_name.startswith("1.0"):
+                effective_cap = packaging.pallet_qty_1x1 or 0
+            else:
+                effective_cap = packaging.pallet_qty_1_1x1_1 or 0
+            if effective_cap <= 0:
+                result = packaging_calculate(packaging_name, quantity_kg, use_pallet=False)
+            else:
+                result = packaging_calculate(
+                    packaging_name,
+                    quantity_kg,
+                    use_pallet=True,
+                    pallet_name=pallet_name,
+                    drums_per_pallet=pallet_qty,
+                )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
-    # 如果未指定单板数量，使用默认值
-    if pallet_qty is None:
-        pallet_qty = capacity
-
-    # 基础计算（海运/共用）
-    drums = service.calculate_drums(quantity_kg, packaging.net_kg)
-    pallets = service.calculate_pallets(drums, pallet_qty, no_pallet)
-    total_cbm = service.calculate_volume(drums, packaging.cbm, pallets, 0.15 if not no_pallet else 0.0)
-    total_weight_kg = service.calculate_gross_weight(drums, packaging.gross_kg, pallets, 27.0)
+    drums = result.drums
+    pallets = result.pallets
+    total_cbm = result.total_cbm
+    total_weight_kg = result.total_weight_kg
+    capacity = result.drums_per_pallet or 0
 
     if transport_mode == "sea":
         container = service.judge_container(total_cbm, total_weight_kg)
-        scheme = service.generate_packing_scheme(drums, pallets, pallet_qty, no_pallet)
+        scheme = service.generate_packing_scheme(drums, pallets, capacity, no_pallet)
         return {
             "drums": drums,
             "pallets": pallets,
-            "total_cbm": round(total_cbm, 3),
-            "total_weight_kg": round(total_weight_kg, 2),
+            "total_cbm": total_cbm,
+            "total_weight_kg": total_weight_kg,
             "packing_scheme": scheme,
             "container": {
                 "recommended": container.recommended,
@@ -77,7 +115,7 @@ async def calculate_package(
                 "drum_tare_kg": packaging.tare_kg,
                 "drum_gross_kg": packaging.gross_kg,
                 "pallet_spec": pallet_spec,
-                "pallet_capacity": pallet_qty,
+                "pallet_capacity": capacity,
             },
         }
 
@@ -86,7 +124,7 @@ async def calculate_package(
         vol_weight_6000 = service.calculate_air_volume_weight(total_cbm, factor=6000)
         chargeable = service.calculate_chargeable_weight(total_weight_kg, vol_weight_167, vol_weight_6000)
         return {
-            "actual_weight_kg": round(total_weight_kg, 2),
+            "actual_weight_kg": total_weight_kg,
             "vol_weight_167": round(vol_weight_167, 2),
             "vol_weight_6000": round(vol_weight_6000, 2),
             "chargeable_weight_kg": round(chargeable, 2),
@@ -97,8 +135,8 @@ async def calculate_package(
         overweight = service.check_land_overweight(total_weight_kg)
         return {
             "total_drums": drums,
-            "total_weight_kg": round(total_weight_kg, 2),
-            "total_cbm": round(total_cbm, 3),
+            "total_weight_kg": total_weight_kg,
+            "total_cbm": total_cbm,
             "overweight_warning": overweight,
         }
 

@@ -317,7 +317,11 @@ def merge_quoted_lines(lines: list[str], raw_text: str = "") -> list[str]:
 
 def parse_header(header_line: str, delimiter: str) -> dict[int, str]:
     """Parse first row as header, return {col_index: field_name} dict."""
-    parts = [p.strip() for p in header_line.split(delimiter)]
+    # delimiter=="SPACE" 时不能按字面 "SPACE" split，须走 split_by_spaces
+    if delimiter == "SPACE":
+        parts = split_by_spaces(header_line)
+    else:
+        parts = [p.strip() for p in header_line.split(delimiter)]
     col_map: dict[int, str] = {}
     for i, part in enumerate(parts):
         field_name = normalize_column_name(part)

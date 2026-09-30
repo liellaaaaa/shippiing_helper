@@ -465,6 +465,15 @@ function generateRandomPh(): string {
   return `${x}±1`
 }
 
+/** 成分行深拷贝：避免表单/导入改动污染台账列表里的原始 composition */
+function cloneComposition(composition: CompositionItem[] | null | undefined): CompositionItem[] {
+  if (!composition || composition.length === 0) return []
+  return composition.map((c: any) => ({
+    ...c,
+    _suggestions: Array.isArray(c._suggestions) ? [...c._suggestions] : c._suggestions,
+  }))
+}
+
 // 归一化 CAS：去掉前导零（"0026545-58-4" -> "26545-58-4"）
 function normCas(s: string): string {
   return (s || '').replace(/(\b0+)(\d)/g, '$2')
@@ -759,7 +768,8 @@ function showEditDialog() {
     product_name_en: selectedItem.value.product_name_en || '',
     appearance_en: selectedItem.value.appearance_en || '',
     ion_type_en: selectedItem.value.ion_type_en || '',
-    composition: selectedItem.value.composition ? [...selectedItem.value.composition] : [],
+    // 深拷贝成分行：浅拷贝会让表单编辑直接改到台账列表里的对象
+    composition: cloneComposition(selectedItem.value.composition),
   }
   showForm.value = true
 }
@@ -816,10 +826,28 @@ function getDefaultDate() {
   return `${y}/${m}/${day}`
 }
 
-function generateMsdsNumber() {
+// MSDS 编号本地防重：自增序号 + 已用集合，替代 Math.random 避免碰撞
+const usedMsdsNumbers = new Set<string>()
+let msdsSeqCounter = 0
+
+function generateMsdsNumber(): string {
   const year = String(new Date().getFullYear()).slice(-2)
-  const seq = String(Math.floor(Math.random() * 100)).padStart(2, '0')
-  return `HHJS-${year}${seq}`
+  // 序号从时间戳低位起算并自增，配合 Set 防重保证本地唯一
+  if (msdsSeqCounter === 0) {
+    msdsSeqCounter = Date.now() % 100
+  }
+  for (let i = 0; i < 200; i += 1) {
+    msdsSeqCounter += 1
+    const candidate = `HHJS-${year}${String(msdsSeqCounter % 100).padStart(2, '0')}`
+    if (!usedMsdsNumbers.has(candidate)) {
+      usedMsdsNumbers.add(candidate)
+      return candidate
+    }
+  }
+  // 超出两位序号空间：用时间戳扩展保证唯一
+  const candidate = `HHJS-${year}${String(Date.now()).slice(-4)}`
+  usedMsdsNumbers.add(candidate)
+  return candidate
 }
 
 function showGenerateDialog(lang: 'cn' | 'en') {
@@ -869,22 +897,24 @@ async function importAllFormulas() {
     ElMessage.error('存在未填写的必填项，请补齐后再导入')
     return
   }
+  let okCount = 0
+  let failCount = 0
   for (const formula of newFormulas.value) {
     // composition already pre-parsed on init; use directly
     const composition = formula.composition || []
-    
+
     // Get appearance from orderItems (passed from Phase2Workflow)
     let appearance = formula.appearance || ''
     // Fallback: try by customs_name from existing ledger
     if (!appearance) {
-      const existingItem = ledgerList.value.find((item: MsdsLedgerItem) => 
+      const existingItem = ledgerList.value.find((item: MsdsLedgerItem) =>
         item.customs_name === formula.customs_name && item.appearance
       )
       if (existingItem) {
         appearance = existingItem.appearance
       }
     }
-    
+
     try {
       await msdsLedgerApi.create({
         customs_name: formula.customs_name,
@@ -893,11 +923,17 @@ async function importAllFormulas() {
         ph: formula.ph || '',
         composition: composition,
       })
+      okCount += 1
     } catch (e) {
+      failCount += 1
       console.error('Failed to import formula:', e)
     }
   }
-  ElMessage.success(`已导入 ${newFormulas.value.length} 个新配方`)
+  if (failCount === 0) {
+    ElMessage.success(`已导入 ${okCount} 个新配方`)
+  } else {
+    ElMessage.warning(`已导入 ${okCount} 个新配方，失败 ${failCount} 个`)
+  }
   newFormulas.value = []
   showEditList.value = false
   await loadLedger()

@@ -111,8 +111,10 @@ export const phase2Api = {
     return apiClient.get(`/transport-reports/linked/${orderItemId}`)
   },
   linkTransportReport(orderItemId: number, transportReportId: number) {
-    return apiClient.post('/transport-reports/link', null, {
-      params: { order_item_id: orderItemId, transport_report_id: transportReportId },
+    // 后端 LinkRequest 要求 JSON body（非 query + null body）
+    return apiClient.post('/transport-reports/link', {
+      order_item_id: orderItemId,
+      transport_report_id: transportReportId,
     })
   },
   unlinkTransportReport(linkId: number) {

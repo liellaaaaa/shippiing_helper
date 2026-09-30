@@ -290,6 +290,12 @@ function getVisibleItems(items: any[]): any[] {
   return items.filter((it: any) => !(it.group_id != null && !it.is_group_header))
 }
 
+/** 台账产品集合（供 MSDS 等使用）：排除组头行，保留子项与独立行。
+ *  onOrderChange / loadLedgerRecord 两条入口必须用同一过滤，避免产品集合不一致。 */
+function getLedgerProductItems(items: any[]): any[] {
+  return items.filter((it: any) => !it.is_group_header)
+}
+
 function getShipperFromTitle(title?: string | null): string {
   if (!title) return SHIPPER_OPTIONS[0]
   const t = title.trim()
@@ -327,8 +333,18 @@ const selectedPiNo = ref<string>('')
 const orderList = ref<DashboardOrder[]>([])
 const piList = ref<any[]>([])
 const currentOrderItems = ref<any[]>([])
-/** 未过滤的全部台账产品（含子项，用于MSDS等需要全部项的场合） */
+/** 台账产品（排除组头行，含子项；onOrderChange / loadLedgerRecord 统一过滤后写入） */
 const allLedgerItems = ref<any[]>([])
+
+/** 请求序号守卫：并发加载时旧响应不得覆盖新数据 */
+let loadSeq = 0
+function nextLoadSeq(): number {
+  loadSeq += 1
+  return loadSeq
+}
+function isStale(seq: number): boolean {
+  return seq !== loadSeq
+}
 const currentDocKey = ref('')
 const currentConfig = ref<any>({})
 const leftWidth = ref(400)
@@ -404,6 +420,7 @@ function selectShipperPreset(text: string) {
 }
 
 async function onOrderChange(orderId: number): Promise<void> {
+  const seq = nextLoadSeq()
   selectedPiNo.value = ''
   shipperEditing.value = false
   shipperSelectValue.value = ''
@@ -416,6 +433,7 @@ async function onOrderChange(orderId: number): Promise<void> {
   // 优先从台账加载（数据更完整）
   if (orderNo) {
     const ledgerRecord = await ordersApi.getLedgerRecordByOrderNo(orderNo)
+    if (isStale(seq)) return
     if (ledgerRecord) {
       // 用 loadLedgerRecord 相同的逻辑填充数据
       const allItems = ledgerRecord.items || []
@@ -445,13 +463,14 @@ async function onOrderChange(orderId: number): Promise<void> {
         },
       }))
       currentOrderItems.value = mappedItems
-      allLedgerItems.value = allItems.filter((it: any) => !it.is_group_header)  // 不含组头
+      allLedgerItems.value = getLedgerProductItems(allItems)
 
       for (const item of currentOrderItems.value) {
         const cn = item.customs_name || ''
         if (cn && !item.product_en) {
           try {
             const res = await nameMappingApi.lookupByCn(cn)
+            if (isStale(seq)) return
             if (res.data.en) item.product_en = res.data.en
           } catch { /* ignore */ }
         }
@@ -462,6 +481,7 @@ async function onOrderChange(orderId: number): Promise<void> {
       if (firstCustomsName) {
         try {
           const res = await nameMappingApi.lookupByCn(firstCustomsName)
+          if (isStale(seq)) return
           productEn = res.data.en || ''
         } catch { /* ignore */ }
       }
@@ -504,8 +524,11 @@ async function onOrderChange(orderId: number): Promise<void> {
   }
 
   // 台账无记录，走原来的 comparison 逻辑
+  // 该分支没有台账记录：清空 selectedLedgerId，避免沿用旧台账 ID 误开单据
+  selectedLedgerId.value = null
   try {
     const data = await getOrderComparison(orderId)
+    if (isStale(seq)) return
     const enrichedItems = (data.items || []).map((it: any) => ({
       ...it,
       product_en: it.order?.product_en || '',
@@ -519,12 +542,14 @@ async function onOrderChange(orderId: number): Promise<void> {
       if (cn && !item.product_en) {
         try {
           const res = await nameMappingApi.lookupByCn(cn)
+          if (isStale(seq)) return
           if (res.data.en) item.product_en = res.data.en
         } catch { /* ignore */ }
       }
     }
     if (data.pi_no) selectedPiNo.value = data.pi_no
     const pis = await getOrderPiContracts(orderId)
+    if (isStale(seq)) return
     piList.value = pis
     if (pis.length > 0 && !selectedPiNo.value) {
       selectedPiNo.value = pis[0].pi_no
@@ -535,6 +560,7 @@ async function onOrderChange(orderId: number): Promise<void> {
     if (firstCustomsName) {
       try {
         const res = await nameMappingApi.lookupByCn(firstCustomsName)
+        if (isStale(seq)) return
         productEn = res.data.en || ''
       } catch {
         productEn = ''
@@ -567,7 +593,7 @@ async function onOrderChange(orderId: number): Promise<void> {
       pallet_count: data.pallet_count ? String(data.pallet_count) : '',
     }
   } catch (e) {
-    piList.value = []
+    if (!isStale(seq)) piList.value = []
   }
 }
 
@@ -717,13 +743,20 @@ async function onIngredientsUpdated(data: { internalCode: string; customsIngredi
 
 onMounted(async () => {
   await loadOrderList()
-  if (selectedOrderId.value) onOrderChange(selectedOrderId.value)
-  if (selectedLedgerId.value) loadLedgerRecord(selectedLedgerId.value)
+  // 两路加载串行执行，避免并发写 currentOrderItems/currentOrderInfo
+  if (selectedOrderId.value) {
+    await onOrderChange(selectedOrderId.value)
+  }
+  if (selectedLedgerId.value) {
+    await loadLedgerRecord(selectedLedgerId.value)
+  }
 })
 
 async function loadLedgerRecord(ledgerId: number) {
+  const seq = nextLoadSeq()
   try {
     const record = await ordersApi.getLedgerRecord(ledgerId)
+    if (isStale(seq)) return
     if (!record) return
     const allItems = record.items || []
     const visibleItems = getVisibleItems(allItems)
@@ -756,14 +789,15 @@ async function loadLedgerRecord(ledgerId: number) {
       },
     }))
     currentOrderItems.value = mappedItems
-    allLedgerItems.value = allItems  // 保存原始全部项（含子项，供MSDS使用）
-    
+    allLedgerItems.value = getLedgerProductItems(allItems)
+
     // Look up English names
     for (const item of currentOrderItems.value) {
       const cn = item.customs_name || ''
       if (cn && !item.product_en) {
         try {
           const res = await nameMappingApi.lookupByCn(cn)
+          if (isStale(seq)) return
           if (res.data.en) item.product_en = res.data.en
         } catch { /* ignore */ }
       }
@@ -775,6 +809,7 @@ async function loadLedgerRecord(ledgerId: number) {
     if (firstCustomsName) {
       try {
         const res = await nameMappingApi.lookupByCn(firstCustomsName)
+        if (isStale(seq)) return
         productEn = res.data.en || ''
       } catch { /* ignore */ }
     }
@@ -802,8 +837,8 @@ async function loadLedgerRecord(ledgerId: number) {
       pallet_count: totalPallets ? String(totalPallets) : (visibleItems[0]?.pallet_count != null ? String(visibleItems[0].pallet_count) : ''),
     }
     selectedPiNo.value = record.pi_no || record.order_no || ''
-    // 设置 selectedOrderId 使顶部按钮可操作
-    selectedOrderId.value = record.id
+    // 台账 ID 写入 selectedLedgerId（勿写 selectedOrderId：两者 ID 命名空间不同）
+    selectedLedgerId.value = record.id
     // 同步发货人下拉框选中值
     const shipperVal = getShipperFromTitle(record.shipment_title)
     currentOrderInfo.value.shipper = shipperVal
@@ -813,7 +848,9 @@ async function loadLedgerRecord(ledgerId: number) {
       piList.value = [{ pi_no: record.pi_no, consignee_name: record.consignee_name || '', consignee_address: record.consignee_address || '', destination: record.destination || '' }]
     }
   } catch (e: any) {
-    ElMessage.error('加载台账记录失败，请稍后重试')
+    if (!isStale(seq)) {
+      ElMessage.error('加载台账记录失败，请稍后重试')
+    }
   }
 }
 </script>

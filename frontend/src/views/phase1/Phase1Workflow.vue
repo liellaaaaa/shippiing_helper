@@ -801,13 +801,12 @@ async function handleSaveLedger() {
     if (missingPackaging.length > 0) {
       try {
         await ElMessageBox.confirm(
-          `以下 ${missingPackaging.length} 个产品未进行包装计算：<br><strong>${missingPackaging.join('、')}</strong><br><br>毛重/CBM 将不会生成。请先完成包装计算，或点「仍要入库」强制保存。`,
+          `以下 ${missingPackaging.length} 个产品未进行包装计算：\n${missingPackaging.join('、')}\n\n毛重/CBM 将不会生成。请先完成包装计算，或点「仍要入库」强制保存。`,
           '包装计算未完成',
           {
             confirmButtonText: '仍要入库',
             cancelButtonText: '去补算',
             type: 'warning',
-            dangerouslyUseHTMLString: true,
           }
         )
       } catch {

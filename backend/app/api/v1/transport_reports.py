@@ -6,6 +6,7 @@ from datetime import datetime
 from fastapi import APIRouter, Query, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+from sqlalchemy import func
 from app.database import SessionLocal
 from app.models.transport_report import TransportReport
 from app.models.order_item_transport_report import OrderItemTransportReport
@@ -162,8 +163,8 @@ async def link_report(body: LinkRequest):
         if existing:
             return {"message": "已关联，无需重复添加", "link_id": existing.id}
 
-        # 获取当前最大 link_order
-        max_order = db.query(OrderItemTransportReport.link_order).filter(
+        # 获取当前最大 link_order（同 order_item 下多条关联时取 max，不能用 scalar 单值）
+        max_order = db.query(func.max(OrderItemTransportReport.link_order)).filter(
             OrderItemTransportReport.order_item_id == body.order_item_id,
         ).scalar() or 0
 

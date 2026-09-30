@@ -1176,7 +1176,7 @@ def _read_xls_rows(file_path: str) -> list[list[str]]:
     rows = []
     for row_idx in range(sheet.nrows):
         row_values = sheet.row_values(row_idx)
-        rows.append([strip_surrogates(str(cell).strip()) if cell else "" for cell in row_values])
+        rows.append([strip_surrogates(str(cell).strip()) if cell is not None else "" for cell in row_values])
     wb.release_resources()
     return rows
 
@@ -1197,7 +1197,7 @@ def _read_xls_bytes(content: bytes) -> list[list[str]]:
     rows = []
     for row_idx in range(sheet.nrows):
         row_values = sheet.row_values(row_idx)
-        rows.append([strip_surrogates(str(cell).strip()) if cell else "" for cell in row_values])
+        rows.append([strip_surrogates(str(cell).strip()) if cell is not None else "" for cell in row_values])
     wb.release_resources()
     return rows
 
@@ -1206,16 +1206,20 @@ def _extract_text_from_pdf_bytes(content: bytes) -> str:
     """通过 OCR 从 PDF 内容提取纯文本（图片型扫描 PDF）"""
     pytesseract.pytesseract.tesseract_cmd = os.getenv("TESSERACT_CMD", "/usr/bin/tesseract")
     doc = pymupdf.open(stream=content, filetype="pdf")
-    texts = []
-    for page in doc:
-        mat = pymupdf.Matrix(3, 3)
-        pix = page.get_pixmap(matrix=mat)
-        img_bytes = pix.tobytes("png")
-        img = Image.open(io.BytesIO(img_bytes))
-        text = pytesseract.image_to_string(img, lang="chi_sim+eng", config="--psm 6")
-        texts.append(text)
-    doc.close()
-    return strip_surrogates("\n".join(texts))
+    try:
+        texts = []
+        for i, page in enumerate(doc):
+            if i >= 20:  # 最多 OCR 前 20 页，避免超大 PDF 拖垮资源
+                break
+            mat = pymupdf.Matrix(3, 3)
+            pix = page.get_pixmap(matrix=mat)
+            img_bytes = pix.tobytes("png")
+            img = Image.open(io.BytesIO(img_bytes))
+            text = pytesseract.image_to_string(img, lang="chi_sim+eng", config="--psm 6")
+            texts.append(text)
+        return strip_surrogates("\n".join(texts))
+    finally:
+        doc.close()
 
 
 def _parse_rows_from_text(text: str) -> list[list[str]]:
@@ -1596,7 +1600,8 @@ JSON输出格式示例：
 
         client = OpenAI(
             api_key=DEEPSEEK_API_KEY,
-            base_url="https://api.deepseek.com"
+            base_url="https://api.deepseek.com",
+            timeout=60,
         )
 
         response = client.chat.completions.create(

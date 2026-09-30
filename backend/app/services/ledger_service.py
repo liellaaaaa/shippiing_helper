@@ -28,6 +28,13 @@ from typing import Optional
 FLOAT_TOLERANCE = 0.01
 
 
+def _null_safe_eq(column, value):
+    """NULL 安全等值比较：value 为 None 时走 IS NULL，避免 = NULL 恒假漏判重。"""
+    if value is None:
+        return column.is_(None)
+    return column == value
+
+
 class LedgerService:
     """台账服务 — 三源合并预览和读写"""
 
@@ -440,11 +447,11 @@ class LedgerService:
             duplicates: list[DuplicateItem] = []
             for item in req.items:
                 query = db.query(OrderPiRecord).filter(
-                    OrderPiRecord.internal_code == item.internal_code,
-                    OrderPiRecord.customs_name == item.customs_name,
-                    OrderPiRecord.hs_code == item.hs_code,
-                    OrderPiRecord.components == item.customs_ingredients,
-                    OrderPiRecord.product_appearance == item.product_appearance,
+                    _null_safe_eq(OrderPiRecord.internal_code, item.internal_code),
+                    _null_safe_eq(OrderPiRecord.customs_name, item.customs_name),
+                    _null_safe_eq(OrderPiRecord.hs_code, item.hs_code),
+                    _null_safe_eq(OrderPiRecord.components, item.customs_ingredients),
+                    _null_safe_eq(OrderPiRecord.product_appearance, item.product_appearance),
                 )
                 existing = query.first()
                 if existing:

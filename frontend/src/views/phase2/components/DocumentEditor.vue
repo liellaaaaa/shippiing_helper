@@ -55,7 +55,7 @@ function buildConfig() {
     editorConfig: {
       callbackUrl: props.callbackUrl || `http://host.docker.internal:8000/api/v1/onlyoffice/callback?doc_key=${props.docKey}`,
       mode: 'edit',
-      forcesave: true,
+      forcesave: false,
     },
   }
 }

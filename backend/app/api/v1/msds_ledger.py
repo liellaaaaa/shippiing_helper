@@ -5,7 +5,7 @@ import random
 import zipfile
 from io import BytesIO
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Query, Body
+from fastapi import APIRouter, Query, Body, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from typing import Optional
@@ -168,18 +168,19 @@ async def delete_ledger(ledger_id: int):
 
 @router.post("/generate")
 @audit_action("msds_generate", "msds-ledger")
-async def generate_msds(request: GenerateRequest):
+async def generate_msds(request: GenerateRequest, http_request: Request):
     """Generate MSDS from template."""
     import os
     import base64
     from app.services.msds_generator_service import MSDSGeneratorService
     from app.services.onlyoffice_service import OnlyOfficeService
     from app.models.shipment_doc import ShipmentDoc
-    
+
     db = SessionLocal()
     try:
         item = msds_ledger_svc.get_ledger(db, request.ledger_id)
         if not item:
+            http_request.state.audit_detail = {"ok": False, "error": "Ledger not found", "ledger_id": request.ledger_id}
             return {"error": "Ledger not found"}
         
         # Prepare ledger data
@@ -232,6 +233,13 @@ async def generate_msds(request: GenerateRequest):
         api_base = os.getenv("API_BASE_URL", "http://localhost:8000")
         callback_base = os.getenv("ONLYOFFICE_CALLBACK_BASE_URL", "http://host.docker.internal:8000")
 
+        http_request.state.audit_detail = {
+            "ok": True,
+            "ledger_id": request.ledger_id,
+            "language": request.language,
+            "saved": existing is None,
+            "doc_key": safe_key,
+        }
         return {
             **config,
             "url": f"{callback_base}/api/v1/onlyoffice/download/{safe_key}",
@@ -244,13 +252,15 @@ async def generate_msds(request: GenerateRequest):
 
 @router.post("/batch-generate")
 @audit_action("msds_batch_generate", "msds-ledger")
-async def batch_generate(request: BatchGenerateRequest):
+async def batch_generate(request: BatchGenerateRequest, http_request: Request):
     """Batch generate MSDS for multiple products. Returns ZIP file."""
     from app.services.msds_generator_service import MSDSGeneratorService
 
     if len(request.ledger_ids) == 0:
+        http_request.state.audit_detail = {"ok": False, "error": "empty ledger_ids"}
         return {"error": "请至少选择一个产品"}
     if len(request.ledger_ids) > BATCH_LIMIT:
+        http_request.state.audit_detail = {"ok": False, "error": "batch too large", "n": len(request.ledger_ids)}
         return {"error": f"单次最多生成{BATCH_LIMIT}个产品"}
 
     db = SessionLocal()
@@ -368,6 +378,16 @@ async def batch_generate(request: BatchGenerateRequest):
         today = datetime.now().strftime("%Y%m%d")
         product_count = len(generated_files) // 2
         zip_filename = f"MSDS_{today}_{product_count}products.zip"
+
+        # 埋点：区分成功数 / 失败数，便于统计生成成功率与重试
+        http_request.state.audit_detail = {
+            "ok": len(errors) == 0,
+            "requested": len(request.ledger_ids),
+            "success_products": product_count,
+            "failed": len(errors),
+            "output_format": request.output_format,
+            "persisted": False,  # 批量生成走 ZIP 下载，不写入 shipment_docs
+        }
 
         return StreamingResponse(
             zip_buf,

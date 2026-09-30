@@ -13,7 +13,7 @@ from fastapi.responses import FileResponse, Response, JSONResponse
 from jose import jwt, JWTError
 
 from app.core.text_sanitize import strip_surrogates
-from app.core.audit_decorator import AuditMiddleware
+from app.core.audit_decorator import AuditMiddleware, attach_user_from_jwt
 
 
 class SanitizedJSONResponse(JSONResponse):
@@ -235,9 +235,13 @@ if os.path.exists(FRONTEND_DIST):
 
 JWT_SECRET = os.getenv("JWT_SECRET", "shipping-helper-secret-key-change-in-production")
 
+
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
     """全局认证中间件，排除登录和健康检查端点."""
+    # 无论是否白名单，只要带了合法 token 就注入用户上下文（审计用）
+    attach_user_from_jwt(request)
+
     if request.url.path in ["/health", "/docs", "/redoc", "/openapi.json", "/", "/favicon.ico", "/favicon.svg"] or \
        request.url.path.startswith("/api/v1/auth/") or \
        request.url.path.startswith("/api/v1/onlyoffice/") or \

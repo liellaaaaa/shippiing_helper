@@ -51,14 +51,14 @@ def audit_action(event_type: str, module: str):
 
 
 class AuditMiddleware(BaseHTTPMiddleware):
-    """中间件：检测带 audit_action 标记的路由，成功后自动写审计日志。"""
+    """中间件：检测带 audit_action 标记的路由，完成后自动写审计日志。
+
+    同时记录失败（HTTP >= 400）以及业务软失败（endpoint 写入
+    request.state.audit_detail），便于统计生成失败率、区分重试与失败。
+    """
 
     async def dispatch(self, request: Request, call_next) -> Response:
         response = await call_next(request)
-
-        # 只记录成功的写操作（2xx）
-        if response.status_code >= 400:
-            return response
 
         try:
             endpoint = request.scope.get("endpoint")
@@ -73,12 +73,25 @@ class AuditMiddleware(BaseHTTPMiddleware):
             if meta is None:
                 return response
 
-            # 从 request.state.user 获取用户名（auth_middleware 已设置）
+            # 优先取 auth_middleware 注入的用户；缺失时兜底解析 Authorization
             user = getattr(request.state, "user", None)
-            user_name = user.get("name", "unknown") if user else "unknown"
+            user_name = user.get("name") if user else None
+            if not user_name:
+                user_name = _decode_bearer_name(request)
+            if not user_name:
+                user_name = "unknown"
 
-            # 获取客户端 IP
             ip_address = _get_client_ip(request)
+
+            # 结果埋点：HTTP 状态 + endpoint 可选业务结果
+            detail = {"http_status": response.status_code}
+            extra = getattr(request.state, "audit_detail", None)
+            if isinstance(extra, dict):
+                detail.update(extra)
+
+            # 业务软失败（HTTP 200 但 body 为 error）由 endpoint 标记 ok=False
+            ok = response.status_code < 400 and detail.get("ok", True)
+            detail["ok"] = ok
 
             try:
                 from app.database import SessionLocal
@@ -88,9 +101,10 @@ class AuditMiddleware(BaseHTTPMiddleware):
                 try:
                     svc = AuditService(db)
                     svc.log(
-                        event_type=meta["event_type"],
+                        event_type=meta["event_type"] if ok else meta["event_type"] + "_failed",
                         user_name=user_name,
                         module=meta["module"],
+                        detail=detail,
                         ip_address=ip_address,
                     )
                 finally:
@@ -109,3 +123,30 @@ def _get_client_ip(request: Request) -> str:
     if forwarded:
         return forwarded.split(",")[0].strip()
     return request.client.host if request.client else "unknown"
+
+
+def _decode_bearer_name(request: Request):
+    """从 Authorization Bearer JWT 解析用户名；无效则返回 None。"""
+    auth_header = request.headers.get("authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return None
+    try:
+        import os
+        from jose import jwt
+
+        secret = os.getenv("JWT_SECRET", "shipping-helper-secret-key-change-in-production")
+        payload = jwt.decode(auth_header[7:], secret, algorithms=["HS256"])
+        return payload.get("sub") or None
+    except Exception:
+        return None
+
+
+def attach_user_from_jwt(request: Request) -> None:
+    """若请求带合法 JWT，则写入 request.state.user（供审计溯源）。
+
+    白名单路径也会执行：前端本就会上报 Authorization，但此前白名单
+    直接 return 导致 user 从未注入，审计日志 user_name 落成 unknown。
+    """
+    name = _decode_bearer_name(request)
+    if name:
+        request.state.user = {"name": name}

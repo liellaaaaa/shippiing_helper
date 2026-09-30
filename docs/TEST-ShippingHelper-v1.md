@@ -5,6 +5,44 @@
 
 ---
 
+## 2026-09-25 回归基线
+
+> 该基线记录一次全量回归的快照结果，用于对照后续改动。**不必重写整份测试计划**。
+
+### 后端 pytest
+
+| 项 | 结果 |
+|----|------|
+| 执行时间 | 2026-09-25 |
+| 命令 | `cd backend && python -m pytest tests/ -v` |
+| 结果 | **约 157 passed，2 failed** |
+| 状态 | 2 个失败为**已知遗留**（订单解析多行折叠问题），非本次回归引入 |
+
+**已知失败用例（2 个，均在 `tests/test_order_parser.py`）：**
+
+| 用例 | 现象 | 备注 |
+|------|------|------|
+| `test_parse_single_order_multiple_items` | 同订单多品（一单多品）被折叠为 1 个 item，期望 2 个 | 已知遗留：多行折叠 |
+| `test_parse_same_product_multiple_lines_kept` | 同产品多行（拆分录入）被折叠为 1 行，期望全部保留 | 已知遗留：多行折叠 |
+
+这两个用例断言 `len(orders[0].items) == 2`，当前 parser 仍会将多行折叠为单条 item，故失败。在多行折叠问题修复前，回归以「157 passed / 2 failed（上述两条）」为可接受基线。
+
+### 前端 vue-tsc
+
+| 项 | 结果 |
+|----|------|
+| 执行时间 | 2026-09-25 |
+| 结果 | **vue-tsc 干净（无类型错误）** |
+
+### 与现实一致的测试口径说明
+
+- **运输报告关联**：`POST /api/v1/transport-reports/link` 使用 JSON body `{"order_item_id", "transport_report_id"}`；`link_order = MAX(link_order)+1`。契约测试见 `tests/test_transport_report_link.py`。
+- **OnlyOffice**：业务为预览 + 另存本地，前端 `forcesave: false`，**不依赖 callback 回写**；callback 接口仅作兼容保留。因此无需「回调强制保存」类用例。
+- **数据中心**：能力为 search / files / tree / file / summary / reindex，**无 upload-corrected**，无需修正上传相关用例。
+- **包装计算**：packages API 与 packaging API 数值同源（统一走 `packaging_service`），一致性用例见 `tests/test_packaging_consistency.py`。
+
+---
+
 ## 测试策略
 
 ### 分层测试

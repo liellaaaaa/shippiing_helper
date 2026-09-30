@@ -108,6 +108,9 @@
 | **运输鉴定报告** | | |
 | GET | `/api/v1/transport-reports/search` | 搜索运输鉴定报告 |
 | GET | `/api/v1/transport-reports/files/{filename}` | 预览运输鉴定报告 PDF |
+| GET | `/api/v1/transport-reports/linked/{order_item_id}` | 查询 order_item 已关联的报告 |
+| POST | `/api/v1/transport-reports/link` | 关联运输鉴定报告到 order_item（JSON body） |
+| DELETE | `/api/v1/transport-reports/unlink/{link_id}` | 取消关联 |
 | POST | `/api/v1/transport-reports/reindex` | 重建运输鉴定报告索引 |
 | **品名对照** | | |
 | GET | `/api/v1/name-mapping` | 获取所有品名对照数据 |
@@ -160,7 +163,7 @@
 **说明：**
 - `access_token` 有效期 24 小时
 - 后续请求需在 Header 中携带：`Authorization: Bearer <access_token>`
-- 用户数据存储在 `backend/data/users.json`
+- 用户数据存储在数据库 `users` 表（项目根 `data/shipping_helper.db`；历史 `backend/data/users.json` 已迁移入库）
 
 ---
 
@@ -363,6 +366,14 @@ Phase 1 核心落库接口。接收订单+PI+包装数据，写入 `order_pi_rec
 
 ## 8. 包装计算
 
+> **计算口径：** `/api/v1/packaging/*` 与 `/api/v1/packages/*` 均与 `app/services/packaging_service.py` **同源**（packages API 内部直接调用 packaging_service.calculate），数值不会出现两套公式。
+>
+> **托盘基准参数**（DB `pallets` 表，以 `packaging_service` 读取为准）：
+> - `1.0*1.0m`：皮重 16 kg / CBM 0.15
+> - `1.1*1.1m`：皮重 19 kg / CBM 0.1815
+>
+> 唯一计算公式在 `packaging_service`；`packages` API 为统一入口（海运/空运/陆运），输出与 packaging API 同源一致。
+
 ### GET `/api/v1/packaging/types`
 
 返回所有包装种类（含规格参数）。
@@ -457,9 +468,11 @@ Phase 1 核心落库接口。接收订单+PI+包装数据，写入 `order_pi_rec
 
 ## 10. OnlyOffice 回调
 
+**业务定位：** 预览 + 另存本地。前端编辑器配置 `forcesave: false`，业务流程**不依赖 callback 回写**保存结果；用户需要留存时通过「另存到本地」导出。
+
 ### POST `/api/v1/onlyoffice/callback`
 
-OnlyOffice Document Server 保存文档时的回调接口。
+**兼容保留，业务不依赖回写。** 该接口为 OnlyOffice Document Server 保存回调的兼容实现，保留以便历史/兼容场景可用；当前业务链路不以 callback 写库为准。
 
 **参数：**
 - `doc_key`: 文档键
@@ -467,7 +480,7 @@ OnlyOffice Document Server 保存文档时的回调接口。
 
 **请求：** `multipart/form-data`，`file` 字段（文件流）
 
-**行为：**
+**行为（兼容路径）：**
 1. 接收 Document Server 发送的文件流
 2. 检查 content_hash 避免重复保存
 3. 写入 `shipment_docs` 表
@@ -502,6 +515,66 @@ OnlyOffice Document Server 保存文档时的回调接口。
 ### GET `/api/v1/transport-reports/search`
 
 在 `references/海运鉴定报告/` 目录中搜索 PDF。参数：`q`。
+
+### GET `/api/v1/transport-reports/linked/{order_item_id}`
+
+查询指定 order_item 已关联的运输鉴定报告列表（按 `link_order` 排序）。
+
+**响应：**
+
+```json
+{
+  "items": [
+    {
+      "link_id": 1,
+      "transport_report_id": 3,
+      "filename": "xxx.pdf",
+      "link_order": 1,
+      "linked_at": "2026-09-25T10:00:00"
+    }
+  ],
+  "total": 1
+}
+```
+
+### POST `/api/v1/transport-reports/link`
+
+将运输鉴定报告关联到指定 order_item。**请求为 JSON body**（非 query 参数）。
+
+**请求体：**
+
+```json
+{
+  "order_item_id": 12,
+  "transport_report_id": 3
+}
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| order_item_id | int | 是 | 订单明细 ID |
+| transport_report_id | int | 是 | 运输鉴定报告 ID |
+
+**成功响应（200）：**
+
+```json
+{
+  "message": "关联成功",
+  "link_id": 10,
+  "link_order": 3
+}
+```
+
+**响应字段说明：**
+- `link_order`：同一 `order_item_id` 下的关联序号，取值规则为 **当前最大 link_order + 1**（`MAX(link_order)+1`，1-based）。乱序或历史脏数据下不取首行值。
+- 重复关联同一报告时返回已有关联，不新增：`{"message": "已关联，无需重复添加", "link_id": <已有 id>}`。
+
+**错误响应：**
+- `404`：`{"detail": "运输鉴定报告不存在"}`
+
+### DELETE `/api/v1/transport-reports/unlink/{link_id}`
+
+取消关联。响应：`{"message": "已取消关联"}`。
 
 ### POST `/api/v1/transport-reports/reindex`
 

@@ -75,15 +75,18 @@ EXPORT_CODES_FILE=/path/to/references/2024.12.5 最新出口商品编码及报�
 │   │   ├── models/            # 数据模型
 │   │   ├── schemas/           # Pydantic schemas
 │   │   └── services/          # 业务服务
-│   ├── data/                  # 数据库和用户数据（不纳入 Git）
 │   ├── migrations/            # 数据库迁移脚本
 │   └── references/            # 文档模板（不纳入 Git）
+├── data/                        # 数据库和运行时数据（不纳入 Git）
+│   └── shipping_helper.db     # SQLite 主库（权威路径见 app/database.py 的 DATABASE_PATH）
 ├── frontend/                   # 前端代码
 │   ├── src/                  # Vue 源码
 │   └── dist/                 # 构建产物（自动生成）
 ├── venv/                      # Python 虚拟环境
 └── references/                # 文档模板文件（不纳入 Git）
 ```
+
+> **数据库真实路径：** 项目根 `data/shipping_helper.db`（由 `backend/app/database.py` 中 `DATABASE_PATH` 指定，不是 `backend/data/`）。备份、权限、迁移脚本均以此路径为准。
 
 ---
 
@@ -202,16 +205,28 @@ ssh user@你的服务器 'systemctl restart shipping-helper'
 
 | 路径 | 说明 |
 |------|------|
-| `backend/data/` | 数据库文件 `shipping_helper.db`、用户数据 `users.json` |
+| `data/` | 数据库文件 `shipping_helper.db`（项目根 `data/`，不是 `backend/data/`） |
 | `references/` | 文档模板文件（二进制 .xlsx/.docx） |
 | `frontend/dist/` | 前端构建产物 |
 | `frontend/node_modules/` | npm 依赖 |
 | `.env` | 环境变量（包含密钥） |
 
 ### 备份数据库
+
+数据库真实路径为**项目根** `data/shipping_helper.db`（以 `backend/app/database.py` 的 `DATABASE_PATH` 为准）：
+
 ```bash
-ssh user@你的服务器 'cp /path/to/server/shipping-helper/backend/data/shipping_helper.db /tmp/shipping_helper_$(date +%Y%m%d).db'
+ssh user@你的服务器 'cp /path/to/server/shipping-helper/data/shipping_helper.db /tmp/shipping_helper_$(date +%Y%m%d).db'
 ```
+
+**备份后建议做完整性检查：**
+
+```bash
+ssh user@你的服务器 'sqlite3 /tmp/shipping_helper_$(date +%Y%m%d).db "PRAGMA integrity_check;"'
+# 预期输出：ok
+```
+
+若输出不是 `ok`，说明备份文件损坏，应重新备份并排查磁盘/文件锁问题。
 
 ---
 
@@ -234,6 +249,32 @@ ufw allow 8000/tcp
 ufw allow 8080/tcp
 ufw reload
 ```
+
+---
+
+## 八-2、内网部署说明
+
+本系统按**内网部署假设**运行：服务仅在**船务部内网**访问，**不暴露公网**。
+
+### 已接受的风险（内网前提下）
+
+| 风险项 | 现状 | 说明 |
+|--------|------|------|
+| 鉴权中间件放行 | 多数业务 API 在 `auth_middleware` 中被放行（不校验 JWT） | 内网可信环境下的**已接受风险**，非疏漏 |
+| 用户口令 | 部门共享弱口令（明文存储于 users 表） | 内网共享使用的**已接受风险** |
+
+### 约束
+
+- 服务端口（80/8000/8080）仅对船务部内网开放，不映射到公网。
+- 不需要公网 TLS / WAF / 限流等加固措施（非公网暴露场景）。
+
+### 未来若需暴露公网（前置条件）
+
+若未来计划将服务暴露到公网，**必须先完成**以下加固后再开放：
+
+1. 收紧 `backend/app/main.py` 中的 `auth_middleware`：取消对业务 API 的放行，所有业务端点强制 JWT 认证。
+2. 口令改为哈希存储（如 bcrypt/passlib），废除部门共享弱口令，改为个人账号 + 强口令策略。
+3. 建议追加：HTTPS、登录失败限流、审计日志外置。
 
 ---
 
@@ -269,17 +310,11 @@ sudo systemctl restart shipping-helper
 
 ## 九、用户账号
 
-服务器上用户数据文件：`/path/to/server/shipping-helper/backend/data/users.json`
+用户账号存储在项目根 `data/shipping_helper.db` 的 `users` 表（历史 `backend/data/users.json` 已由迁移脚本 018 迁入数据库）。
 
-```json
-[
-  {"name": "张三", "password": "zhangsan123", "role": "admin"},
-  {"name": "肖聪", "password": "123456", "role": "admin"},
-  {"name": "万凤", "password": "123456", "role": "admin"}
-]
-```
+添加/修改用户可直接编辑 `users` 表（或通过迁移脚本导入），修改后重启服务。
 
-添加/修改用户需要编辑此文件后重启服务。
+> **口令策略（已接受风险）：** 当前为部门共享弱口令，仅适用于内网部署假设。详见下方「内网部署说明」。
 
 ---
 
@@ -311,8 +346,8 @@ docker exec onlyoffice cat /etc/onlyoffice/documentserver/local.json | grep -A2 
 
 ### 4. 数据库只读
 ```bash
-chown -R www-data:www-data /path/to/server/shipping-helper/backend/data
-chmod -R u+w /path/to/server/shipping-helper/backend/data
+chown -R www-data:www-data /path/to/server/shipping-helper/data
+chmod -R u+w /path/to/server/shipping-helper/data
 ```
 
 ### 5. 前端 500 错误

@@ -51,49 +51,38 @@ Key skills to use:
 | Decision | Choice |
 |----------|--------|
 | Document Editor | **OnlyOffice only** (Excel + Word unified, no Luckysheet) |
-| Calculation Logic | Single source: `backend/app/services/calculation_service.py` (Phase 1 & 2 shared) |
+| Calculation Logic | Packaging formulas have a single source: `backend/app/services/packaging_service.py`. `calculation_service.py` is a thin wrapper / container-judgment helper only — not a second formula set. |
 | Database | SQLite WAL mode, file-based storage |
 | File Storage | Database BLOBs, not shared folder |
 | Template Principle | Templates are read-only; instances are copied from templates |
 | Pessimistic Locking | Order-level locking (`order_status`, `locked_by`, `locked_at`) |
-| OnlyOffice Callback | Backend MUST expose `POST /api/v1/onlyoffice/callback` to receive file streams from Document Server. On save success: write to DB + release lock. |
+| OnlyOffice Callback | Preview + save-as local via browser; **no edit write-back**. `POST /api/v1/onlyoffice/callback` is kept for Document Server compatibility only. |
 
 ---
 
-## OnlyOffice Callback Interface
+## OnlyOffice Usage
 
-When the user clicks Save in OnlyOffice, the Document Server POSTs the file to the callback URL. The backend endpoint must:
+**Actual shape**: generate document → preview / light edit in frontend → user saves as a local file in the browser. **No edit write-back into the system.**
 
-```python
-# POST /api/v1/onlyoffice/callback
-# Request: multipart/form-data with file stream
-# Response: JSON status
-
-@app.post("/api/v1/onlyoffice/callback")
-async def onlyoffice_callback(order_id: int, user: str):
-    # 1. Receive file stream from OnlyOffice Document Server
-    # 2. Write file blob to shipment_docs table
-    # 3. Increment version number
-    # 4. Release pessimistic lock (order_status = "saved", locked_by = null)
-    # 5. Return success JSON
-```
-
-**Callback behavior**:
-- Document Server sends file via HTTP POST with `document` field (file stream)
-- Backend receives, stores in DB, releases lock
-- Never write directly to shared folders (avoids file handle issues on Windows)
+- `DocumentEditor.vue` sets `forcesave: false`
+- `POST /api/v1/onlyoffice/callback` remains for Document Server compatibility; business persistence does **not** depend on it (no DB write on the save path)
+- Do not describe or implement it as "must save back to DB"
 
 ---
 
 ## Key Business Rules
 
 ### Packaging Calculation (复用)
-All weight/volume calculations must use `calculation_service.py`:
-- `calculate_drum_count(quantity_kg, net_kg_per_drum)` - drums = ⌈order_qty / net_per_drum⌉
-- `calculate_pallet_count(drums, capacity_per_pallet)` - pallets = ⌈drums / capacity⌉
-- `calculate_volume(drums, cbm_per_drum, pallets, cbm_per_pallet)`
-- `calculate_gross_weight(drums, gross_per_drum, pallets, pallet_weight)`
-- `judge_20gp(total_volume_cbm, total_weight_kg)` - fits if ≤28CBM AND ≤21000kg
+Single formula source: `backend/app/services/packaging_service.py` (commit 55bf9ee + 2e57f5c):
+
+- `packages = ceil(qty/fill)`
+- `pallets = ceil(packages/cap)` (includes remainder pallet)
+- `gross = net + packages*tare + pallets*pallet_weight`
+- `volume = packages*drum_cbm + pallets*pallet_cbm`
+- Pallet specs come from DB (migration 021): 1.0*1.0m = 16kg / 0.15 CBM, 1.1*1.1m = 19kg / 0.1815 CBM
+- `packages.py` calls `packaging_service`; no 0.15/27 magic numbers
+- Container summary compares `total_cbm/total_weight_kg` against limits (20GP≤28/21000, 40GP≤56/27000)
+- `calculation_service.py` is a thin wrapper / container-judgment helper, **not** a second formula source
 
 ### Data Priority (报关品名/H.S.Code)
 - 报关品名: order > PI > knowledge base
@@ -122,7 +111,7 @@ shipping_helper/
 │       │   │   ├── msds.py          # MSDS list/content/reindex
 │       │   │   ├── msds_generator.py # MSDS generator API
 │       │   │   ├── msds_ledger.py   # MSDS ledger CRUD + batch generate
-│       │   │   ├── data_center.py   # Data center (MSDS search/tree/file)
+│       │   │   ├── data_center.py   # Data center (MSDS search/tree/file; no corrected-upload)
 │       │   │   ├── transport.py     # Transport report upload
 │       │   │   ├── transport_reports.py # Transport report search/link
 │       │   │   ├── export_codes.py  # HS code lookup API
@@ -139,8 +128,8 @@ shipping_helper/
 │       │   ├── auth_service.py    # JWT auth service
 │       │   ├── order_service.py   # Order service layer
 │       │   ├── pi_service.py      # PI service layer
-│       │   ├── packaging_service.py # Packaging calculation (drums, pallets, 20GP)
-│       │   ├── calculation_service.py # Core calculation logic (Phase 1 & 2 shared)
+│       │   ├── packaging_service.py # Packaging formulas (single source: drums, pallets, containers)
+│       │   ├── calculation_service.py # Thin wrapper / container judgment helper
 │       │   ├── merge_service.py   # Order-PI merge + comparison
 │       │   ├── save_service.py    # Transactional save for order+PI+packaging
 │       │   ├── ledger_service.py  # Order ledger service
@@ -310,13 +299,30 @@ The `参考/` folder contains the Python implementation that should inform imple
 
 3. **Internal Code Location**: `internal_code` is stored ONLY in `order_items` (product-level). The `orders` table does NOT contain `internal_code`.
 
-3. **Calculation Consistency**: Weight/volume/20GP logic exists ONLY in `calculation_service.py`. Phase 1 and Phase 2 call the same service.
+4. **Calculation Consistency**: Packaging weight/volume/container formulas exist ONLY in `packaging_service.py`. Phase 1 and Phase 2 call the same service. `calculation_service.py` is a thin wrapper only.
 
-4. **Locking Mechanism**: When user opens a document for editing, lock immediately (`order_status = "editing"`, `locked_by`, `locked_at`). Release on save/close.
+5. **Locking Mechanism**: When user opens a document for editing, lock immediately (`order_status = "editing"`, `locked_by`, `locked_at`). Release on save/close.
 
-5. **Template Files**: Never modify template files directly. Always copy to instance, then fill data.
+6. **Template Files**: Never modify template files directly. Always copy to instance, then fill data.
 
-6. **Mock Data**: Use simulated data for development. User will provide real samples later.
+7. **Mock Data**: Use simulated data for development. User will provide real samples later.
+
+8. **Data correction**: Data center "upload corrected MSDS" is **removed**. Business-side MSDS/formula corrections go through the formula ledger (`msds-ledger`, 配方台账).
+
+9. **Phase 2 race / IDs**: `loadSeq` guards against load races; order ID and ledger ID are separate (`selectedOrderId` / `selectedLedgerId`); transport-report link API uses a JSON body.
+
+---
+
+## Accepted Risks (intentional)
+
+| Item | Note |
+|------|------|
+| Deployment | Intranet use by the shipping department; not exposed to the public internet |
+| Auth | Auth middleware currently allows most business APIs (intentional) |
+| Password | Shared weak password (intentional) |
+| OnlyOffice | Preview + save-as local only; no write-back; callback is not a business dependency |
+| order_parser | 2 failing tests around multi-line folding (known) |
+| 40GP limits | Row-level 67 CBM vs summary 56 CBM discrepancy (known) |
 
 ---
 
@@ -388,12 +394,12 @@ docker run -d -p 8080:80 onlyoffice/documentserver
 | DocumentService | ✅ done | Template copying, BLOB storage, version management |
 | ShipmentDoc model | ✅ done | Document version storage with content_hash idempotency |
 | ExportCodesService | ✅ done | HS code lookup service |
-| OnlyOffice callback | ✅ done | `POST /api/v1/onlyoffice/callback` with pessimistic lock release |
+| OnlyOffice callback | ✅ done | `POST /api/v1/onlyoffice/callback` kept for Document Server compatibility; preview + save-as local, no write-back |
 | Phase 2 frontend page | ✅ done | Phase2Workflow + ReferencePanel + DocumentEditor components |
 | PI upload (.pdf) | ✅ done | PiUploadDragger supports .pdf via OCR |
 | consignee/destination | ✅ done | PI Header fields extracted from PDF |
 | Customs declaration | ✅ done | 5-sheet workbook generation |
-| MSDS ledger | ✅ done | MSDS ledger CRUD + batch generation |
+| MSDS ledger (配方台账) | ✅ done | MSDS/formula ledger CRUD + batch generation (replaces corrected-upload flow) |
 | Audit log | ✅ done | Operation audit records and stats |
 
-*Last updated: 2026/08/01*
+*Last updated: 2026/09/25*

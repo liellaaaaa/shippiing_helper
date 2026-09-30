@@ -52,49 +52,38 @@ ShippingHelper 是一款外贸船务效率工具。
 | 决策 | 选择 |
 |------|------|
 | 文档编辑器 | **OnlyOffice 独占**（Excel + Word 统一，不用 Luckysheet） |
-| 计算逻辑 | 单一来源：`backend/app/services/calculation_service.py`（Phase 1 & 2 共用） |
+| 计算逻辑 | 包装计算单一公式源：`backend/app/services/packaging_service.py`；`calculation_service.py` 仅薄封装/柜型判定辅助 |
 | 数据库 | SQLite WAL 模式，文件存储 |
 | 文件存储 | 数据库 BLOB，不用共享文件夹 |
 | 模板原则 | 模板只读，实例从模板复制 |
 | 悲观锁 | 订单级锁（`order_status`, `locked_by`, `locked_at`） |
-| OnlyOffice 回调 | 后端必须暴露 `POST /api/v1/onlyoffice/callback` 接收 Document Server 文件流，保存成功则写入 DB 并释放锁 |
+| OnlyOffice 回调 | 预览 + 另存本地，不回写；callback 接口仅兼容保留 |
 
 ---
 
-## OnlyOffice 回调接口
+## OnlyOffice 使用形态
 
-用户点击 OnlyOffice 保存时，Document Server 会 POST 文件到回调 URL，后端必须：
+**真实形态**：生成单据 → 前端预览/微调 → 浏览器另存为本地。**不做编辑回写系统**。
 
-```python
-# POST /api/v1/onlyoffice/callback
-# 请求：multipart/form-data 文件流
-# 响应：JSON status
-
-@app.post("/api/v1/onlyoffice/callback")
-async def onlyoffice_callback(doc_key: str, user: str, file: UploadFile = File(default=None)):
-    # 1. 接收 Document Server 发送的文件流
-    # 2. 检查 content_hash 避免重复保存
-    # 3. 写入 shipment_docs 表
-    # 4. 版本号递增
-    # 5. 返回 {"error": 0}
-```
-
-**回调行为**：
-- Document Server 通过 HTTP POST 发送 `document` 字段（文件流）
-- 后端接收后存 DB，释放锁
-- 绝不直接写共享文件夹（避免 Windows 文件句柄问题）
+- `DocumentEditor.vue` 已设 `forcesave: false`
+- `POST /api/v1/onlyoffice/callback` 仍保留以兼容 Document Server，但业务上**不依赖它持久化**（不写 DB、不作为保存链路）
+- 不要写成或实现成「必须保存回写 DB」
 
 ---
 
 ## 核心业务规则
 
 ### 包装计算（复用）
-所有重量/体积计算必须使用 `calculation_service.py`：
-- `calculate_drums(quantity_kg, net_kg_per_drum)` - drums = ⌈order_qty / net_per_drum⌉
-- `calculate_pallets(drums, capacity_per_pallet)` - pallets = ⌈drums / capacity⌉
-- `calculate_volume(drums, cbm_per_drum, pallets, cbm_per_pallet)`
-- `calculate_gross_weight(drums, gross_per_drum, pallets, pallet_weight)`
-- `judge_container(total_volume_cbm, total_weight_kg)` - 20GP ≤28CBM 且 ≤21000kg
+唯一公式源：`backend/app/services/packaging_service.py`（commit 55bf9ee + 2e57f5c）：
+
+- `packages = ceil(qty/fill)`
+- `pallets = ceil(packages/cap)`（含尾板）
+- `gross = net + packages*tare + pallets*托重`
+- `volume = packages*桶CBM + pallets*托CBM`
+- 托盘规格以 DB 为准（migration 021）：1.0*1.0m = 16kg / 0.15 CBM，1.1*1.1m = 19kg / 0.1815 CBM
+- `packages.py` 已统一调用 `packaging_service`，禁止 0.15/27 魔数
+- 货柜汇总按 `total_cbm/total_weight_kg` 比柜限（20GP≤28/21000，40GP≤56/27000）
+- `calculation_service.py` 仅作薄封装/柜型判定辅助，**不是第二套公式**
 
 ### 数据优先级（报关品名/H.S.Code）
 - 报关品名：订单 > PI > 知识库
@@ -140,8 +129,8 @@ shipping_helper/
 │       │   ├── auth_service.py    # JWT 认证服务
 │       │   ├── order_service.py   # 订单服务层
 │       │   ├── pi_service.py      # PI 服务层
-│       │   ├── packaging_service.py # 包装计算（桶数、托盘、20GP）
-│       │   ├── calculation_service.py # 核心计算逻辑（Phase 1 & 2 共用）
+│       │   ├── packaging_service.py # 包装计算唯一公式源
+│       │   ├── calculation_service.py # 薄封装/柜型判定辅助
 │       │   ├── merge_service.py   # 订单-PI 合并 + 比对
 │       │   ├── save_service.py    # 订单+PI+包装的事务性保存
 │       │   ├── ledger_service.py  # 订单台账服务
@@ -329,7 +318,7 @@ shipping_helper/
 
 ### OnlyOffice
 - `POST /api/v1/onlyoffice/jwt` — 创建 JWT
-- `POST /api/v1/onlyoffice/callback` — 文档保存回调
+- `POST /api/v1/onlyoffice/callback` — Document Server 兼容回调（不回写，业务不依赖）
 - `GET /api/v1/onlyoffice/download/{key}` — 下载文档
 
 ### 数据中心
@@ -411,9 +400,9 @@ shipping_helper/
 3. ~~单证生成（Booking, MSDS via OnlyOffice）~~ ✅
 4. ~~数据展示（左侧看板、右侧编辑器）~~ ✅
 5. ~~数据中心（MSDS 搜索、运输鉴定报告）~~ ✅
-6. ~~OnlyOffice 回调（含版本管理）~~ ✅
+6. ~~OnlyOffice 预览/另存（callback 兼容保留）~~ ✅
 7. ~~报关资料生成（5 sheet 工作簿）~~ ✅
-8. ~~MSDS 台账 + 批量生成~~ ✅
+8. ~~MSDS 台账（配方台账）+ 批量生成~~ ✅
 9. ~~审计日志~~ ✅
 
 > Phase 3（报关）已并入 Phase 2，无独立 Phase3Workflow 页面。
@@ -428,13 +417,17 @@ shipping_helper/
 
 3. **Internal Code 位置**：`internal_code` 仅存储在 `order_items`（产品级），`orders` 表不包含此字段。
 
-4. **计算一致性**：重量/体积/20GP 逻辑仅存在于 `calculation_service.py`，Phase 1 和 Phase 2 调用同一服务。
+4. **计算一致性**：包装重量/体积/柜型公式仅存在于 `packaging_service.py`，Phase 1 和 Phase 2 共用；`calculation_service.py` 只做薄封装。
 
 5. **锁机制**：用户打开文档编辑时立即加锁（`order_status = "editing"`, `locked_by`, `locked_at`），保存/关闭时释放。
 
 6. **模板文件**：绝不直接修改模板文件，总是复制到实例后再填充数据。
 
 7. **Phase 1 落库**：数据通过 `POST /api/v1/dashboard/records` 写入 `order_pi_records` 表，不是直接写入 orders/order_items 表。
+
+8. **数据修正**：已删除数据中心「修正上传 MSDS」；业务侧 MSDS/配方修正改走配方台账（`msds-ledger`）。
+
+9. **Phase 2 竞态与 ID**：`loadSeq` 防竞态；订单 ID 与台账 ID 分离（`selectedOrderId` / `selectedLedgerId`）；运输报告关联 API 用 JSON body。
 
 ---
 
@@ -480,8 +473,8 @@ docker run -d -p 8080:80 onlyoffice/documentserver
 - `backend/app/core/pi_parser.py` — 列映射、智能降级、置信度
 - `backend/app/services/order_service.py` — 服务层（事务性保存）
 - `backend/app/services/pi_service.py` — PI 服务层 + pi_data upsert
-- `backend/app/services/packaging_service.py` — 包装计算（桶数、托盘、体积、20GP）
-- `backend/app/services/calculation_service.py` — 核心计算逻辑（Phase 1 & 2 共用）
+- `backend/app/services/packaging_service.py` — 包装计算唯一公式源
+- `backend/app/services/calculation_service.py` — 薄封装/柜型判定辅助
 - `backend/app/services/merge_service.py` — 订单-PI 合并 + 比对
 - `backend/app/services/save_service.py` — 订单+PI+包装的事务性保存
 - `backend/app/services/document_service.py` — 文档模板 + BLOB 存储
@@ -565,12 +558,37 @@ docker run -d -p 8080:80 onlyoffice/documentserver
 | DocumentService | ✅ 完成 | 模板复制、BLOB 存储、版本管理 |
 | ShipmentDoc 模型 | ✅ 完成 | 文档版本存储（含 content_hash 去重） |
 | ExportCodesService | ✅ 完成 | HS code 查询服务 |
-| OnlyOffice 回调 | ✅ 完成 | `POST /api/v1/onlyoffice/callback` 含 content_hash 去重 |
+| OnlyOffice 预览/另存 | ✅ 完成 | 预览后浏览器另存本地，不回写；`POST /api/v1/onlyoffice/callback` 仅兼容保留 |
 | Phase 2 前端页面 | ✅ 完成 | Phase2Workflow + ReferencePanel + DocumentEditor 组件 |
 | PI 上传（.pdf） | ✅ 完成 | PiUploadDragger 支持 .pdf OCR |
 | 收货人/目的港 | ✅ 完成 | PI Header 字段从 PDF 提取 |
-| 数据中心（MSDS） | ✅ 完成 | 搜索、预览、目录树 |
+| 数据中心（MSDS） | ✅ 完成 | 搜索、预览、目录树（无修正上传） |
 | 运输鉴定报告 | ✅ 完成 | 在 references/ 中搜索 + 预览 |
 | 报关资料 | ✅ 完成 | `GET /api/v1/documents/customs`（5 sheet 工作簿） |
+| 配方台账（msds-ledger） | ✅ 完成 | MSDS/配方台账 CRUD + 批量生成；业务修正改走此处 |
 
-*最后更新：2026/06/22*
+---
+
+## 2026-09-25 审计修复摘要
+
+| 批次 | 内容 |
+|------|------|
+| 包装公式 | 统一至 `packaging_service`（commit 55bf9ee + 2e57f5c）：含尾板、托盘规格走 DB、去掉 0.15/27 魔数、货柜汇总修正 |
+| 清关/合并/落库 | 金额大写支持 million/billion 与美分；多品缺失数量/单价留空不回退 PI 单值 |
+| 数据中心 | 防路径穿越；删除「修正上传 MSDS」（改走配方台账） |
+| Phase1/2 & 解析 | XSS、`loadSeq` 竞态、订单/台账 ID 分离、运输报告关联 JSON body、解析边界 |
+
+---
+
+## 已接受风险
+
+| 项 | 说明 |
+|----|------|
+| 部署 | 内网船务部使用，不暴露公网 |
+| 鉴权 | 中间件对多数业务 API 放行（有意为之） |
+| 口令 | 共享弱口令（有意为之） |
+| OnlyOffice | 只预览+另存本地，不回写；callback 非业务依赖 |
+| order_parser | 多行折叠 2 个测试失败（已知） |
+| 40GP 口径 | 行级 67 CBM vs 汇总 56 CBM 口径差（已知） |
+
+*最后更新：2026/09/25*

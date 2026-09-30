@@ -49,8 +49,8 @@ shipping_helper/
 │       │   ├── auth_service.py           # JWT 认证服务
 │       │   ├── order_service.py          # 订单服务层
 │       │   ├── pi_service.py              # PI 服务层
-│       │   ├── packaging_service.py      # 包装计算
-│       │   ├── calculation_service.py     # 核心计算逻辑（Phase 1 & 2 共用）
+│       │   ├── packaging_service.py      # 包装计算唯一公式源
+│       │   ├── calculation_service.py     # 薄封装/柜型判定辅助（非第二套公式）
 │       │   ├── merge_service.py           # 订单-PI 合并 + 比对
 │       │   ├── save_service.py           # 订单+PI+包装的事务性保存
 │       │   ├── ledger_service.py          # 台账服务（订单台账）
@@ -191,28 +191,30 @@ docker run -d -p 8080:80 onlyoffice/documentserver
 | 订单粘贴解析 | ✅ | Tab/换行分隔、一单多品、知识库匹配；兼容企业微信 / Excel 粘贴（单元格换行截断合并、空列保留） |
 | PI 文件提取 | ✅ | .xlsx/.xls/.pdf(OCR)、列映射、置信度 |
 | 数据关联 | ✅ | internal_code 关联、订单-PI 合并 |
-| 包装计算 | ✅ | 13种桶型、2种托盘、20GP判断、多行计算器 |
+| 包装计算 | ✅ | 13种桶型、2种托盘、柜型判断、多行计算器；公式唯一来源 `packaging_service.py` |
 | 数据看板 | ✅ | 只读预览 + 台账详情 |
 | 余数分配 | ✅ | 每行余数独立选择板规格 |
 | 订单台账 | ✅ | 落库记录查询、编辑、删除、判重 |
+
+> 包装公式唯一来源 `backend/app/services/packaging_service.py`：`packages = ceil(qty/fill)`，`pallets = ceil(packages/cap)`（含尾板），`gross = net + packages*tare + pallets*托重`，`volume = packages*桶CBM + pallets*托CBM`。托盘规格以 DB 为准（migration 021）：1.0*1.0m = 16kg / 0.15 CBM，1.1*1.1m = 19kg / 0.1815 CBM。货柜汇总按 total_cbm/total_weight_kg 比柜限（20GP≤28/21000，40GP≤56/27000）。
 
 ## Phase 2 功能模块
 
 | 模块 | 状态 | 说明 |
 |------|------|------|
 | JWT 登录认证 | ✅ | AuthService、登录页面、路由守卫 |
-| Phase 2 API 路由 | ✅ | 文档生成、OnlyOffice 回调 |
+| Phase 2 API 路由 | ✅ | 文档生成、OnlyOffice 回调（兼容保留） |
 | OnlyOfficeService | ✅ | Booking/MSDS 生成、标记填充 |
 | DocumentService | ✅ | 模板复制、BLOB 存储、版本管理 |
 | ShipmentDoc 模型 | ✅ | 文档版本存储、content_hash 幂等 |
-| OnlyOffice 回调 | ✅ | content_hash 去重、悲观锁释放 |
+| OnlyOffice 预览/微调 | ✅ | 预览后浏览器另存为本地，不回写系统；callback 接口仅兼容 Document Server |
 | Phase 2 前端页面 | ✅ | Phase2Workflow + ReferencePanel + DocumentEditor |
 | PI 上传 (.pdf) | ✅ | 支持 PDF via OCR |
 | consignee/destination | ✅ | PI Header 字段从 PDF 提取 |
-| 数据中心（MSDS） | ✅ | 搜索、预览、目录树 |
+| 数据中心（MSDS） | ✅ | 搜索、预览、目录树（已移除「修正上传 MSDS」） |
 | 运输鉴定报告 | ✅ | 在 references/ 中搜索 + 预览 |
-| 报关资料 | ✅ | 5 sheet 工作簿生成（发票 / 箱单按产品数动态扩展）；支持宏昊 / 民浩双公司模板切换（公司配置 + 占位符 + 印章，按发货人自动推导） |
-| MSDS 台账 | ✅ | MSDS 台账管理 + 批量生成（PDF 走 OnlyOffice 转换服务，并发转换、失败自动回退 docx）；列表分页、外观 / 组分下拉联动 CAS |
+| 报关资料 | ✅ | 5 sheet 工作簿生成（发票 / 箱单按产品数动态扩展）；支持宏昊 / 民浩双公司模板切换（公司配置 + 占位符 + 印章，按发货人自动推导）；金额大写支持 million/billion 与美分 |
+| MSDS 台账（配方台账） | ✅ | 配方台账管理 + 批量生成（PDF 走 OnlyOffice 转换服务，并发转换、失败自动回退 docx）；列表分页、外观 / 组分下拉联动 CAS。业务侧 MSDS 修正改走配方台账 |
 | 审计日志 | ✅ | 覆盖 30 个后端写操作的审计记录与统计（统一装饰器 + 中间件），查询接口需鉴权 |
 | 发货人预设 | ✅ | 宏昊（HONGHAO）/ 民浩（MINHAO）抬头预设与地址映射，按抬头自动匹配选中 |
 
@@ -229,6 +231,8 @@ docker run -d -p 8080:80 onlyoffice/documentserver
 | 8/27 | MSDS 批量生成 PDF 改用 OnlyOffice Conversion API 替代 Windows COM（并发转换、失败回退 docx）；报关资料默认币制 CNY → USD；MSDS 台账分页 + 选中置顶 |
 | 8/31 | 审计日志扩展至 30 个写操作；修复订单台账编辑保存不生效；MSDS 台账表单优化（外观下拉、组分 CAS 联动、成对校验），新增 `/reference/appearances`、`/reference/ingredients` |
 | 9/4 | 修复企业微信单元格内换行导致销售订单表整表解析失败（不完整片段行合并 + 行首空白补空首列） |
+| 9/24 | 包装公式统一至 `packaging_service`（含尾板；托盘规格以 DB 为准，migration 021）；去掉 0.15/27 魔数 |
+| 9/25 | 审计修复四批次：清关金额大写 million/billion + 美分、多品缺失数量/单价留空不回退 PI；数据中心防路径穿越并移除修正上传；packages API 统一走 packaging_service 并修正货柜汇总；XSS / loadSeq 竞态 / 订单与台账 ID 分离 / 运输报告关联 JSON body |
 
 ## 核心文档
 
@@ -249,16 +253,27 @@ docker run -d -p 8080:80 onlyoffice/documentserver
 | 决策 | 选择 |
 |------|------|
 | 文档编辑器 | OnlyOffice（全栈统一，不使用 Luckysheet） |
-| 计算逻辑 | `backend/app/services/calculation_service.py`（Phase 1 & 2 共用） |
+| 计算逻辑 | 包装计算唯一公式源 `backend/app/services/packaging_service.py`；`calculation_service.py` 仅薄封装/柜型判定辅助 |
 | 数据库 | SQLite WAL 模式 |
 | 文件存储 | 数据库 BLOB，不使用共享文件夹 |
 | 模板原则 | 模板只读，实例从模板复制 |
 | 悲观锁 | 订单级锁（`order_status`, `locked_by`, `locked_at`） |
-| OnlyOffice 回调 | 后端暴露 `POST /api/v1/onlyoffice/callback`，保存成功写 DB + 释放锁 |
+| OnlyOffice 回调 | 预览 + 另存本地，不回写；callback 接口仅兼容保留 |
 | PDF 解析 | OCR（pymupdf）支持 PDF 格式 PI 文件 |
 | PDF 生成 | OnlyOffice Conversion API（替代 Windows COM，跨平台，失败自动回退 docx） |
 | 审计 | 统一装饰器 + 中间件覆盖写操作，查询接口独立鉴权 |
 | 公司模板 | 报关资料按 `company_code` 切换抬头 / 税号 / 地址 / 印章（宏昊 honghao、民浩 minhao） |
+
+## 已知限制与已接受风险
+
+| 项 | 说明 |
+|----|------|
+| 部署形态 | 内网船务部使用，不暴露公网 |
+| 鉴权 | 鉴权中间件对多数业务 API 放行（有意为之，已接受风险） |
+| 口令 | 共享弱口令（有意为之，已接受风险） |
+| OnlyOffice | 生成单据 → 前端预览/微调 → 浏览器另存为本地；**不做编辑回写系统**，不依赖 callback 持久化 |
+| order_parser | 多行折叠存在 2 个测试失败（已知） |
+| 40GP 口径 | 行级判定 67 CBM（40HQ）与汇总 56 CBM（40GP）存在口径差（已知） |
 
 ## 数据模型
 
@@ -284,8 +299,8 @@ Phase 1 落库数据存储在 `order_pi_records` 表（合并记录），不直�
 | 包装计算 | `GET /api/v1/packaging/types`, `POST /api/v1/packaging/calculate` |
 | 数据看板 | `GET /api/v1/dashboard/orders`, `POST /api/v1/dashboard/records` |
 | 文档生成 | `POST /api/v1/documents/booking`, `GET /api/v1/documents/msds`, `GET /api/v1/documents/customs?company_code=honghao\|minhao` |
-| OnlyOffice | `POST /api/v1/onlyoffice/callback`, `GET /api/v1/onlyoffice/download/{key}` |
-| MSDS 台账 | `GET /api/v1/msds-ledger`, `POST /api/v1/msds-ledger/generate` |
+| OnlyOffice | `POST /api/v1/onlyoffice/callback`（兼容保留）, `GET /api/v1/onlyoffice/download/{key}` |
+| MSDS 台账（配方台账） | `GET /api/v1/msds-ledger`, `POST /api/v1/msds-ledger/generate` |
 | 数据中心 | `GET /api/v1/data-center/search`, `GET /api/v1/data-center/tree` |
 | 运输报告 | `GET /api/v1/transport-reports/search` |
 | 品名对照 | `GET /api/v1/name-mapping`, `GET /api/v1/name-mapping/lookup` |
@@ -293,7 +308,7 @@ Phase 1 落库数据存储在 `order_pi_records` 表（合并记录），不直�
 | 参考数据 | `GET /api/v1/reference/appearances`, `GET /api/v1/reference/ingredients` |
 | 健康检查 | `GET /health` |
 
-> 注意：除登录和健康检查外，所有 API 端点均需要认证（携带 `Authorization: Bearer <token>`）。
+> 鉴权现状：内网部署，鉴权中间件对多数业务 API 目前放行（已接受风险）。登录与健康检查不受影响。
 
 详见 `docs/API-ShippingHelper-v1.md`。
 

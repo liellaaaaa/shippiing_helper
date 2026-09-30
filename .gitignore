@@ -54,10 +54,10 @@ Thumbs.db
 .env.local
 .env.*.local
 
-# Reference files (large binary .doc/.pdf files)
-references/*
-backend/references/*
-!references/clearance/
+# Reference files — never commit; sync to the server directly
+# (includes clearance templates/samples; do NOT re-add with !exceptions)
+references/
+backend/references/
 
 # Reference folder (legacy PyQt5 code, not uploaded to repo)
 参考/

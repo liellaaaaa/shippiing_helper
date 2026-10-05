@@ -117,6 +117,8 @@ export interface MergePreviewItem {
   customs_name?: string
   customs_ingredients?: string
   product_appearance?: string
+  /** 合并预览时自动补全 CAS 的成分名列表（如 ["水"]） */
+  cas_filled_names?: string[]
   validation_status: string
   warnings: ValidationWarning[]
 }

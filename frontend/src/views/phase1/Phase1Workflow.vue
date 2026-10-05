@@ -102,6 +102,20 @@
 
     <!-- 合并预览区 -->
     <div v-if="mergePreviewData" class="merge-preview-panel">
+      <!-- CAS 自动补全提示 -->
+      <el-alert
+        v-if="casFilledSummary.length > 0"
+        type="info"
+        :closable="true"
+        style="margin-bottom: 12px"
+      >
+        <template #title>
+          成分 CAS 已自动补全 {{ casFilledSummary.length }} 处，请核对后入库
+        </template>
+        <div v-for="s in casFilledSummary" :key="s.internal_code + s.names" class="validation-warn">
+          <strong>{{ s.internal_code }}</strong>：{{ s.names.join('、') }}
+        </div>
+      </el-alert>
       <!-- 校验警告 -->
       <el-alert
         v-if="mergePreviewData.validation_status === 'warning'"
@@ -281,7 +295,18 @@
           <el-table-column prop="customs_ingredients" label="报关成分" min-width="150">
             <template #default="{ row }">
               <span v-if="row.isGroup" style="color:#909399">见子项</span>
-              <el-input v-else v-model="row.customs_ingredients" size="small" />
+              <template v-else>
+                <div style="display:flex;align-items:center;gap:4px">
+                  <el-input v-model="row.customs_ingredients" size="small" />
+                  <el-tooltip
+                    v-if="row.cas_filled_names?.length"
+                    :content="`已自动补全 CAS：${row.cas_filled_names.join('、')}，请核对`"
+                    placement="top"
+                  >
+                    <el-tag size="small" type="warning" effect="plain">补CAS</el-tag>
+                  </el-tooltip>
+                </div>
+              </template>
             </template>
           </el-table-column>
           <el-table-column prop="product_appearance" label="产品外观" min-width="100">
@@ -358,6 +383,7 @@ interface MergeTableRow {
   customs_name?: string
   customs_ingredients?: string
   product_appearance?: string
+  cas_filled_names?: string[]
   source_pi_contract: boolean
   source_sales_order: boolean
   source_pi_file: boolean
@@ -409,6 +435,14 @@ const canPreview = computed(() =>
 )
 
 const canSave = computed(() => mergePreviewData.value !== null)
+
+/** 合并预览中被自动补全 CAS 的行汇总 */
+const casFilledSummary = computed(() => {
+  const items = mergePreviewData.value?.items || []
+  return items
+    .filter((it: any) => it.cas_filled_names?.length)
+    .map((it: any) => ({ internal_code: it.internal_code || it.product_cn || '', names: it.cas_filled_names }))
+})
 
 // ── 树形数据同步 ──────────────────────────────────────────────────────────────
 

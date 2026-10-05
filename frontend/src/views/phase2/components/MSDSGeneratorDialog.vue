@@ -490,54 +490,63 @@ function normName(s: string): string {
   return (s || '').trim().toLowerCase().replace(/\s+/g, '')
 }
 
-// 成分匹配级别：full = 完全一致；pct = CAS 一致但含量不同；none = 不一致
-// 支持双向匹配：缺 CAS 时用成分名称匹配，缺名称时用 CAS 匹配
+// 成分匹配级别：full = 完全一致；pct = 配对一致但含量不同；none = 不一致
+// 按成分逐条配对：双方都有 CAS 时用 CAS；任一侧缺 CAS 时用名称兜底。
+// 这样「水」没写 CAS、「水 (7732-18-5)」写了 CAS 时仍视为同一配方，避免反复弹出新配方。
 function compositionMatchLevel(orderList: any[], ledgerList: any[]): 'full' | 'pct' | 'none' {
-  // 构建订单侧的映射
-  const orderCasMap: Record<string, string> = {}
-  const orderNameMap: Record<string, string> = {}
-  for (const c of orderList || []) {
-    const cas = normCas(c.cas || '').trim()
-    const name = normName(c.component_cn || '')
-    if (cas) orderCasMap[cas] = normPct(c.percentage)
-    else if (name) orderNameMap[name] = normPct(c.percentage)
-  }
-  // 构建台账侧的映射
-  const ledgerCasMap: Record<string, string> = {}
-  const ledgerNameMap: Record<string, string> = {}
-  for (const c of ledgerList || []) {
-    const cas = normCas(c.cas || '').trim()
-    const name = normName(c.component_cn || '')
-    if (cas) ledgerCasMap[cas] = normPct(c.percentage)
-    else if (name) ledgerNameMap[name] = normPct(c.percentage)
-  }
-  const oCasKeys = Object.keys(orderCasMap).sort()
-  const lCasKeys = Object.keys(ledgerCasMap).sort()
-  const oNameKeys = Object.keys(orderNameMap).sort()
-  const lNameKeys = Object.keys(ledgerNameMap).sort()
+  const oList = orderList || []
+  const lList = ledgerList || []
+  if (oList.length === 0 || lList.length === 0) return 'none'
+  if (oList.length !== lList.length) return 'none'
 
-  // 策略1：订单有 CAS 号时，优先用 CAS 号匹配
-  if (oCasKeys.length > 0) {
-    if (oCasKeys.join(',') !== lCasKeys.join(',')) return 'none'
-    for (const cas of oCasKeys) {
-      const op = orderCasMap[cas]
-      const lp = ledgerCasMap[cas]
-      if (op && lp && op !== lp) return 'pct'
-    }
-    return 'full'
+  const used = new Set<number>()
+  let pctDiff = false
+
+  const takePct = (oc: any, lc: any) => {
+    const op = normPct(oc.percentage)
+    const lp = normPct(lc.percentage)
+    if (op && lp && op !== lp) pctDiff = true
   }
-  // 策略2：订单没有 CAS 号时，用成分名称匹配
-  if (oNameKeys.length > 0) {
-    if (oNameKeys.join(',') !== lNameKeys.join(',')) return 'none'
-    for (const name of oNameKeys) {
-      const op = orderNameMap[name]
-      const lp = ledgerNameMap[name]
-      if (op && lp && op !== lp) return 'pct'
+
+  for (const oc of oList) {
+    const oCas = normCas(oc.cas || '').trim()
+    const oName = normName(oc.component_cn || '')
+    if (!oCas && !oName) return 'none'
+
+    // 优先 CAS 配对
+    let matched = false
+    if (oCas) {
+      for (let i = 0; i < lList.length; i++) {
+        if (used.has(i)) continue
+        const lCas = normCas(lList[i].cas || '').trim()
+        if (lCas && oCas === lCas) {
+          used.add(i)
+          takePct(oc, lList[i])
+          matched = true
+          break
+        }
+      }
     }
-    return 'full'
+    // 名称兜底（双方都有 CAS 且不一致时不允许配对）
+    if (!matched && oName) {
+      for (let i = 0; i < lList.length; i++) {
+        if (used.has(i)) continue
+        const lc = lList[i]
+        const lCas = normCas(lc.cas || '').trim()
+        const lName = normName(lc.component_cn || '')
+        if (oCas && lCas && oCas !== lCas) continue
+        if (lName && oName === lName) {
+          used.add(i)
+          takePct(oc, lc)
+          matched = true
+          break
+        }
+      }
+    }
+    if (!matched) return 'none'
   }
-  // 订单既无 CAS 号也无成分名称
-  return 'none'
+
+  return pctDiff ? 'pct' : 'full'
 }
 
 // 将结构化成分数据格式化为文本（用于回填 customs_ingredients）
@@ -555,6 +564,47 @@ function formatCompositionToText(composition: any[]): string {
 // 检查订单成分是否缺少 CAS 号（需要从台账回填）
 function needsCasBackfill(orderComp: any[]): boolean {
   return orderComp.some(c => !c.cas)
+}
+
+// 从已加载台账 / 成分库为缺 CAS 的组分补号（如 水 → 7732-18-5）
+async function autoFillMissingCas(formulas: any[], ledgerItems: MsdsLedgerItem[]) {
+  const missing = new Set<string>()
+  for (const f of formulas) {
+    for (const c of f.composition || []) {
+      if (!c.cas?.trim() && c.component_cn?.trim()) missing.add(c.component_cn.trim())
+    }
+  }
+  if (missing.size === 0) return
+
+  const resolve = (name: string): string => {
+    const target = normName(name)
+    for (const item of ledgerItems) {
+      for (const c of item.composition || []) {
+        if (c.cas && normName(c.component_cn) === target) return c.cas
+      }
+    }
+    return ''
+  }
+
+  await Promise.all([...missing].map(async (name) => {
+    let cas = resolve(name)
+    if (!cas) {
+      try {
+        const res = await msdsLedgerApi.searchIngredients(name)
+        const results = res.data.results || []
+        const hit = results.find((r: any) => r.name === name) || results.find((r: any) => normName(r.name) === normName(name)) || results[0]
+        cas = hit?.cas || ''
+      } catch {
+        cas = ''
+      }
+    }
+    if (!cas) return
+    for (const f of formulas) {
+      for (const c of f.composition || []) {
+        if (!c.cas?.trim() && normName(c.component_cn) === normName(name)) c.cas = cas
+      }
+    }
+  }))
 }
 
 // 校验新配方必填项，返回是否全部通过；失败时填充 importErrors 供界面标红
@@ -589,9 +639,10 @@ watch(() => props.modelValue, (v) => {
       const names = [...new Set(props.orderItems.map((it: any) => it.customs_name || it.order?.customs_name || it.pi?.customs_name).filter(Boolean))]
       orderItemsNames.value = names
       orderItemsWithIngredients.value = props.orderItems.map((it: any) => ({
+        internal_code: it.internal_code || '',
         customs_name: it.customs_name || it.order?.customs_name || '',
         customs_ingredients: it.customs_ingredients || '',
-        appearance: it.appearance || it.order?.appearance || '',
+        appearance: it.appearance || it.product_appearance || it.order?.appearance || '',
       }))
     } else {
       orderItemsNames.value = []
@@ -682,8 +733,9 @@ async function loadLedger() {
           })
         }
       }
-      
+
       if (newFormulas.value.length > 0) {
+        await autoFillMissingCas(newFormulas.value, items)
         showEditList.value = true
       }
     }
@@ -924,6 +976,20 @@ async function importAllFormulas() {
         composition: composition,
       })
       okCount += 1
+      // 导入后把含 CAS 的完整成分回写到订单项，避免下次比对又缺号弹新配方
+      const fullText = formatCompositionToText(composition)
+      if (fullText) {
+        for (const oi of orderItemsWithIngredients.value) {
+          const sameItem = (formula.internal_code && oi.internal_code === formula.internal_code)
+            || (oi.customs_ingredients && oi.customs_ingredients === formula.customs_ingredients)
+          if (sameItem) {
+            oi.customs_ingredients = fullText
+            if (oi.internal_code) {
+              emit('ingredientsUpdated', { internalCode: oi.internal_code, customsIngredients: fullText })
+            }
+          }
+        }
+      }
     } catch (e) {
       failCount += 1
       console.error('Failed to import formula:', e)
@@ -956,6 +1022,8 @@ function parseIngredients(ingredients: string): any[] {
     .replace(/\s+/g, ' ')       // collapse whitespace
     .trim()
 
+  // 先把括号里的 CAS 号抽出来，避免被当作备注删掉（如 水（7732-18-5））
+  text = text.replace(/[（(]\s*(\d{2,7}-\d{1,2}-\d{1,3})\s*[）)]/g, ' $1 ')
   // Remove parenthetical notes like （货源地：江西抚州）
   text = text.replace(/[（(][^）)]*[）)]/g, '').trim()
 

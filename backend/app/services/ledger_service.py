@@ -21,6 +21,7 @@ from app.schemas.order import ParsedOrderSchema, OrderItemSchema, SkippedRowSche
 from app.schemas.pi_contract import PiContractUploadResponse
 from app.core.order_parser import parse_pasted_data, parse_pi_contract_table
 from app.core.pi_parser import parse_pi_bytes
+from app.core.cas_filler import fill_missing_cas, load_name_to_cas
 from app.services.customs_name_service import CustomsNameService
 from typing import Optional
 
@@ -247,6 +248,17 @@ class LedgerService:
                         item.customs_name = json_data.get("customs_name")
                     if not item.customs_ingredients:
                         item.customs_ingredients = json_data.get("components")
+
+        # 报关成分缺 CAS 自动补全（如「水 10%」→「水 7732-18-5 10%」），源头补全避免下游反复误判新配方
+        name_to_cas = load_name_to_cas()
+        if name_to_cas:
+            for item in merged_items:
+                if not item.customs_ingredients:
+                    continue
+                new_text, filled_names = fill_missing_cas(item.customs_ingredients, name_to_cas)
+                if filled_names:
+                    item.customs_ingredients = new_text
+                    item.cas_filled_names = filled_names
 
         # 统计匹配情况
         matched_count = sum(1 for i in merged_items if i.source_pi_contract and i.source_sales_order)

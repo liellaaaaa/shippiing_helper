@@ -128,6 +128,8 @@ class MergePreviewItem(BaseModel):
     customs_name: Optional[str] = None
     customs_ingredients: Optional[str] = None
     product_appearance: Optional[str] = None
+    # 合并预览时自动补全的 CAS 对应成分名（如 ["水"]），供前端提示核对
+    cas_filled_names: list[str] = []
     # 校验状态
     validation_status: str = "ok"  # ok | warning | error
     warnings: list[ValidationWarning] = []

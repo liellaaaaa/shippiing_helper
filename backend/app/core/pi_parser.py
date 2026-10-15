@@ -1440,7 +1440,7 @@ def parse_proforma_invoice_from_text(text: str, filename: str = "") -> PiContrac
 
 
 # ──────────────────────────────────────────────────────────────────────
-# DeepSeek AI 解析
+# AI 解析（DeepSeek → 小米 MiMo 降级）
 # ──────────────────────────────────────────────────────────────────────
 
 def _format_rows_for_ai(rows: list[list[str]]) -> str:
@@ -1517,21 +1517,122 @@ def _build_response_from_ai(ai_data: dict) -> PiContractUploadResponse:
     )
 
 
-def _call_deepseek_api(rows: list[list[str]], filename: str) -> PiContractUploadResponse | None:
+def _call_ai_provider(
+    *,
+    provider: str,
+    api_key: str,
+    base_url: str,
+    model: str,
+    rows: list[list[str]],
+    filename: str,
+    use_json_mode: bool = True,
+    extra_body: dict | None = None,
+    timeout: float = 30,
+) -> PiContractUploadResponse | None:
     """
-    调用DeepSeek-V4-Flash API解析PI文件
-    返回解析结果或None（失败时）
+    调用 OpenAI 兼容 API 解析 PI 文件。
+    返回解析结果或 None（未配置 / 调用失败时）。
     """
-    from app.core.config import DEEPSEEK_API_KEY
-
-    if not DEEPSEEK_API_KEY:
-        print("[AI Parse] DEEPSEEK_API_KEY未配置，跳过AI解析")
+    if not api_key:
+        print(f"[AI Parse] {provider} API Key未配置，跳过")
         return None
 
-    # 格式化Excel内容
     content = _format_rows_for_ai(rows)
+    system_prompt = _PI_AI_SYSTEM_PROMPT
 
-    system_prompt = """你是一个PI(Proforma Invoice)合同解析专家。请从Excel内容中提取以下字段，返回JSON格式。
+    try:
+        from openai import OpenAI
+
+        client = OpenAI(
+            api_key=api_key,
+            base_url=base_url,
+            timeout=timeout,
+        )
+
+        create_kwargs = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"文件名: {filename}\n\nExcel内容:\n{content}"}
+            ],
+            "max_tokens": 4096,
+        }
+        if use_json_mode:
+            create_kwargs["response_format"] = {"type": "json_object"}
+        if extra_body:
+            create_kwargs["extra_body"] = extra_body
+
+        try:
+            response = client.chat.completions.create(**create_kwargs)
+        except Exception as first_err:
+            # 部分兼容端点不支持 response_format / thinking 扩展，去掉后重试一次
+            if use_json_mode or extra_body:
+                print(f"[AI Parse] {provider} 首次调用失败({first_err})，去掉扩展参数重试")
+                create_kwargs.pop("response_format", None)
+                create_kwargs.pop("extra_body", None)
+                response = client.chat.completions.create(**create_kwargs)
+            else:
+                raise
+
+        ai_content = response.choices[0].message.content
+
+        if not ai_content:
+            print(f"[AI Parse] {provider} 返回空内容")
+            return None
+
+        ai_data = json.loads(ai_content)
+        return _build_response_from_ai(ai_data)
+
+    except Exception as e:
+        print(f"[AI Parse] {provider} API调用失败: {e}")
+        return None
+
+
+def _try_ai_parse(rows: list[list[str]], filename: str) -> PiContractUploadResponse | None:
+    """AI 解析降级链：DeepSeek → 小米 MiMo。全部失败返回 None。"""
+    from app.core.config import (
+        DEEPSEEK_API_KEY,
+        DEEPSEEK_BASE_URL,
+        DEEPSEEK_MODEL,
+        MIMO_API_KEY,
+        MIMO_BASE_URL,
+        MIMO_MODEL,
+    )
+
+    providers = [
+        {
+            "provider": "DeepSeek",
+            "api_key": DEEPSEEK_API_KEY,
+            "base_url": DEEPSEEK_BASE_URL or "https://api.deepseek.com",
+            "model": DEEPSEEK_MODEL or "deepseek-v4-flash",
+            "use_json_mode": True,
+            "extra_body": {"thinking": {"type": "disabled"}},
+        },
+        {
+            "provider": "MiMo",
+            "api_key": MIMO_API_KEY,
+            "base_url": MIMO_BASE_URL or "https://token-plan-cn.xiaomimimo.com/v1",
+            "model": MIMO_MODEL or "mimo-v2.6-pro",
+            "use_json_mode": True,
+            # mimo-v2.6-pro 默认带思考，关闭以免 max_tokens 被思考耗尽导致空回复
+            "extra_body": {"thinking": {"type": "disabled"}},
+        },
+    ]
+
+    for kwargs in providers:
+        result = _call_ai_provider(rows=rows, filename=filename, **kwargs)
+        if result:
+            print(
+                f"[AI Parse] {kwargs['provider']} 成功解析PI: "
+                f"{result.pi_no}, {len(result.items)}个产品"
+            )
+            return result
+        print(f"[AI Parse] {kwargs['provider']} 未得到结果，尝试下一个模型")
+
+    return None
+
+
+_PI_AI_SYSTEM_PROMPT = """你是一个PI(Proforma Invoice)合同解析专家。请从Excel内容中提取以下字段，返回JSON格式。
 
 字段列表：
 - pi_no: PI号/合同号（必须包含HT开头的编号）
@@ -1595,41 +1696,6 @@ JSON输出格式示例：
 4. 如果有多个产品，全部放入items数组
 5. 严格按照上述JSON格式返回，不要添加额外文字"""
 
-    try:
-        from openai import OpenAI
-
-        client = OpenAI(
-            api_key=DEEPSEEK_API_KEY,
-            base_url="https://api.deepseek.com",
-            timeout=60,
-        )
-
-        response = client.chat.completions.create(
-            model="deepseek-v4-flash",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"文件名: {filename}\n\nExcel内容:\n{content}"}
-            ],
-            max_tokens=4096,
-            response_format={'type': 'json_object'},
-            extra_body={"thinking": {"type": "disabled"}}
-        )
-
-        ai_content = response.choices[0].message.content
-
-        # 处理空响应
-        if not ai_content:
-            print("[AI Parse] AI返回空内容")
-            return None
-
-        # 解析JSON
-        ai_data = json.loads(ai_content)
-        return _build_response_from_ai(ai_data)
-
-    except Exception as e:
-        print(f"[AI Parse] DeepSeek API调用失败: {e}")
-        return None
-
 
 def _auto_parse_rows(rows: list[list[str]]) -> PiContractUploadResponse:
     """
@@ -1658,28 +1724,17 @@ def parse_file_path(file_path: str) -> PiContractUploadResponse:
 
 
 def parse_pi_bytes(content: bytes, filename: str) -> PiContractUploadResponse:
-    """从内存字节解析PI文件，AI优先，Regex兜底，支持 .xlsx / .xls / .pdf"""
+    """从内存字节解析PI文件：DeepSeek → MiMo → Regex，支持 .xlsx / .xls / .pdf"""
     ext = os.path.splitext(filename)[1].lower() if filename else ""
 
-    if ext == ".xlsx":
-        rows = _read_xlsx_bytes(content)
-        # 1. 尝试AI解析（主路径）
-        ai_result = _call_deepseek_api(rows, filename)
+    if ext in (".xlsx", ".xls"):
+        rows = _read_xlsx_bytes(content) if ext == ".xlsx" else _read_xls_bytes(content)
+        # 1. AI 解析（DeepSeek → MiMo）
+        ai_result = _try_ai_parse(rows, filename)
         if ai_result:
-            print(f"[AI Parse] 成功解析PI: {ai_result.pi_no}, {len(ai_result.items)}个产品")
             return ai_result
-        # 2. AI失败，fallback到Regex
-        print("[AI Parse] AI解析失败，使用Regex兜底")
-        return _auto_parse_rows(rows)
-    elif ext == ".xls":
-        rows = _read_xls_bytes(content)
-        # 1. 尝试AI解析（主路径）
-        ai_result = _call_deepseek_api(rows, filename)
-        if ai_result:
-            print(f"[AI Parse] 成功解析PI: {ai_result.pi_no}, {len(ai_result.items)}个产品")
-            return ai_result
-        # 2. AI失败，fallback到Regex
-        print("[AI Parse] AI解析失败，使用Regex兜底")
+        # 2. AI 全部失败，fallback 到本地 Excel/规则解析
+        print("[AI Parse] AI解析失败，使用Excel/Regex兜底")
         return _auto_parse_rows(rows)
     elif ext == ".pdf":
         text = _extract_text_from_pdf_bytes(content)

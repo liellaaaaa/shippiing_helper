@@ -33,5 +33,12 @@ DOCUMENT_SERVER_URL = os.getenv("DOCUMENT_SERVER_URL", "http://localhost:8080")
 ONLYOFFICE_SECRET_KEY = os.getenv("ONLYOFFICE_SECRET_KEY", "shipping-helper-secret-key")
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 
-# DeepSeek AI API
+# DeepSeek AI API（PI 解析一级）
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
+DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
+
+# 小米 MiMo AI API（PI 解析二级降级，OpenAI 兼容）
+MIMO_API_KEY = os.getenv("MIMO_API_KEY", "")
+MIMO_BASE_URL = os.getenv("MIMO_BASE_URL", "https://token-plan-cn.xiaomimimo.com/v1")
+MIMO_MODEL = os.getenv("MIMO_MODEL", "mimo-v2.6-pro")

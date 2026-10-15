@@ -1,12 +1,14 @@
 <template>
   <div class="diff-cell">
-    <span v-if="!hasDiff" class="一致">✅ 一致</span>
+    <!-- 唯一默认子节点，避免 ElOnlyChild 报 no valid child -->
     <el-tooltip
-      v-else
+      :disabled="!hasDiff"
       placement="top"
       :content="tooltipContent"
     >
-      <span :class="cellClass">{{ displayValue }} <span class="diff-flag">⚠️</span></span>
+      <span :class="hasDiff ? cellClass : '一致'">
+        {{ hasDiff ? displayValue : '✅ 一致' }}<span v-if="hasDiff" class="diff-flag">⚠️</span>
+      </span>
     </el-tooltip>
   </div>
 </template>

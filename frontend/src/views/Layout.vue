@@ -59,18 +59,20 @@
 
         <div class="nav-actions">
           <div class="nav-divider"></div>
-          <el-button id="health-trigger" class="health-btn" :loading="healthLoading" circle title="系统检测" @click.stop="checkHealth">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10"/>
-              <line x1="12" y1="8" x2="12" y2="12"/>
-              <line x1="12" y1="16" x2="12.01" y2="16"/>
-            </svg>
-          </el-button>
           <el-popover
             placement="bottom"
             :width="320"
             trigger="manual"
             v-model:visible="healthPopoverVisible">
+            <template #reference>
+              <el-button id="health-trigger" class="health-btn" :loading="healthLoading" circle title="系统检测" @click.stop="checkHealth">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="12" y1="8" x2="12" y2="12"/>
+                  <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+              </el-button>
+            </template>
             <div v-if="healthLoading">检查中...</div>
             <div v-else-if="healthData">
               <div class="health-header" style="margin-bottom:12px">

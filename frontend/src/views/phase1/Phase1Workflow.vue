@@ -82,7 +82,7 @@
             @fileSelected="handlePiFileSelected"
           />
           <div v-else class="pi-file-info">
-            <el-icon><document /></el-icon>
+            <el-icon><Document /></el-icon>
             <span class="pi-file-name">{{ piFileName }}</span>
             <el-button text size="small" @click="piFileUploaded = false; piFileName = ''; piFileData = null">
               重新上传
